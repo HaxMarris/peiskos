@@ -230,6 +230,12 @@ export function createApp(opts: AppOptions): Server {
     if (!channel || !canSee(channel, userId)) throw new HttpError(404, 'Room not found');
     return channel;
   };
+  /** A room someone can see that holds messages (not a voice room). */
+  const textRoom = (id: number, userId: number) => {
+    const channel = visibleRoom(id, userId);
+    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    return channel;
+  };
   const channelAudience = (channel: Channel) => serverMemberIds(channel.serverId).filter((id) => canSee(channel, id));
 
   const serverMemberIds = (serverId: number) =>
@@ -429,6 +435,18 @@ export function createApp(opts: AppOptions): Server {
     if (v.length > max) throw new HttpError(400, `${field} must be at most ${max} characters`);
     return v;
   };
+  const cleanUsername = (value: unknown) => {
+    const username = cleanName(value, 'Username', 32);
+    if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Username may only use letters, numbers, _ . -');
+    return username;
+  };
+  /** The new password someone picked, when changing or resetting it. */
+  const newPassword = (body: Json) => {
+    if (typeof body.newPassword !== 'string' || body.newPassword.length < 8) throw new HttpError(400, 'New password must be at least 8 characters');
+    return body.newPassword;
+  };
+  /** A code to type in from an email, 000000 to 999999. */
+  const sixDigitCode = () => String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
 
   // ---- realtime -----------------------------------------------------------
 
@@ -758,10 +776,7 @@ export function createApp(opts: AppOptions): Server {
     db, rawDb: opts.db, route, fail: (status, message) => new HttpError(status, message),
     hosting: opts.hosting, registrationCode: opts.registrationCode, uploadDir: opts.uploadDir, publicUrl: opts.publicUrl,
     online, inVoice,
-    signOut: (userId) => {
-      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-      for (const ws of sockets.get(userId) ?? []) ws.close(4001, 'Signed out');
-    },
+    signOut: (userId) => signOutOthers(userId, null, 'Signed out'),
     deleteAccount: (userId, deleteMessages) => deleteAccount(userById(userId)!, deleteMessages),
   });
   const fun = extras({
@@ -826,8 +841,7 @@ export function createApp(opts: AppOptions): Server {
     '/api/register',
     ({ body, ip, ua }) => {
       checkTries([`register-ip:${ip}`], 10);
-      const username = cleanName(body.username, 'Username', 32);
-      if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Username may only use letters, numbers, _ . -');
+      const username = cleanUsername(body.username);
       if (typeof body.password !== 'string' || body.password.length < 8)
         throw new HttpError(400, 'Password must be at least 8 characters');
       // A signup link, the registration code, or nothing at all, as the host chose on the admin page.
@@ -893,9 +907,7 @@ export function createApp(opts: AppOptions): Server {
       throw new HttpError(403, 'Your current password is wrong');
     }
     clearTries(key);
-    if (typeof body.newPassword !== 'string' || body.newPassword.length < 8)
-      throw new HttpError(400, 'New password must be at least 8 characters');
-    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(body.newPassword), user.id);
+    db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(hashPassword(newPassword(body)), user.id);
     signOutOthers(user.id, session ?? null, 'Password changed');
     return { ok: true };
   });
@@ -1115,8 +1127,7 @@ export function createApp(opts: AppOptions): Server {
     broadcastToServer(serverId, { type: 'server_deleted', serverId, reason: 'deleted' });
     // Its bots belong to it alone, so their tokens stop working with it.
     for (const { id } of db.prepare('SELECT id FROM users WHERE bot = 1 AND bot_server_id = ? AND deleted_at IS NULL').all(serverId) as { id: number }[]) {
-      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
-      for (const ws of sockets.get(id) ?? []) ws.close(4001, 'Signed out');
+      signOutOthers(id, null, 'Signed out');
       db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(now(), id);
     }
     for (const id of voiceRoomIds(serverId)) closeVoiceRoom(id);
@@ -1545,7 +1556,7 @@ export function createApp(opts: AppOptions): Server {
   };
 
   const handleSoundUpload = async (req: IncomingMessage, res: ServerResponse, serverId: number, url: URL) => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     allowed(serverId, user, 'emoji');
     const name = soundName(url.searchParams.get('name'));
     const emoji = soundEmoji(url.searchParams.get('emoji'));
@@ -2158,13 +2169,18 @@ export function createApp(opts: AppOptions): Server {
     return { width, height };
   };
 
-  // The file is the raw request body; its name comes in the x-filename header.
-  const handleUpload = async (req: IncomingMessage, res: ServerResponse, channelId: number) => {
+  /** The logged-in person sending a file, which is the raw request body. */
+  const uploader = (req: IncomingMessage) => {
     const user = userByToken(bearer(req));
     if (!user) throw new HttpError(401, 'Not logged in');
     if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
-    const channel = visibleRoom(channelId, user.id);
-    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    return user;
+  };
+
+  // The file is the raw request body; its name comes in the x-filename header.
+  const handleUpload = async (req: IncomingMessage, res: ServerResponse, channelId: number) => {
+    const user = uploader(req);
+    const channel = textRoom(channelId, user.id);
     const limit = uploadLimitFor(channel.serverId, user.id);
     if (!limit) throw new HttpError(403, "Your roles can't share files in this hearth");
     checkUnsent(user.id);
@@ -2242,9 +2258,7 @@ export function createApp(opts: AppOptions): Server {
     'image/jpeg': (b) => b[0] === 0xff && b[1] === 0xd8,
   };
   const handleThumbUpload = async (req: IncomingMessage, res: ServerResponse, id: string) => {
-    const user = userByToken(bearer(req));
-    if (!user) throw new HttpError(401, 'Not logged in');
-    if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
+    const user = uploader(req);
     const a = db.prepare('SELECT type FROM attachments WHERE id = ? AND uploader_id = ? AND message_id IS NULL').get(id, user.id) as { type: string } | undefined;
     if (!a) throw new HttpError(404, 'File not found');
     if (!a.type.startsWith('video/')) throw new HttpError(400, 'Only videos have thumbnails');
@@ -2316,14 +2330,6 @@ export function createApp(opts: AppOptions): Server {
     return userChanged(user.id);
   };
 
-  /** The logged-in uploader of a picture, which is the raw request body. */
-  const pictureUploader = (req: IncomingMessage) => {
-    const user = userByToken(bearer(req));
-    if (!user) throw new HttpError(401, 'Not logged in');
-    if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
-    return user;
-  };
-
   /** Reads a picture from the request body and saves it in `folder`, returning its new file name. */
   const savePicture = async (req: IncomingMessage, folder: string, what: string) => {
     const data = await readLimited(req, MAX_AVATAR_BYTES, new HttpError(413, `${what} can be at most ${MAX_AVATAR_BYTES / 1048576} MB`));
@@ -2337,7 +2343,7 @@ export function createApp(opts: AppOptions): Server {
 
   // The app shrinks the picture to a small square before sending.
   const handleAvatarUpload = async (req: IncomingMessage, res: ServerResponse) => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     send(res, 200, setAvatarFile(user, await savePicture(req, 'avatars', 'Profile pictures')));
   };
 
@@ -2356,7 +2362,7 @@ export function createApp(opts: AppOptions): Server {
 
   // The host, and roles allowed to edit the burrow, can change its picture and banner.
   const handleBurrowPictureUpload = async (req: IncomingMessage, res: ServerResponse, serverId: number, column: PictureColumn = 'icon') => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     allowed(serverId, user, 'burrow');
     const file = await savePicture(req, 'burrow-pictures', column === 'icon' ? 'Hearth pictures' : 'Banners');
     // They may have lost the right (or the burrow may be gone) while it uploaded.
@@ -2371,7 +2377,7 @@ export function createApp(opts: AppOptions): Server {
   };
   // A message of the day with a photo: the picture is the request body, its words are ?text=.
   const handleMotdPicture = async (req: IncomingMessage, res: ServerResponse, serverId: number, url: URL) => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     fun.canAddMotd(serverId, user);
     const file = await savePicture(req, 'burrow-pictures', 'Photos');
     try {
@@ -2463,8 +2469,7 @@ export function createApp(opts: AppOptions): Server {
 
   /** Saves a GIF from a search into a room, ready to send like an uploaded file. */
   route('POST', '/api/channels/:id/gifs', async ({ user, params, body }) => {
-    const channel = visibleRoom(Number(params[0]), user.id);
-    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    const channel = textRoom(Number(params[0]), user.id);
     const gif = gifsOn().get(String(body.id ?? ''));
     if (!gif) throw new HttpError(404, 'That GIF is no longer available. Search again.');
     checkUnsent(user.id);
@@ -2994,7 +2999,7 @@ export function createApp(opts: AppOptions): Server {
     confirmIdentity(user, body);
     checkTries([`email:${user.id}`], 5);
     failedTry([`email:${user.id}`], 60 * 60 * 1000); // every code sent counts, so nobody's inbox is flooded
-    const code = String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
+    const code = sixDigitCode();
     const before = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(user.id) as { email: string | null; email_verified: number };
     db.prepare('UPDATE users SET email = ?, email_verified = 0, email_code = ?, email_code_expires = ? WHERE id = ?').run(email, code, now() + 30 * 60 * 1000, user.id);
     try {
@@ -3056,7 +3061,7 @@ export function createApp(opts: AppOptions): Server {
       // The same answer either way, so this can't be used to find out who has an email on file.
       const answer = { ok: true, minutes: RESET_MINUTES };
       if (!u?.email || !u.email_verified) return answer;
-      const code = String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
+      const code = sixDigitCode();
       db.prepare('UPDATE users SET reset_code = ?, reset_expires = ?, reset_tries = 0 WHERE id = ?').run(hashCode(code), now() + RESET_MINUTES * 60 * 1000, u.id);
       // Not waited for, so how long the answer takes doesn't give away who has an email on file either.
       void mailTo(u.email, `Your Peiskos password code: ${code}`, {
@@ -3095,11 +3100,9 @@ export function createApp(opts: AppOptions): Server {
         else db.prepare('UPDATE users SET reset_tries = reset_tries + 1 WHERE id = ?').run(u.id);
         throw new HttpError(400, u.reset_tries + 1 >= 5 ? 'Too many wrong codes. Ask for a new one.' : "That code isn't right");
       }
-      if (typeof body.newPassword !== 'string' || body.newPassword.length < 8) throw new HttpError(400, 'New password must be at least 8 characters');
-      db.prepare('UPDATE users SET password_hash = ?, reset_code = NULL, reset_expires = NULL, reset_tries = 0 WHERE id = ?').run(hashPassword(body.newPassword), u.id);
+      db.prepare('UPDATE users SET password_hash = ?, reset_code = NULL, reset_expires = NULL, reset_tries = 0 WHERE id = ?').run(hashPassword(newPassword(body)), u.id);
       // Signed out everywhere, as when you change it yourself.
-      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
-      for (const ws of sockets.get(u.id) ?? []) ws.close(4001, 'Password changed');
+      signOutOthers(u.id, null, 'Password changed');
       clearTries(`login-user:${name.toLowerCase()}|${ip}`);
       clearTries(`login-user:${name.toLowerCase()}`);
       // With two-step login on, the new password still needs the code from their phone.
@@ -3305,8 +3308,7 @@ export function createApp(opts: AppOptions): Server {
   const scheduledChanged = (userId: number) => sendTo([userId], { type: 'scheduled', items: scheduledOf(userId) });
 
   route('POST', '/api/channels/:id/scheduled', ({ user, params, body }) => {
-    const channel = visibleRoom(Number(params[0]), user.id);
-    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    const channel = textRoom(Number(params[0]), user.id);
     const content = typeof body.content === 'string' ? withoutBidi(body.content) : '';
     if (looksBlank(content)) throw new HttpError(400, 'Message is empty');
     if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
@@ -3354,9 +3356,7 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/messages/:id/forward', async ({ user, params, body }) => {
     const id = Number(params[0]);
     const { channel: from } = visibleMessage(user, id);
-    const to = channelById(Number(body.channelId));
-    if (!to || !canSee(to, user.id)) throw new HttpError(404, 'Room not found');
-    if (to.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    const to = textRoom(Number(body.channelId), user.id);
     const m = messageById(id)!;
     const place = placeOf(from.id, user.id)!;
     // Files are copied, so the forward keeps working if the original is deleted.
@@ -3438,8 +3438,7 @@ export function createApp(opts: AppOptions): Server {
     return token;
   };
   const removeBot = (serverId: number, userId: number) => {
-    db.prepare('DELETE FROM sessions WHERE user_id = ?').run(userId);
-    for (const ws of sockets.get(userId) ?? []) ws.close(4001, 'Signed out');
+    signOutOthers(userId, null, 'Signed out');
     db.prepare('DELETE FROM webhooks WHERE user_id = ?').run(userId);
     // Its messages stay, under its name.
     db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(now(), userId);
@@ -3631,7 +3630,7 @@ export function createApp(opts: AppOptions): Server {
 
   // The picture is the raw request body; ?name= and ?kind=emoji|sticker say what it is.
   const handleEmojiUpload = async (req: IncomingMessage, res: ServerResponse, serverId: number, url: URL) => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     allowed(serverId, user, 'emoji');
     const kind = url.searchParams.get('kind') === 'sticker' ? 'sticker' : 'emoji';
     const name = emojiName(url.searchParams.get('name'));
@@ -4495,7 +4494,7 @@ export function createApp(opts: AppOptions): Server {
     return meJson(user);
   };
   const handleBannerUpload = async (req: IncomingMessage, res: ServerResponse) => {
-    const user = pictureUploader(req);
+    const user = uploader(req);
     send(res, 200, setBannerFile(user, await savePicture(req, 'avatars', 'Banners')));
   };
   route('DELETE', '/api/me/banner', ({ user }) => setBannerFile(user, null));
@@ -4710,8 +4709,7 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/me/username', ({ user, body }) => {
     confirmIdentity(user, body);
-    const username = cleanName(body.username, 'Username', 32);
-    if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Username may only use letters, numbers, _ . -');
+    const username = cleanUsername(body.username);
     // Keeping your own name in a different case is fine, reserved or not.
     if (username.toLowerCase() !== user.username.toLowerCase()) {
       checkNameFree(username, user.id);
@@ -4970,8 +4968,7 @@ export function createApp(opts: AppOptions): Server {
     let u;
     try { u = resetLinkUser(body.token); }
     catch (err) { failedTry([`reset-link-ip:${ip}`]); throw err; }
-    if (typeof body.newPassword !== 'string' || body.newPassword.length < 8) throw new HttpError(400, 'New password must be at least 8 characters');
-    db.prepare('UPDATE users SET password_hash = ?, reset_link = NULL, reset_link_expires = NULL WHERE id = ?').run(hashPassword(body.newPassword), u.id);
+    db.prepare('UPDATE users SET password_hash = ?, reset_link = NULL, reset_link_expires = NULL WHERE id = ?').run(hashPassword(newPassword(body)), u.id);
     signOutOthers(u.id, null, 'Password changed');
     clearTries(`login-user:${u.username.toLowerCase()}|${ip}`);
     clearTries(`login-user:${u.username.toLowerCase()}`);
