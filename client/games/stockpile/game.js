@@ -237,7 +237,7 @@ function show(v){
   const prevTurn = view && view.turn;
   const before = view && view.phase === 'play' ? view.seats : [];
   view = v;
-  if(v.phase === 'lobby'){ picked = null; renderLobby(); showScreen('lobbyScreen'); return; }
+  if(v.phase === 'lobby'){ picked = null; closePeek(); renderLobby(); showScreen('lobbyScreen'); return; }
   if(!pickedStillThere()) picked = null;
   showScreen('table');
   renderTable();
@@ -301,7 +301,12 @@ function renderTable(){
     stock.appendChild(el('div', 'pile-label' + (s.stock === 1 ? ' last' : ''), s.stock === 1 ? 'last card' : s.stock + ' left'));
     row.appendChild(stock);
     const ds = el('div', 'opp-discards');
-    s.discards.forEach(d=> ds.appendChild(fan(d, 'mini')));
+    s.discards.forEach((d, i)=>{
+      const f = fan(d, 'mini');
+      peekable(f, s.uid, i);
+      f.onclick = (e)=>{ e.stopPropagation(); if(d.length > 1) (canHover ? openPeek : togglePeek)(s.uid, i, f); };
+      ds.appendChild(f);
+    });
     row.appendChild(ds);
     box.appendChild(row);
     opp.appendChild(box);
@@ -354,12 +359,20 @@ function renderTable(){
     const discardTarget = myTurn && picked && picked.src === 'hand';
     const f = fan(d, '', pickedIs('discard', i) ? 'picked' : '');
     f.classList.toggle('target', !!discardTarget);
+    peekable(f, me.id, i);
     f.onclick = (e)=>{
       if(picked && picked.src === 'hand') return discardTo(i);
       if(d.length) pick('discard', i, d[d.length-1]);
       e.stopPropagation();
     };
-    md.appendChild(f);
+    const col = el('div', 'discard-col');
+    col.appendChild(f);
+    if(d.length > 1){
+      const all = el('button', 'see-all', 'See all ' + d.length);
+      all.onclick = (e)=>{ e.stopPropagation(); togglePeek(me.id, i, f); };
+      col.appendChild(all);
+    }
+    md.appendChild(col);
   });
   const hand = $('hand');
   hand.replaceChildren();
@@ -375,6 +388,8 @@ function renderTable(){
     : picked ? (picked.src === 'hand' ? 'Tap a pile in the middle to play it, or one of your discard piles to end your turn.' : 'Tap a pile in the middle to play it.')
     : 'Tap a card to pick it up. End your turn by discarding a card from your hand.';
 
+  if(v.phase === 'play') refreshPeek(); else closePeek();
+
   // The end of a round.
   const over = v.phase === 'over';
   $('overlay').classList.toggle('hidden', !over);
@@ -385,6 +400,72 @@ function renderTable(){
     $('btnAgain').classList.toggle('hidden', !isHost);
     $('overStatus').textContent = isHost ? '' : 'Waiting for the host…';
   }
+}
+
+// ================================================================
+// EVERYONE — looking through a discard pile
+// Hover a pile (on a computer) or tap it (someone else's, or "See all" under
+// yours) and every card in it is laid out, bottom to top.
+// ================================================================
+let peekAt = null;      // {uid, i, anchor} the pile being looked through
+let peekTimer = 0;
+const canHover = window.matchMedia('(hover: hover)').matches;
+
+function peekable(f, uid, i){
+  f.dataset.peek = uid + ':' + i;
+  if(!canHover) return;
+  f.addEventListener('mouseenter', ()=>{
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(()=> openPeek(uid, i, f), 250);
+  });
+  f.addEventListener('mouseleave', ()=>{
+    clearTimeout(peekTimer);
+    peekTimer = setTimeout(closePeek, 120);
+  });
+}
+
+function togglePeek(uid, i, anchor){
+  if(peekAt && peekAt.uid === uid && peekAt.i === i) closePeek();
+  else openPeek(uid, i, anchor);
+}
+
+function openPeek(uid, i, anchor){
+  const seat = view && view.seats.find(s=>s.uid===uid);
+  const cards = seat && seat.discards[i];
+  if(!cards || cards.length < 2) return closePeek();
+  peekAt = {uid, i, anchor};
+  const box = $('peek');
+  box.replaceChildren();
+  box.appendChild(el('div', 'peek-title', (uid === me.id ? 'Your' : seat.name + "'s") + ' discard pile ' + (i + 1) + ' · ' + cards.length + ' cards'));
+  const row = el('div', 'peek-row');
+  cards.forEach((c, k)=>{
+    const cell = el('div', 'peek-cell');
+    cell.appendChild(cardEl(c, k === cards.length - 1 ? 'peek-top' : ''));
+    cell.appendChild(el('div', 'pile-label', k === cards.length - 1 ? 'top' : k === 0 ? 'bottom' : ''));
+    row.appendChild(cell);
+  });
+  box.appendChild(row);
+  box.classList.remove('hidden');
+  // Next to the pile: above it if there's room, otherwise below, and always on screen.
+  const r = anchor.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const left = Math.max(8, Math.min(window.innerWidth - b.width - 8, r.left + r.width/2 - b.width/2));
+  let top = r.top - b.height - 8;
+  if(top < 8) top = Math.min(window.innerHeight - b.height - 8, r.bottom + 8);
+  box.style.left = left + 'px';
+  box.style.top = Math.max(8, top) + 'px';
+}
+
+function closePeek(){
+  peekAt = null;
+  $('peek').classList.add('hidden');
+}
+
+/** The table was drawn again: keep the pile open, with its cards as they are now. */
+function refreshPeek(){
+  if(!peekAt) return;
+  const anchor = document.querySelector('[data-peek="' + peekAt.uid + ':' + peekAt.i + '"]');
+  if(anchor) openPeek(peekAt.uid, peekAt.i, anchor);
+  else closePeek();
 }
 
 /** A discard pile, fanned so every card in it shows; only the top one can be played. */
@@ -464,6 +545,7 @@ $('stockSelect').onchange = ()=>{
 };
 // Tapping the table (not a card) puts the card back down.
 $('table').addEventListener('click', (e)=>{
+  if(peekAt && !e.target.closest('.fan, .see-all, #peek')) closePeek();
   if(picked && !e.target.closest('.card, .fan')){ picked = null; renderTable(); }
 });
 
