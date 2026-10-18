@@ -137,7 +137,9 @@ select option{ color:var(--ink); }
 .pile-col{ display:flex; flex-direction:column; align-items:center; gap:4px; }
 .pile-label{ font-size:0.75rem; color:var(--muted); text-align:center; white-space:nowrap; }
 
-#mine{ flex:none; display:flex; flex-direction:column; align-items:center; gap:8px; padding-top:6px; border-top:1px solid var(--felt-line); }
+#mine{ flex:none; align-self:center; display:flex; flex-direction:column; align-items:center; gap:8px; padding:8px 14px 6px; border-radius:16px; border:2px solid var(--felt-line); background:rgba(0,0,0,0.12); transition:border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+/* Your turn: the same gold box the other players get, so it's easy to spot. */
+#mine.turn{ border-color:var(--gold); background:rgba(255,209,102,0.12); box-shadow:0 0 18px rgba(255,209,102,0.25); }
 #mine.spectating #myRow{ display:none; }
 #myRow{ display:flex; align-items:flex-start; gap:clamp(12px, 4vw, 36px); }
 #myStock .card{ box-shadow:0 0 0 2px rgba(255,255,255,0.25), 0 6px 14px rgba(0,0,0,0.3); }

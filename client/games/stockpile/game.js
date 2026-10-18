@@ -220,6 +220,7 @@ function showScreen(name){
 }
 
 function showToast(msg){
+  document.querySelectorAll('.toast').forEach(t=> t.remove());   // one at a time, so they don't pile up
   const t = el('div', 'toast', msg);
   document.body.appendChild(t);
   setTimeout(()=> t.remove(), 2600);
@@ -323,6 +324,7 @@ function renderTable(){
 
   // Your stockpile, discard piles and hand.
   $('mine').classList.toggle('spectating', !mySeat);
+  $('mine').classList.toggle('turn', myTurn);
   const stock = $('myStock');
   stock.replaceChildren();
   if(mySeat){
