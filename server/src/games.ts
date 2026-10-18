@@ -1,15 +1,15 @@
-// Games at the fire: one game per fire, played by up to four of the people sitting there. Whoever
+// Games at the fire: one game per fire, played by some of the people sitting there (each game says how many). Whoever
 // starts it runs the game in their app; Peiskos only passes messages between the players (who's
 // moving where, and the board as the host's app sees it), so nothing goes peer to peer. Like the
 // fireside chat it's only kept in memory, and it ends when its host leaves.
 import { WebSocket } from 'ws';
 import type { Json } from './http.ts';
 
-export const GAMES = ['melonbomber'] as const;
-type GameName = (typeof GAMES)[number];
+/** The games, and how many can play each. */
+export const GAMES = { melonbomber: 4, stockpile: 8 } as const;
+type GameName = keyof typeof GAMES;
 type Game = { name: GameName; hostId: number; players: Map<number, WebSocket>; since: number };
 
-const MAX_PLAYERS = 4;
 const MAX_MESSAGE = 16 * 1024; // one message's game data, as JSON
 
 export interface GamesContext {
@@ -58,7 +58,7 @@ export function fireGames(ctx: GamesContext) {
       return;
     }
     if (msg.action === 'start') {
-      const name = GAMES.find((n) => n === msg.game);
+      const name = (Object.keys(GAMES) as GameName[]).find((n) => n === msg.game);
       if (!name) throw ctx.fail(400, "That game isn't here");
       if (!g) {
         games.set(channelId, { name, hostId: user.id, players: new Map([[user.id, ws]]), since: Date.now() });
@@ -66,7 +66,7 @@ export function fireGames(ctx: GamesContext) {
         g.players.set(user.id, ws); // playing from this device now
       } else {
         if (g.name !== name) throw ctx.fail(409, 'Another game is going at this fire');
-        if (g.players.size >= MAX_PLAYERS) throw ctx.fail(409, `The game is full (${MAX_PLAYERS} players)`);
+        if (g.players.size >= GAMES[name]) throw ctx.fail(409, `The game is full (${GAMES[name]} players)`);
         g.players.set(user.id, ws);
       }
     } else if (msg.action === 'leave') {

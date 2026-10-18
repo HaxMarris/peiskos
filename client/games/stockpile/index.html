@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Stockpile</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ============ WAITING FOR PEISKOS ============ -->
+  <div class="panel" id="loadingScreen">
+    <h1 class="logo">Stock<span>pile</span></h1>
+    <div class="status-line">Getting the game ready…</div>
+  </div>
+
+  <!-- ============ LOBBY ============ -->
+  <div class="panel hidden" id="lobbyScreen">
+    <h1 class="logo">Stock<span>pile</span></h1>
+    <div class="tagline">Two to eight players from the fire</div>
+    <div class="player-list" id="lobbyPlayers"></div>
+    <div class="setting-row" id="stockRow">
+      <label class="setting-label" for="stockSelect">Stockpile size</label>
+      <select id="stockSelect">
+        <option value="auto" selected>Standard</option>
+        <option value="5">5 cards (quick)</option>
+        <option value="10">10 cards</option>
+        <option value="15">15 cards</option>
+        <option value="20">20 cards</option>
+        <option value="30">30 cards</option>
+      </select>
+    </div>
+    <details class="rules">
+      <summary>How to play</summary>
+      <ul>
+        <li>Be the first to get rid of every card in your <b>stockpile</b>.</li>
+        <li>The four piles in the middle are shared. Each starts with a 1 and goes up in order to 12, then it's cleared.</li>
+        <li>On your turn, play from your hand, the top of your stockpile, or the top of your discard piles. <b>Wild</b> cards count as any number.</li>
+        <li>Empty your hand during your turn and you draw five more.</li>
+        <li>End your turn by putting one card from your hand on one of your four discard piles.</li>
+        <li>Standard stockpiles are 30 cards, or 20 with five or more players.</li>
+        <li>Tap a card to pick it up, then tap where it goes.</li>
+      </ul>
+    </details>
+    <button class="btn hidden" id="btnStart">Deal the cards</button>
+    <div class="status-line" id="lobbyStatus">Waiting for the host to deal…</div>
+    <button class="small-link" id="btnLeaveLobby">Leave game</button>
+  </div>
+
+  <!-- ============ TABLE ============ -->
+  <div id="table" class="hidden">
+    <div id="topBar">
+      <div id="turnBanner"></div>
+      <div id="logLine" aria-live="polite"></div>
+      <button id="btnQuit" class="small-btn" title="Leave this game">Quit</button>
+    </div>
+    <div id="opponents"></div>
+    <div id="middle">
+      <div class="pile-col">
+        <div class="card back" id="drawPile"></div>
+        <div class="pile-label" id="drawCount"></div>
+      </div>
+      <div id="builds"></div>
+    </div>
+    <div id="mine">
+      <div id="myRow">
+        <div class="pile-col">
+          <div class="slot" id="myStock"></div>
+          <div class="pile-label" id="myStockCount"></div>
+        </div>
+        <div id="myDiscards"></div>
+      </div>
+      <div id="hand"></div>
+      <div id="hint"></div>
+      <button class="btn small hidden" id="btnPass">End turn (no cards to discard)</button>
+    </div>
+    <div id="overlay" class="hidden">
+      <div class="panel">
+        <h1 class="logo" id="overTitle"></h1>
+        <div class="tagline" id="overSub"></div>
+        <button class="btn hidden" id="btnAgain">Back to the lobby</button>
+        <div class="status-line" id="overStatus"></div>
+        <button class="small-link" id="btnLeaveOver">Leave game</button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script src="game.js"></script>
+</body>
+</html>

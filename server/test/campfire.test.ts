@@ -483,3 +483,22 @@ test('games at the fire: up to four play, Peiskos passes their messages, and it 
   assert.equal((await b.next((ev) => ev.type === 'game_state' && !ev.game)).game, null);
   for (const s of [h, b, c, d]) s.ws.close();
 });
+
+test('each game has its own player limit: Stockpile seats eight', async () => {
+  const names = ['h', 'p2', 'p3', 'p4', 'p5', 'p6', 'p7', 'p8', 'p9'];
+  const folks = await people(...names);
+  const { fire } = await burrow(...folks);
+  const sockets = await Promise.all(folks.map((p) => socket(p.token)));
+  for (const s of sockets) {
+    s.send({ type: 'voice_join', channelId: fire });
+    await s.next((ev) => ev.type === 'fireside_history');
+  }
+  const [h, ...rest] = sockets;
+  h.send({ type: 'game', action: 'start', game: 'stockpile' });
+  await h.next((ev) => ev.type === 'game_state' && ev.game?.name === 'stockpile');
+  for (const s of rest.slice(0, 7)) s.send({ type: 'game', action: 'start', game: 'stockpile' });
+  await h.next((ev) => ev.type === 'game_state' && ev.game?.players.length === 8);
+  rest[7].send({ type: 'game', action: 'start', game: 'stockpile' });
+  await rest[7].next((ev) => ev.type === 'error' && /full \(8 players\)/.test(ev.error));
+  for (const s of sockets) s.ws.close();
+});
