@@ -220,6 +220,7 @@ function showScreen(name){
 }
 
 function showToast(msg){
+  document.querySelectorAll('.toast').forEach(t=> t.remove());   // one at a time, so they don't pile up
   const t = el('div', 'toast', msg);
   document.body.appendChild(t);
   setTimeout(()=> t.remove(), 2600);
@@ -234,12 +235,18 @@ function cardEl(c, extra){
 
 function show(v){
   const prevTurn = view && view.turn;
+  const before = view && view.phase === 'play' ? view.seats : [];
   view = v;
   if(v.phase === 'lobby'){ picked = null; renderLobby(); showScreen('lobbyScreen'); return; }
   if(!pickedStillThere()) picked = null;
   showScreen('table');
   renderTable();
   if(v.phase === 'play' && v.turn === me.id && prevTurn !== me.id) showToast('Your turn');
+  // Someone just got down to the last card of their stockpile.
+  if(v.phase === 'play') for(const s of v.seats){
+    const was = before.find(b=>b.uid===s.uid);
+    if(s.stock === 1 && was && was.stock > 1) showToast(s.uid === me.id ? "You're on your last card!" : s.name + ' is on their last card!');
+  }
 }
 
 function renderLobby(){
@@ -285,12 +292,13 @@ function renderTable(){
     const head = el('div', 'opp-head');
     head.appendChild(el('span', 'dot p' + (v.seats.indexOf(s) % 8)));
     head.appendChild(el('span', 'pname', s.name));
+    if(s.stock === 1) head.appendChild(el('span', 'last-badge', 'LAST CARD'));
     head.appendChild(el('span', 'opp-hand', '✋' + s.hand));
     box.appendChild(head);
     const row = el('div', 'opp-row');
     const stock = el('div', 'mini-col');
     stock.appendChild(s.top === null ? el('div', 'card mini empty') : cardEl(s.top, 'mini'));
-    stock.appendChild(el('div', 'pile-label', s.stock + ' left'));
+    stock.appendChild(el('div', 'pile-label' + (s.stock === 1 ? ' last' : ''), s.stock === 1 ? 'last card' : s.stock + ' left'));
     row.appendChild(stock);
     const ds = el('div', 'opp-discards');
     s.discards.forEach(d=> ds.appendChild(fan(d, 'mini')));
@@ -323,6 +331,7 @@ function renderTable(){
 
   // Your stockpile, discard piles and hand.
   $('mine').classList.toggle('spectating', !mySeat);
+  $('mine').classList.toggle('turn', myTurn);
   const stock = $('myStock');
   stock.replaceChildren();
   if(mySeat){
@@ -331,9 +340,13 @@ function renderTable(){
       c.onclick = ()=> pick('stock', 0, mySeat.top);
       stock.appendChild(c);
     } else stock.appendChild(el('div', 'card empty'));
-    $('myStockCount').textContent = mySeat.stock + ' in your stockpile';
+    $('myStockCount').textContent = mySeat.stock === 1 ? 'Last card in your stockpile!' : mySeat.stock + ' in your stockpile';
+    $('myStockCount').classList.toggle('last', mySeat.stock === 1);
+    $('myStock').classList.toggle('last', mySeat.stock === 1);
   } else {
     $('myStockCount').textContent = '';
+    $('myStockCount').classList.remove('last');
+    $('myStock').classList.remove('last');
   }
   const md = $('myDiscards');
   md.replaceChildren();
