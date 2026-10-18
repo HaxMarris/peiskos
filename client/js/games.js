@@ -1,4 +1,4 @@
-// Games at the fire: one game per fire, for up to four of the people sitting there.
+// Games at the fire: one game per fire, for some of the people sitting there (each game says how many).
 //
 // A game is its own page (client/games/<name>/), shown in a frame on the fire's stage. Whoever
 // starts it is the host: their copy runs the match, and the others' copies send it their moves.
@@ -8,10 +8,18 @@
 const FIRE_GAMES = {
   melonbomber: {
     title: 'Melon Bomber',
+    icon: '🍉',
+    maxPlayers: 4,
     blurb: 'Drop melons, break crates, grab power-ups and be the last melon standing. Two to four players; bots fill in if you play alone.',
   },
+  stockpile: {
+    title: 'Stockpile',
+    icon: '🃏',
+    maxPlayers: 8,
+    blurb: 'Build the piles from 1 to 12 and be the first to empty your stockpile. Wilds are anything. Two to eight players.',
+  },
 };
-const GAME_MAX_PLAYERS = 4;
+const gameMax = (name) => FIRE_GAMES[name]?.maxPlayers ?? 4;
 
 let fireGame = null; // { channelId, game: { name, hostId, players, since } } at your fire
 let gamePlay = null; // { name, frame, ready, queue } while you're playing, on this device
@@ -24,10 +32,10 @@ const gamePlayers = (g) => g.players.map((id) => ({ id, name: nameOf(id, 'Player
 function openGamePicker() {
   if (fireGame?.game) return joinFireGame();
   modal(`<h2>Play a game together</h2>
-    <p class="small muted">Everyone at the fire can join, up to ${GAME_MAX_PLAYERS} players. You can keep talking while you play.</p>
+    <p class="small muted">Everyone at the fire can join, and you can keep talking while you play.</p>
     <div class="game-picks">${Object.entries(FIRE_GAMES).map(([name, g]) => `
       <button type="button" class="game-pick" data-game="${name}">
-        <span class="game-pick-icon" aria-hidden="true">🍉</span>
+        <span class="game-pick-icon" aria-hidden="true">${g.icon}</span>
         <span class="game-pick-text"><b>${g.title}</b><span class="small muted">${g.blurb}</span></span>
         <span class="btn">Start</span>
       </button>`).join('')}
@@ -43,7 +51,7 @@ function joinFireGame() {
   const g = fireGame?.game;
   if (!g) return;
   if (gamePlay) return showGame();
-  if (!inFireGame() && g.players.length >= GAME_MAX_PLAYERS) return toast(`The game is full (${GAME_MAX_PLAYERS} players).`);
+  if (!inFireGame() && g.players.length >= gameMax(g.name)) return toast(`The game is full (${gameMax(g.name)} players).`);
   gameStarting = true;
   sendGame({ action: 'start', game: g.name }); // joins, or moves your game to this device
 }
@@ -152,13 +160,15 @@ function renderGamePanel() {
   $('#fire-game').classList.toggle('on', !!g);
   $('#game-panel').classList.toggle('hidden', !g);
   if (!g) return;
-  const info = FIRE_GAMES[g.name] ?? { title: 'A game' };
+  const info = FIRE_GAMES[g.name] ?? { title: 'A game', icon: '🎲' };
+  const max = gameMax(g.name);
   const playing = inFireGame();
+  $('#game-panel-icon').textContent = info.icon;
   $('#game-panel-title').textContent = info.title;
-  $('#game-panel-sub').textContent = `Started by ${g.hostId === state.me.id ? 'you' : nameOf(g.hostId)} · ${g.players.length} of ${GAME_MAX_PLAYERS} playing`;
+  $('#game-panel-sub').textContent = `Started by ${g.hostId === state.me.id ? 'you' : nameOf(g.hostId)} · ${g.players.length} of ${max} playing`;
   const open = $('#game-panel-open');
-  open.textContent = playing ? (gamePlay ? 'Back to the game' : 'Open the game') : g.players.length >= GAME_MAX_PLAYERS ? 'Full' : 'Join';
-  open.disabled = !playing && g.players.length >= GAME_MAX_PLAYERS;
+  open.textContent = playing ? (gamePlay ? 'Back to the game' : 'Open the game') : g.players.length >= max ? 'Full' : 'Join';
+  open.disabled = !playing && g.players.length >= max;
   const leave = $('#game-panel-leave');
   leave.classList.toggle('hidden', !playing);
   leave.textContent = g.hostId === state.me.id ? 'End game' : 'Leave';
