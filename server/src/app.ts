@@ -18,6 +18,7 @@ import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
+import { casino, type CasinoContext } from './casino.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
 import { mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
@@ -50,6 +51,8 @@ export interface AppOptions {
   hosting?: HostingOptions;
   /** Who runs this server and how to reach them, for the privacy policy and terms (see legal.ts). */
   legal?: { name?: string; contact?: string };
+  /** Tests make the casino's poker table quicker, and stack its decks. */
+  casino?: Pick<CasinoContext, 'timing' | 'deck'>;
 }
 
 type User = { id: number; username: string; displayName: string | null; avatar: string | null };
@@ -62,6 +65,7 @@ type Channel = {
   serverId: number;
   name: string;
   kind: 'text' | 'voice' | 'thread';
+  casino: number; // a text room with the casino in it
   private: number;
   parentId: number | null;
   slow: number; // slow mode: seconds between someone's messages
@@ -71,7 +75,7 @@ type Channel = {
   keepChat: number; // the fireside chat stays after everyone leaves
 };
 const CHANNEL_COLS = `id, server_id AS serverId, name, kind, private, parent_id AS parentId,
-  slow_seconds AS slow, announce, archived_at AS archivedAt, user_limit AS userLimit, keep_chat AS keepChat`;
+  slow_seconds AS slow, announce, archived_at AS archivedAt, user_limit AS userLimit, keep_chat AS keepChat, casino`;
 const MAX_MESSAGE_LENGTH = 4000;
 const MAX_ATTACHMENTS = 10;
 const MAX_REACTIONS = 20; // different emoji on one message
@@ -327,6 +331,7 @@ export function createApp(opts: AppOptions): Server {
       .map(({ serverId: _, private: priv, parentId: __, announce, archivedAt, ...c }) => ({
         ...c,
         keepChat: !!c.keepChat,
+        casino: !!c.casino,
         private: !!priv,
         announce: !!announce,
         archived: archivedAt !== null,
@@ -1224,13 +1229,14 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/servers/:id/channels', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     allowed(serverId, user, 'rooms');
+    // A casino is a text room with the casino in it, so its chat works like any other room's.
     const kind = body.kind === 'voice' ? 'voice' : 'text';
     const name = roomName(body.name, kind);
     const last = (db.prepare("SELECT MAX(COALESCE(position, id)) AS p FROM channels WHERE server_id = ? AND kind != 'thread'").get(serverId) as { p: number | null }).p;
     const groupId = kind === 'text' && body.groupId != null ? groupIn(serverId, body.groupId) : null;
     const r = db
-      .prepare('INSERT INTO channels (server_id, name, kind, private, created_at, position, group_id) VALUES (?, ?, ?, ?, ?, ?, ?)')
-      .run(serverId, name, kind, body.private ? 1 : 0, now(), (last ?? 0) + 1, groupId);
+      .prepare('INSERT INTO channels (server_id, name, kind, private, created_at, position, group_id, casino) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(serverId, name, kind, body.private ? 1 : 0, now(), (last ?? 0) + 1, groupId, body.kind === 'casino' ? 1 : 0);
     if (body.private) setAccess(Number(r.lastInsertRowid), accessList(serverId, body.memberIds), roleList(serverId, body.roleIds));
     sendServerUpdate(serverId);
     return serverSummary(serverId, user.id);
@@ -1287,6 +1293,7 @@ export function createApp(opts: AppOptions): Server {
         fireside.delete(channel.id);
       }
     }
+    if (body.casino !== undefined && channel.kind === 'text') db.prepare('UPDATE channels SET casino = ? WHERE id = ?').run(body.casino ? 1 : 0, channel.id);
     if (body.archived !== undefined && channel.kind === 'text') {
       if (body.archived && !channel.archivedAt) {
         const open = db.prepare("SELECT COUNT(*) AS n FROM channels WHERE server_id = ? AND kind = 'text' AND archived_at IS NULL").get(channel.serverId) as { n: number };
@@ -1527,6 +1534,15 @@ export function createApp(opts: AppOptions): Server {
   // ---- games at the fire
 
   const games = fireGames({ inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message) });
+
+  // ---- the casino (casino.ts): chips, blackjack, slots, cases and a hold 'em table in each casino room
+
+  const casinoTables = casino({
+    db, route, fail: (status, message) => new HttpError(status, message),
+    channelById, canSee: canSee as never, isMember, serverMemberIds, sendTo,
+    isOnline: (userId) => sockets.has(userId),
+    ...opts.casino,
+  });
 
   // ---- calls in direct messages: a conversation's own voice room, and ringing the others
 
@@ -4926,6 +4942,8 @@ export function createApp(opts: AppOptions): Server {
           listen.handle(user, msg);
         } else if (msg.type === 'game') {
           games.handle(user, ws, msg);
+        } else if (msg.type === 'casino') {
+          casinoTables.watch(ws, user.id, msg.channelId == null ? null : Number(msg.channelId));
         } else if (msg.type === 'typing') {
           const channel = channelById(Number(msg.channelId));
           if (channel && canSee(channel, user.id))
@@ -4947,6 +4965,7 @@ export function createApp(opts: AppOptions): Server {
       const wasIdle = userIdle(user.id);
       idleSockets.get(user.id)?.delete(ws);
       games.closed(user.id, ws);
+      casinoTables.closed(ws);
       if (set!.size === 0) {
         sockets.delete(user.id);
         online.delete(user.id);
@@ -4963,6 +4982,7 @@ export function createApp(opts: AppOptions): Server {
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
+    casinoTables.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);
   });

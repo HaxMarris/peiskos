@@ -201,6 +201,7 @@ export function openDb(file: string): Db {
   addHosting(db);
   addExtras(db);
   addIdFloor(db);
+  addCasino(db);
   hashSessionTokens(db);
   return db;
 }
@@ -716,6 +717,36 @@ function addIdFloor(db: Db) {
       INSERT INTO id_floor (name, value) VALUES ('messages', old.id)
         ON CONFLICT(name) DO UPDATE SET value = MAX(value, excluded.value);
     END;
+  `);
+}
+
+/**
+ * The casino: casino rooms (text rooms with the casino in them), everyone's chips, and what they've
+ * opened from cases. at_table is what someone has at a poker table, given back if the server restarts;
+ * blackjack is their hand as it stands.
+ */
+function addCasino(db: Db) {
+  const cols = db.prepare('PRAGMA table_info(channels)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'casino')) db.exec('ALTER TABLE channels ADD COLUMN casino INTEGER NOT NULL DEFAULT 0');
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS casino_wallets (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      chips      INTEGER NOT NULL,
+      at_table   INTEGER NOT NULL DEFAULT 0,
+      blackjack  TEXT,
+      free_at    INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS casino_items (
+      id         INTEGER PRIMARY KEY,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      skin_id    TEXT NOT NULL,
+      float      REAL NOT NULL,
+      stattrak   INTEGER NOT NULL DEFAULT 0,
+      value      INTEGER NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS casino_items_by_user ON casino_items(user_id, id);
   `);
 }
 

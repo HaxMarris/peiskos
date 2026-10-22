@@ -575,6 +575,7 @@ function connect() {
     setConnected(true, 'Connected');
     // Dropping off took you out of any game at the fire (and ended it, if it was yours).
     gameConnectionLost();
+    casinoReconnected();
     // The server forgets who's in voice when we drop off, so tell it again.
     if (state.voice) ws.send(JSON.stringify({ type: 'voice_join', channelId: state.voice.channelId, ...voiceFlags() }));
     // Dropping off ended your "is live" post; still sharing, it picks back up.
@@ -834,6 +835,12 @@ function handleEvent(ev) {
       break;
     case 'game_msg':
       onGameMessage(ev);
+      break;
+    case 'poker':
+      onCasinoPoker(ev);
+      break;
+    case 'casino_wallet':
+      setWallet(ev.wallet);
       break;
     case 'ring':
       onRing(ev);

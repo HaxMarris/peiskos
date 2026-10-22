@@ -625,7 +625,11 @@ function openNewRoom() {
       ${state.voiceEnabled ? `<div class="kind-choice">
         <label><input type="radio" name="kind" value="text" checked /> Text room</label>
         <label><input type="radio" name="kind" value="voice" /> Voice room</label>
-      </div>` : ''}
+        <label><input type="radio" name="kind" value="casino" /> Casino</label>
+      </div>` : `<div class="kind-choice">
+        <label><input type="radio" name="kind" value="text" checked /> Text room</label>
+        <label><input type="radio" name="kind" value="casino" /> Casino</label>
+      </div>`}
       ${s.groups?.length ? `<label>Under heading<select id="new-channel-group"><option value="">No heading</option>${s.groups.map((g) => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('')}</select></label>` : ''}
       ${privacyFields(s, false, [])}
       <div class="error" id="modal-error"></div>
