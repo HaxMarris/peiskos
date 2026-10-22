@@ -282,12 +282,14 @@ function renderTable(){
   $('turnBanner').classList.toggle('mine', myTurn);
   $('logLine').textContent = v.log;
 
-  // Everyone else, in turn order starting after you.
-  const opp = $('opponents');
-  opp.replaceChildren();
+  // Everyone else sits around the table, in turn order going clockwise from you:
+  // up your left side, across the top, then down your right side.
   const at = Math.max(0, v.seats.findIndex(s=>s.uid===me.id));
   const others = v.seats.slice(at).concat(v.seats.slice(0, at)).filter(s=>s.uid!==me.id);
-  others.forEach(s=>{
+  const [onLeft, onTop, onRight] = seatsAround(others.length);
+  const spots = [$('oppLeft'), $('oppTop'), $('oppRight')];
+  spots.forEach(x=> x.replaceChildren());
+  others.forEach((s, k)=>{
     const box = el('div', 'opp' + (s.uid===v.turn && v.phase==='play' ? ' turn' : ''));
     const head = el('div', 'opp-head');
     head.appendChild(el('span', 'dot p' + (v.seats.indexOf(s) % 8)));
@@ -309,9 +311,13 @@ function renderTable(){
     });
     row.appendChild(ds);
     box.appendChild(row);
-    opp.appendChild(box);
+    if(k < onLeft) spots[0].prepend(box);   // the left side fills from the bottom up
+    else if(k < onLeft + onTop) spots[1].appendChild(box);
+    else spots[2].appendChild(box);
   });
-  opp.classList.toggle('hidden', !others.length);
+  $('arena').classList.toggle('narrow', narrowTable());
+  fitCards(onLeft + onRight > 0 ? 2 : 0, onTop);
+  spots.forEach(x=> x.classList.toggle('hidden', !x.childElementCount));
 
   // The draw pile and the four building piles.
   $('drawCount').textContent = v.draw + ' to draw';
@@ -468,6 +474,28 @@ function refreshPeek(){
   else closePeek();
 }
 
+/** On a phone there's no room at the sides, so everyone sits across the top. */
+function narrowTable(){ return window.innerWidth < 760; }
+
+/**
+ * Cards are as big as the window allows. Height is handled in the CSS; this caps them by width,
+ * counting how many card widths a row of the table needs: another player's box is about 3.4 card
+ * widths, and your own area and the center piles about 6.2.
+ */
+function fitCards(sideBoxes, topBoxes){
+  const units = narrowTable() ? 7.5 : sideBoxes * 3.4 + Math.max(6.2, topBoxes * 3.5);
+  const cap = (window.innerWidth - 40 - (sideBoxes + Math.max(1, topBoxes)) * 20) / units;
+  document.documentElement.style.setProperty('--wcap', Math.max(30, cap).toFixed(1) + 'px');
+}
+
+/** How many of the other players sit on your left, across from you, and on your right. */
+function seatsAround(n){
+  if(narrowTable() || n <= 1) return [0, n, 0];
+  if(n === 2) return [1, 0, 1];
+  if(n <= 4) return [1, n - 2, 1];
+  return [2, n - 4, 2];
+}
+
 /** A discard pile, fanned so every card in it shows; only the top one can be played. */
 function fan(cards, size, topCls){
   const f = el('div', 'fan' + (size ? ' ' + size : ''));
@@ -543,6 +571,12 @@ $('stockSelect').onchange = ()=>{
   stockSetting = $('stockSelect').value;
   publish();
 };
+// The seats move between the sides and the top as the window changes size.
+let resizeTimer = 0;
+window.addEventListener('resize', ()=>{
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(()=>{ if(view && view.phase !== 'lobby') renderTable(); }, 120);
+});
 // Tapping the table (not a card) puts the card back down.
 $('table').addEventListener('click', (e)=>{
   if(peekAt && !e.target.closest('.fan, .see-all, #peek')) closePeek();
