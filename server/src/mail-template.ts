@@ -57,7 +57,7 @@ export function codeEmail(m: CodeEmail): { text: string; html: string } {
       </td></tr>`
     : '';
   const contact = m.contact
-    ? `Questions? Write to <a href="mailto:${esc(m.contact)}" style="color:${EMBER};text-decoration:none">${esc(m.contact)}</a><br>`
+    ? `Questions? Write to <a href="${esc(/^https?:\/\//i.test(m.contact) ? m.contact : `mailto:${m.contact}`)}" style="color:${EMBER};text-decoration:none">${esc(m.contact)}</a><br>`
     : '';
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Peiskos</title></head>
