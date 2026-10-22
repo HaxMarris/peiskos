@@ -1,29 +1,10 @@
-/* The casino (js/casino.js): a casino room's tables, machine and cases. Felt and cards keep their
+/* The casino (js/casino.js): the fire's poker table, blackjack, the slot machine and cases. Felt and cards keep their
    colours in both themes; everything around them follows Glød. */
 
-/* ---------- the room: the casino and its chat ---------- */
-.casino { display: none; }
-.chat.casino-room .casino { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.chat.casino-room[data-casino="floor"] .messages-wrap,
-.chat.casino-room[data-casino="floor"] .composer-wrap { display: none; }
-.chat.casino-room[data-casino="chat"] .casino { display: none; }
-
-.casino-switch { display: flex; flex: none; background: var(--surface-2); border-radius: 999px; padding: 3px; }
-.casino-switch button { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 800; font-size: 13px; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
-.casino-switch button[aria-pressed="true"] { background: var(--surface); color: var(--text-strong); box-shadow: var(--shadow); }
-
-/* Wide enough: the casino with the room's chat beside it. */
-@media (min-width: 1280px) {
-  .chat.casino-room { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 28%); grid-template-rows: auto auto auto minmax(0, 1fr) auto; }
-  .chat.casino-room > .chat-header { grid-column: 1 / -1; grid-row: 1; }
-  .chat.casino-room > .voice-pill { grid-column: 1 / -1; grid-row: 2; }
-  .chat.casino-room > .call-bar { grid-column: 1 / -1; grid-row: 3; }
-  .chat.casino-room .casino { display: flex !important; grid-column: 1; grid-row: 4 / 6; border-right: 1px solid var(--line); }
-  .chat.casino-room .messages-wrap { display: flex !important; grid-column: 2; grid-row: 4; }
-  .chat.casino-room .composer-wrap { display: block !important; grid-column: 2; grid-row: 5; padding: 0 14px 14px; }
-  .chat.casino-room .messages { padding-left: 4px; padding-right: 4px; }
-  .casino-switch { display: none !important; }
-}
+/* ---------- on the fire's stage, opened from the games ---------- */
+.casino-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.casino-view > .stage-head { border-bottom: 1px solid var(--line); }
+.casino { display: flex; flex-direction: column; flex: 1; min-height: 0; }
 
 .casino { --felt: #1d6b4c; --felt-dark: #0f3d2b; --rail: #6b3f22; --rail-light: #9a6034; --card: #fffdf8; --card-red: #c0262d;
   background: radial-gradient(ellipse at 50% 0%, var(--accent-soft), transparent 60%), var(--bg); overflow: hidden; }
@@ -279,8 +260,8 @@
 
 /* ---------- phones ---------- */
 @media (max-width: 760px) {
-  .chat.casino-room .chat-title { display: none; }
-  .chat.casino-room .casino-switch { margin-right: auto; }
+  .casino-view .stage-head { padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); }
+  .casino-view .stage-head h1 { font-size: 20px; }
   .casino-top { padding: 10px 14px 2px; gap: 8px; flex-wrap: nowrap; }
   .casino-top .chip-icon:not(.sm) { width: 24px; height: 24px; }
   #casino-free { padding: 8px 12px; font-size: 13px; white-space: nowrap; }

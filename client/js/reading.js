@@ -88,7 +88,6 @@ function renderChatHeader() {
   renderComposerLock();
   renderSlowNote();
   renderCallButton();
-  renderCasinoRoom();
 }
 
 // ---- reading: the room you're looking at is read up to its newest message

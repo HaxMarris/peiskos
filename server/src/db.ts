@@ -721,13 +721,10 @@ function addIdFloor(db: Db) {
 }
 
 /**
- * The casino: casino rooms (text rooms with the casino in them), everyone's chips, and what they've
- * opened from cases. at_table is what someone has at a poker table, given back if the server restarts;
+ * The casino (games at the fire): everyone's chips, and what they've opened from cases. at_table is what someone has at a poker table, given back if the server restarts;
  * blackjack is their hand as it stands.
  */
 function addCasino(db: Db) {
-  const cols = db.prepare('PRAGMA table_info(channels)').all() as { name: string }[];
-  if (!cols.some((c) => c.name === 'casino')) db.exec('ALTER TABLE channels ADD COLUMN casino INTEGER NOT NULL DEFAULT 0');
   db.exec(`
     CREATE TABLE IF NOT EXISTS casino_wallets (
       user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

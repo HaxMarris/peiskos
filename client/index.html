@@ -226,9 +226,6 @@
           <h1 id="channel-name"></h1>
           <div id="channel-sub" class="muted small"></div>
         </div>
-        <div class="casino-switch hidden" id="casino-switch" role="group" aria-label="Casino or chat">
-          <button type="button" data-view="floor">Casino</button><button type="button" data-view="chat">Chat</button>
-        </div>
         <button class="icon-btn" id="search-btn" title="Search messages (Ctrl+K)" aria-label="Search messages">
           <svg viewBox="0 0 24 24"><path d="M10 3a7 7 0 0 1 5.6 11.2l5.1 5.1-1.4 1.4-5.1-5.1A7 7 0 1 1 10 3Zm0 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10Z"/></svg>
         </button>
@@ -292,8 +289,6 @@
           </button>
         </form>
       </div>
-      <!-- A casino room's casino (casino.js); its chat is the room's own. -->
-      <section id="casino" class="casino hidden" aria-label="Casino"></section>
       <!-- The Campfire: everyone in the voice room sitting around the fire, with its own chat.
            "All video" swaps it for the video grid. -->
       <section id="stage" class="stage hidden" data-show="fire">
@@ -420,6 +415,14 @@
             <button class="btn secondary" id="game-view-back">Back to the fire</button>
           </header>
           <div class="game-frame" id="game-frame"></div>
+        </div>
+        <!-- The casino (casino.js), opened from the games at the fire. -->
+        <div class="casino-view">
+          <header class="stage-head">
+            <h1>Casino</h1>
+            <button class="btn secondary" id="casino-back">Back to the fire</button>
+          </header>
+          <section id="casino" class="casino" aria-label="Casino"></section>
         </div>
         <div class="video-view">
           <header class="stage-head">

@@ -669,6 +669,7 @@ a.btn { text-decoration: none; display: inline-block; }
 /* ---------- the Campfire: everyone sitting around the fire, and the fireside chat ---------- */
 .stage[data-show="fire"] .video-view, .stage[data-show="video"] .fire-space { display: none; }
 .stage[data-show="game"] .video-view, .stage[data-show="game"] .fire-space, .stage:not([data-show="game"]) .game-view { display: none; }
+.stage[data-show="casino"] .video-view, .stage[data-show="casino"] .fire-space, .stage:not([data-show="casino"]) .casino-view { display: none; }
 .video-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .fire-space { --camp: color-mix(in srgb, var(--bg) 95%, #000); flex: 1; min-height: 0; display: flex; position: relative; }
 .fire-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 60% 55% at 50% 58%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%), var(--camp); }
@@ -1193,6 +1194,12 @@ button.seat-face { cursor: pointer; }
 .game-pick-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .game-pick-text b { color: var(--text-strong); }
 .game-pick .btn { flex: none; pointer-events: none; }
+.modal-card .game-picks-head { display: flex; align-items: center; gap: 10px; margin: 8px 0 -4px; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
+.game-picks-head::before, .game-picks-head::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+/* Casino games: smaller tiles, two to a row. */
+.casino-picks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+.casino-picks .game-pick { flex-direction: column; align-items: flex-start; gap: 6px; padding: 12px; }
+.casino-picks .game-pick-icon { font-size: 26px; }
 .call-btn svg { fill: currentColor; }
 .call-btn.live { color: var(--online); }
 .call-bar { flex: none; display: flex; align-items: center; gap: 10px; margin: 8px 22px 0; padding: 8px 8px 8px 14px; border-radius: 14px; background: var(--accent-soft); color: var(--text-strong); font-weight: 700; font-size: 14px; }

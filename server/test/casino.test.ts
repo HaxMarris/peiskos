@@ -16,6 +16,8 @@ const db = openDb(':memory:');
 const app = createApp({
   db,
   publicDir: '/nonexistent',
+  // Voice on, so there are fires to sit at (nothing here talks to LiveKit).
+  voice: { apiKey: 'devkey', apiSecret: 'a-secret-that-is-at-least-32-characters-long', apiUrl: 'http://127.0.0.1:9' },
   casino: { timing: { turnMs: 5000, awayTurnMs: 5000, pauseMs: 150, dealMs: 20 }, deck: () => (nextDeck ? nextDeck() : (null as never)) },
 });
 let base = '';
@@ -211,18 +213,16 @@ test('chips: slots, cases, blackjack and free chips', async () => {
   assert.equal(topUp.data.got, 500);
 });
 
-test("hold 'em at a casino room's table", async (t) => {
+test("hold 'em at the fire's table", async (t) => {
   const max = await reg('maxp');
   const sam = await reg('samp');
   const hearth = (await call('/api/servers', { body: { name: 'Card night' }, token: max.token })).data;
   await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: sam.token });
-  const made = (await call(`/api/servers/${hearth.id}/channels`, { body: { name: 'Casino', kind: 'casino' }, token: max.token })).data;
-  const room = made.channels.find((c: any) => c.casino);
-  assert.equal(room.kind, 'text');
-  assert.equal(room.name, 'casino');
-  const text = made.channels.find((c: any) => !c.casino);
-  // Only casino rooms have a table.
-  assert.equal((await call(`/api/channels/${text.id}/poker`, { body: { action: 'sit', seat: 0, buyIn: 1000 }, token: max.token })).status, 404);
+  const made = (await call(`/api/servers/${hearth.id}/channels`, { body: { name: 'Fire', kind: 'voice' }, token: max.token })).data;
+  const room = made.channels.find((c: any) => c.kind === 'voice');
+  const text = made.channels.find((c: any) => c.kind === 'text');
+  // Only fires have a table.
+  assert.equal((await call(`/api/channels/${text.id}/poker`, { body: { action: 'sit', seat: 0, buyIn: 1000 }, token: max.token })).status, 400);
 
   const m = listen(max.token);
   const s = listen(sam.token);
@@ -231,6 +231,11 @@ test("hold 'em at a casino room's table", async (t) => {
     s.ws.close();
   });
   await Promise.all([m.ready, s.ready]);
+  // You have to be at the fire to sit at its table.
+  assert.equal((await call(`/api/channels/${room.id}/poker`, { body: { action: 'sit', seat: 0, buyIn: 1000 }, token: max.token })).status, 400);
+  m.ws.send(JSON.stringify({ type: 'voice_join', channelId: room.id }));
+  s.ws.send(JSON.stringify({ type: 'voice_join', channelId: room.id }));
+  await wait(100);
   m.ws.send(JSON.stringify({ type: 'casino', channelId: room.id }));
   await wait(100);
   assert.ok(m.events.some((e) => e.type === 'poker' && e.channelId === room.id && e.table.seats.every((x: any) => x === null)));
@@ -292,4 +297,15 @@ test("hold 'em at a casino room's table", async (t) => {
   // Leaderboard for the hearth.
   const leaders = (await call(`/api/servers/${hearth.id}/casino/leaders`, { token: sam.token })).data;
   assert.equal(leaders.length, 2);
+
+  // Leaving the fire gets you up from its table, and your stack goes back to your wallet.
+  const before = (await call('/api/casino', { token: sam.token })).data.wallet;
+  assert.ok(before.atTable > 0);
+  s.ws.send(JSON.stringify({ type: 'voice_leave' }));
+  await wait(300);
+  while (!latest(m.events).done) await wait(50);
+  await wait(200);
+  const after = (await call('/api/casino', { token: sam.token })).data.wallet;
+  assert.equal(after.atTable, 0);
+  assert.equal(after.chips, before.chips + before.atTable);
 });
