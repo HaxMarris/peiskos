@@ -314,11 +314,13 @@ const STAR_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.
 const CLOSE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6.4 5 12 10.6 17.6 5 19 6.4 13.4 12l5.6 5.6-1.4 1.4-5.6-5.6L6.4 19 5 17.6l5.6-5.6L5 6.4z"/></svg>';
 const CHECK_ICON = '<svg viewBox="0 0 24 24" class="check" aria-label="Current"><path d="M9.5 16.2 5.3 12l-1.4 1.4 5.6 5.6 11-11-1.4-1.4z"/></svg>';
 const ROOM_ICON = '<svg viewBox="0 0 24 24" class="room-icon" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>';
-function roomIcon() {
+function roomIcon(c) {
   const t = document.createElement('template');
-  t.innerHTML = ROOM_ICON;
+  t.innerHTML = c?.casino ? CASINO_ICON : ROOM_ICON;
   return t.content.firstChild;
 }
+// A casino room: a spade.
+const CASINO_ICON = '<svg viewBox="0 0 24 24" class="room-icon" aria-hidden="true"><path d="M12 3c3 3.8 7.5 6.2 7.5 10.2a3.8 3.8 0 0 1-6.3 2.8c.3 1.8 1 3.1 2.3 4H8.5c1.3-.9 2-2.2 2.3-4a3.8 3.8 0 0 1-6.3-2.8C4.5 9.2 9 6.8 12 3Z"/></svg>';
 const CHAT_ICON = '<svg viewBox="0 0 24 24"><path d="M4 4h16a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H9l-5 4V5a1 1 0 0 1 1-1Z" fill="currentColor"/></svg>';
 
 const isDm = (s) => s?.kind === 'dm';
