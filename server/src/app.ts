@@ -2625,7 +2625,10 @@ export function createApp(opts: AppOptions): Server {
     // Replies go to whoever runs the server, not to the address codes are sent from.
     const contact = opts.legal?.contact;
     const { text, html } = codeEmail({ ...content, publicUrl: opts.publicUrl, contact });
-    await sendMail(opts.mail, { to, subject, text, html, replyTo: contact });
+    // LEGAL_CONTACT may be a web page rather than an address; then replies go to the sender as before.
+    // (No line breaks either, so it can't add mail headers of its own.)
+    const replyTo = contact && looksLikeEmail(contact) ? contact : undefined;
+    await sendMail(opts.mail, { to, subject, text, html, replyTo });
   };
 
   route('POST', '/api/me/email', async ({ user, body }) => {
@@ -4837,13 +4840,16 @@ export function createApp(opts: AppOptions): Server {
 
     ws.on('message', (raw) => {
       const text = String(raw);
-      if (!(text.startsWith('{"type":"game"') ? gameFrames : frames).take(0)) return;
+      const game = text.startsWith('{"type":"game"');
+      if (!(game ? gameFrames : frames).take(0)) return;
       let msg: Json;
       try {
         msg = JSON.parse(text);
       } catch {
         return;
       }
+      // A second "type" later in the text would win, so only game messages get the games' allowance.
+      if (game && msg.type !== 'game') return;
       try {
         if (msg.type === 'ping') {
           // The app checks now and then that the connection still works (a dropped Wi-Fi often doesn't close it).

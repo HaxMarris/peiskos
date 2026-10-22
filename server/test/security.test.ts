@@ -185,6 +185,19 @@ test('the live connection ignores a flood of messages, without closing', async (
   ws.close();
 });
 
+test("a message dressed up as a game message doesn't get the games' allowance", async () => {
+  const [kim] = await people('kim');
+  const { ws } = await socket(kim.token);
+  let pongs = 0;
+  ws.on('message', (raw) => { if (JSON.parse(String(raw)).type === 'pong') pongs++; });
+  // JSON keeps the last "type", so this reads as a ping but starts like a game message.
+  for (let i = 0; i < 20; i++) ws.send('{"type":"game","type":"ping"}');
+  ws.send(JSON.stringify({ type: 'ping' }));
+  await new Promise((r) => setTimeout(r, 200));
+  assert.equal(pongs, 1);
+  ws.close();
+});
+
 test('a voice token is only good for joining soon after', async () => {
   const [host] = await people('host');
   const b = await burrow(host);
