@@ -61,7 +61,8 @@ function stockSizeFor(n){
 }
 
 function deal(){
-  const players = present.slice(0, MAX_PLAYERS);
+  // A fresh seating every round, so who sits next to whom (and the turn order) changes.
+  const players = shuffle(present.slice(0, MAX_PLAYERS));
   const stockSize = stockSizeFor(players.length);
   // Enough decks that the draw pile doesn't run dry with lots of players.
   const decks = Math.max(1, Math.ceil((players.length * (stockSize + HAND) + 60) / DECK));
