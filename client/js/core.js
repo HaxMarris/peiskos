@@ -575,9 +575,9 @@ function connect() {
     setConnected(true, 'Connected');
     // Dropping off took you out of any game at the fire (and ended it, if it was yours).
     gameConnectionLost();
-    casinoReconnected();
     // The server forgets who's in voice when we drop off, so tell it again.
     if (state.voice) ws.send(JSON.stringify({ type: 'voice_join', channelId: state.voice.channelId, ...voiceFlags() }));
+    casinoReconnected();
     // Dropping off ended your "is live" post; still sharing, it picks back up.
     if (state.voice?.room?.localParticipant?.isScreenShareEnabled) ws.send(JSON.stringify({ type: 'voice_live', live: true }));
     // So is whether you're away from this device, and what you're playing.

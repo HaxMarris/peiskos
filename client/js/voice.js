@@ -305,6 +305,7 @@ function leaveVoice(quiet) {
   renderFireside();
   stopListen();
   stopGame();
+  stopCasino();
   pttHeld = false;
   stopAppAudio(voice);
   stopThumbs(voice);
@@ -667,6 +668,7 @@ function openVideo(key) {
 function renderStage() {
   const room = state.voice?.room;
   const LK = window.LivekitClient;
+  $('#stage').dataset.show = state.stageShow;
   if (!LK) return;
   const people = room ? [room.localParticipant, ...room.remoteParticipants.values()] : [];
   const showing = (p, source) => {
@@ -684,7 +686,6 @@ function renderStage() {
   $('#voice-watch').classList.toggle('has-video', others && !state.stageOpen);
   $('#voice-watch').classList.toggle('on', state.stageOpen);
   $('#voice-watch').title = state.stageOpen ? 'Back to chat' : 'Open the fire';
-  $('#stage').dataset.show = state.stageShow;
   $('#stage-video').classList.toggle('hidden', !sharing.size);
   if (JSON.stringify([...sharing]) !== JSON.stringify([...state.sharing])) {
     state.sharing = sharing;

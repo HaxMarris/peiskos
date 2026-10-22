@@ -1,18 +1,17 @@
-// The casino: a room in a hearth with Texas hold 'em, blackjack, a slot machine and cases to open.
-// Chips are play money only; everyone has one balance, used in every casino room. The server deals,
-// spins and opens everything; this only shows it.
+// The casino, in the games at the fire: Texas hold 'em, blackjack, a slot machine and cases to open.
+// Chips are play money only; everyone has one balance, used at every fire. The server deals, spins
+// and opens everything; this only shows it.
 //
-// A casino room is a text room too: on a wide screen its chat sits beside the casino, and on a
-// narrower one the header switches between the two.
+// It opens on the fire's stage, like a game. Each fire has its own hold 'em table, for the people
+// sitting at it; blackjack, the slots and cases are just you.
 
 const casino = {
   data: null, // the lobby: cases, slot reels, the rules
   loading: null,
   wallet: null,
-  channelId: null, // the casino room on screen
+  channelId: null, // the fire whose casino is open
   tab: store.get('casinoTab') || 'poker',
-  view: 'floor', // or 'chat', when they don't both fit
-  table: null, // the hold 'em table in this room
+  table: null, // the hold 'em table at your fire
   tableRoom: null,
   blackjack: null,
   inventory: [],
@@ -27,38 +26,48 @@ const chipsText = (n) => Number(n ?? 0).toLocaleString();
 const casinoPanes = {};
 let casinoBuilt = false;
 
-// ---- opening and leaving a casino room
+// ---- opening and closing it on the fire's stage
 
-/** Shows the casino when the room on screen is one, and tells the server which table to keep us posted on. */
-function renderCasinoRoom() {
-  const where = roomById(state.channelId);
-  const on = !!where && !where.thread && !!where.c.casino && !isDm(where.s);
-  const chat = $('main.chat');
-  chat.classList.toggle('casino-room', on);
-  $('#casino-switch').classList.toggle('hidden', !on);
-  $('#casino').classList.toggle('hidden', !on);
-  if (!on) {
-    if (casino.channelId !== null) {
-      casino.channelId = null;
-      sendCasino(null);
-    }
-    return;
-  }
-  chat.dataset.casino = casino.view;
-  renderCasinoSwitch();
-  if (casino.channelId === where.c.id) return;
-  casino.channelId = where.c.id;
-  if (casino.tableRoom !== where.c.id) casino.table = null;
+const casinoOnScreen = () => casino.channelId !== null && state.stageOpen && state.stageShow === 'casino';
+
+/** Opens the casino on the stage, on one of its games. */
+function openCasino(tab = casino.tab) {
+  if (!state.voice) return;
+  casino.tab = tab;
+  store.set('casinoTab', tab);
+  const channelId = state.voice.channelId;
+  if (casino.tableRoom !== channelId) casino.table = null;
+  casino.channelId = channelId;
   buildCasino();
-  sendCasino(where.c.id);
+  sendCasino(channelId);
   loadCasino();
+  if (!state.stageOpen) openStage();
+  state.stageShow = 'casino';
+  renderStage();
   renderCasino();
+}
+
+/** Back to the fire; the table keeps going without you watching (you stay seated if you sat down). */
+function closeCasino() {
+  if (state.stageShow === 'casino') {
+    state.stageShow = 'fire';
+    renderStage();
+  }
+}
+
+/** Leaving the fire leaves its table too (the server stands you up). */
+function stopCasino() {
+  closeCasino();
+  if (casino.channelId !== null) sendCasino(null);
+  casino.channelId = null;
+  casino.table = null;
+  casino.tableRoom = null;
 }
 
 const sendCasino = (channelId) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify({ type: 'casino', channelId }));
 /** Back online: the server forgot which table we're looking at. */
 function casinoReconnected() {
-  if (casino.channelId !== null) sendCasino(casino.channelId);
+  if (casino.channelId !== null && state.voice?.channelId === casino.channelId) sendCasino(casino.channelId);
   if (casino.data) loadCasino(true);
 }
 
@@ -77,17 +86,7 @@ async function loadCasino(fresh = false) {
   return casino.loading;
 }
 
-function renderCasinoSwitch() {
-  for (const b of $('#casino-switch').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.view === casino.view));
-}
-$('#casino-switch').addEventListener('click', (e) => {
-  const b = e.target.closest('button[data-view]');
-  if (!b) return;
-  casino.view = b.dataset.view;
-  $('main.chat').dataset.casino = casino.view;
-  renderCasinoSwitch();
-  if (casino.view === 'chat') { messagesEl.scrollTop = messagesEl.scrollHeight; markReadSoon(); }
-});
+$('#casino-back').onclick = closeCasino;
 
 function buildCasino() {
   if (casinoBuilt) return;
@@ -199,13 +198,11 @@ async function openLeaders() {
   } catch (err) { $('#leaders') && ($('#leaders').innerHTML = `<li class="error">${escapeHtml(err.message)}</li>`); }
 }
 
-/** Posts a line in the casino room's chat, to show off. */
-async function brag(text) {
-  if (casino.channelId === null) return;
-  try {
-    await api(`/api/channels/${casino.channelId}/messages`, { method: 'POST', body: { content: text } });
-    toast('Shared in the chat.');
-  } catch (err) { toast(err.message); }
+/** Posts a line in the fireside chat, to show off. */
+function brag(text) {
+  if (!state.voice || state.ws?.readyState !== WebSocket.OPEN) return toast("You're offline right now.");
+  state.ws.send(JSON.stringify({ type: 'fireside_send', content: text }));
+  toast('Shared in the fireside chat.');
 }
 
 // ---- Texas hold 'em
@@ -236,6 +233,7 @@ function buildPoker() {
 const myPokerSeat = () => casino.table?.seats.findIndex((s) => s?.userId === state.me.id) ?? -1;
 
 function onCasinoPoker(ev) {
+  if (ev.channelId !== state.voice?.channelId) return;
   const before = casino.table;
   casino.table = ev.table;
   casino.tableRoom = ev.channelId;
@@ -244,22 +242,17 @@ function onCasinoPoker(ev) {
   const yourTurn = me >= 0 && ev.table.toAct === me;
   const wasYourTurn = before && before.toAct === me && before.handNo === ev.table.handNo;
   if (yourTurn && !wasYourTurn) {
-    if (ev.channelId !== casino.channelId || casino.tab !== 'poker' || document.hidden || casino.view === 'chat')
-      toast("It's your turn at the poker table.", { action: 'Go', onAction: () => goToPoker(ev.channelId) });
+    if (!casinoOnScreen() || casino.tab !== 'poker' || document.hidden)
+      toast("It's your turn at the poker table.", { action: 'Go', onAction: goToPoker });
     playSound('message');
   }
   if (ev.channelId === casino.channelId) renderPoker(before);
 }
 
-function goToPoker(channelId) {
-  const where = roomById(channelId);
-  if (!where) return;
-  casino.tab = 'poker';
-  casino.view = 'floor';
-  if (state.serverId !== where.s.id) selectServer(where.s.id, false, channelId);
-  else selectChannel(channelId);
-  showView('chat');
-  renderCasino();
+function goToPoker() {
+  if (!state.voice) return;
+  goToVoice();
+  openCasino('poker');
 }
 
 /** Seats go round the table with yours at the bottom. */
@@ -821,7 +814,7 @@ function showDrop(item, c) {
     <div class="drop-actions">
       <button type="button" class="btn" data-open="${c.id}">Open another (${chipsText(c.price)})</button>
       <button type="button" class="btn secondary" data-sell="${item.id}">Sell for ${chipsText(item.value)}</button>
-      <button type="button" class="btn secondary" data-brag="${item.id}">Show the chat</button>
+      <button type="button" class="btn secondary" data-brag="${item.id}">Show the fire</button>
     </div>`;
   box.dataset.brag = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
   if (['covert', 'rare'].includes(skin.rarity)) playSound('message');
@@ -892,7 +885,7 @@ function openItem(item) {
   modal(`${dropHtml(item)}
     <div class="modal-row">
       <button type="button" class="btn secondary" data-close>Keep</button>
-      <button type="button" class="btn secondary" id="item-brag">Show the chat</button>
+      <button type="button" class="btn secondary" id="item-brag">Show the fire</button>
       <button type="button" class="btn" id="item-sell">Sell for ${chipsText(item.value)}</button>
     </div>`, 'drop-modal');
   $('#item-sell').onclick = async () => {
@@ -903,9 +896,8 @@ function openItem(item) {
 
 // Keys: Space spins the slots when they're on screen.
 document.addEventListener('keydown', (e) => {
-  if (e.key !== ' ' || casino.channelId === null || casino.tab !== 'slots' || casino.view === 'chat' && isNarrowCasino()) return;
+  if (e.key !== ' ' || !casinoOnScreen() || casino.tab !== 'slots') return;
   if (e.target.closest?.('input, textarea, select, button, [contenteditable]') || !$('#modal').classList.contains('hidden')) return;
   e.preventDefault();
   spin();
 });
-const isNarrowCasino = () => !matchMedia('(min-width: 1280px)').matches;

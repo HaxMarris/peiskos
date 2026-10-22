@@ -29,21 +29,50 @@ const sendGame = (msg) => state.ws?.readyState === WebSocket.OPEN && state.ws.se
 const inFireGame = () => !!fireGame?.game?.players.includes(state.me?.id);
 const gamePlayers = (g) => g.players.map((id) => ({ id, name: nameOf(id, 'Player') }));
 
+// The casino's games (casino.js) sit in their own part of the picker: play chips, not a match.
+const CASINO_GAMES = {
+  poker: { title: "Texas hold 'em", icon: '♠️', blurb: "The fire's own table: up to eight players, blinds 10/20." },
+  blackjack: { title: 'Blackjack', icon: '🂡', blurb: 'You against the dealer. Blackjack pays 3 to 2.' },
+  slots: { title: 'Slots', icon: '🎰', blurb: 'Five reels, ten lines. Three flames pays 500 times.' },
+  cases: { title: 'Cases', icon: '🎁', blurb: 'Open cases for made-up weapon skins, then keep them or sell them back.' },
+};
+
 function openGamePicker() {
-  if (fireGame?.game) return joinFireGame();
+  const g = fireGame?.game;
+  const playing = g && inFireGame();
+  const running = g && `
+      <button type="button" class="game-pick" data-join>
+        <span class="game-pick-icon" aria-hidden="true">${FIRE_GAMES[g.name]?.icon ?? '🎲'}</span>
+        <span class="game-pick-text"><b>${FIRE_GAMES[g.name]?.title ?? 'A game'}</b><span class="small muted">Started by ${g.hostId === state.me.id ? 'you' : escapeHtml(nameOf(g.hostId))} · ${g.players.length} of ${gameMax(g.name)} playing</span></span>
+        <span class="btn">${playing ? 'Open' : 'Join'}</span>
+      </button>`;
   modal(`<h2>Play a game together</h2>
     <p class="small muted">Everyone at the fire can join, and you can keep talking while you play.</p>
-    <div class="game-picks">${Object.entries(FIRE_GAMES).map(([name, g]) => `
+    <div class="game-picks">${running || Object.entries(FIRE_GAMES).map(([name, f]) => `
       <button type="button" class="game-pick" data-game="${name}">
-        <span class="game-pick-icon" aria-hidden="true">${g.icon}</span>
-        <span class="game-pick-text"><b>${g.title}</b><span class="small muted">${g.blurb}</span></span>
+        <span class="game-pick-icon" aria-hidden="true">${f.icon}</span>
+        <span class="game-pick-text"><b>${f.title}</b><span class="small muted">${f.blurb}</span></span>
         <span class="btn">Start</span>
       </button>`).join('')}
+    </div>
+    <h3 class="game-picks-head">Casino</h3>
+    <p class="small muted">Play chips only. Everyone gets 5,000 to start, and more for free every day.</p>
+    <div class="game-picks casino-picks">${Object.entries(CASINO_GAMES).map(([tab, c]) => `
+      <button type="button" class="game-pick" data-casino="${tab}">
+        <span class="game-pick-icon" aria-hidden="true">${c.icon}</span>
+        <span class="game-pick-text"><b>${c.title}</b><span class="small muted">${c.blurb}</span></span>
+      </button>`).join('')}
     </div>`);
-  $('#modal-card').querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
+  const card = $('#modal-card');
+  card.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
     closeModal();
     gameStarting = true;
     sendGame({ action: 'start', game: b.dataset.game });
+  }));
+  card.querySelector('[data-join]')?.addEventListener('click', () => { closeModal(); joinFireGame(); });
+  card.querySelectorAll('[data-casino]').forEach((b) => (b.onclick = () => {
+    closeModal();
+    openCasino(b.dataset.casino);
   }));
 }
 

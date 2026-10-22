@@ -1,7 +1,7 @@
-// The casino: a room in a hearth with Texas hold 'em, blackjack, a slot machine and CS-style cases.
-// Everything is played with chips, and chips are play money only: everyone starts with some, gets
-// more for free every day, and they can't be bought or cashed out. One balance per person, used in
-// every casino room. The server deals, spins and opens everything, so nobody's app decides what it wins.
+// The casino, in the games at the fire: Texas hold 'em (one table at each fire), blackjack, a slot
+// machine and CS-style cases. Everything is played with chips, and chips are play money only: everyone
+// starts with some, gets more for free every day, and they can't be bought or cashed out. One balance
+// per person, used at every fire. The server deals, spins and opens everything, so nobody's app decides what it wins.
 import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import type { Db } from './db.ts';
@@ -25,7 +25,7 @@ export const POKER = { smallBlind: 10, bigBlind: 20, minBuyIn: 400, maxBuyIn: 40
 const AWAY_STAND_MS = 2 * 60_000; // offline this long at a table, and you get up (with your chips)
 const SITTING_OUT_STAND_MS = 10 * 60_000;
 
-type Channel = { id: number; serverId: number; casino: number };
+type Channel = { id: number; serverId: number; kind: string };
 type User = { id: number };
 type Handler = (ctx: { user: User; params: string[]; body: Json }) => unknown;
 
@@ -33,8 +33,10 @@ export interface CasinoContext {
   db: Db;
   route: (method: string, path: string, handler: Handler) => void;
   fail: (status: number, message: string) => Error;
-  channelById: (id: number) => (Channel & Record<string, unknown>) | undefined;
-  canSee: (channel: never, userId: number) => boolean;
+  channelById: (id: number) => Channel | undefined;
+  /** Which fire (voice room) each person is at. */
+  inVoice: Map<number, number>;
+  usersInVoice: (channelId: number) => number[];
   isMember: (serverId: number, userId: number) => boolean;
   serverMemberIds: (serverId: number) => number[];
   isOnline: (userId: number) => boolean;
@@ -329,16 +331,17 @@ export function casino(ctx: CasinoContext) {
     return { blackjack: blackjackView(wallet(user.id)), wallet: walletView(user.id) };
   });
 
-  // ---- Texas hold 'em: one table in each casino room, for up to eight
+  // ---- Texas hold 'em: one table at each fire, for up to eight of the people sitting there
 
-  const tables = new Map<number, PokerTable>(); // casino room id -> its table
+  const tables = new Map<number, PokerTable>(); // voice room id -> its table
   const watching = new Map<WebSocket, { userId: number; channelId: number }>();
   const offlineSince = new Map<number, number>();
   const outSince = new Map<number, number>();
 
-  const casinoRoom = (channelId: number, userId: number) => {
+  /** The fire someone is sitting at, which is the only one whose table they can play at. */
+  const fireOf = (channelId: number, userId: number) => {
     const channel = ctx.channelById(channelId);
-    if (!channel || !channel.casino || !ctx.canSee(channel as never, userId)) throw fail(404, 'Casino not found');
+    if (!channel || channel.kind !== 'voice' || ctx.inVoice.get(userId) !== channelId) throw fail(400, 'Join the fire to play poker there');
     return channel;
   };
   const tableEvent = (channelId: number, userId: number) => {
@@ -349,10 +352,10 @@ export function casino(ctx: CasinoContext) {
     handNo: 0, smallBlind: POKER.smallBlind, bigBlind: POKER.bigBlind, button: -1, board: [], street: null, done: true, pot: 0,
     currentBet: 0, toAct: -1, deadline: 0, winners: [], seats: Array(MAX_SEATS).fill(null), options: null, log: [],
   });
-  /** Everyone looking at the room, and everyone sitting at its table, sees the table as it is now. */
+  /** Everyone at the fire, and everyone sitting at its table, sees the table as it is now. */
   const tableChanged = (channelId: number) => {
     const t = tables.get(channelId);
-    const ids = new Set<number>();
+    const ids = new Set<number>(ctx.usersInVoice(channelId));
     for (const w of watching.values()) if (w.channelId === channelId) ids.add(w.userId);
     for (const s of t?.seats ?? []) if (s) ids.add(s.userId);
     for (const id of ids) ctx.sendTo([id], tableEvent(channelId, id));
@@ -391,11 +394,11 @@ export function casino(ctx: CasinoContext) {
   };
 
   route('POST', '/api/channels/:id/poker', ({ user, params, body }) => {
-    const channel = casinoRoom(Number(params[0]), user.id);
+    const channel = fireOf(Number(params[0]), user.id);
     const action = String(body.action);
     if (action === 'sit') {
       const other = atTable(user.id);
-      if (other !== undefined) throw fail(400, other === channel.id ? "You're already at this table" : "You're already at a table in another casino");
+      if (other !== undefined) throw fail(400, other === channel.id ? "You're already at this table" : "You're already at a table at another fire");
       const chips = wholeChips(body.buyIn, 'A buy-in');
       if (chips < POKER.minBuyIn || chips > POKER.maxBuyIn) throw fail(400, `Buy in for ${POKER.minBuyIn} to ${POKER.maxBuyIn} chips`);
       const seat = Number(body.seat);
@@ -433,13 +436,13 @@ export function casino(ctx: CasinoContext) {
     return { ok: true };
   });
 
-  // Every few seconds: people who went offline or sat out for long get up, and tables in rooms
-  // that are gone (or aren't a casino any more) close with everyone's chips going back.
+  // Every few seconds: people who left the fire, went offline or sat out for long get up, and tables
+  // at fires that are gone close with everyone's chips going back.
   const sweep = () => {
     const now = Date.now();
     for (const [channelId, t] of tables) {
       const channel = ctx.channelById(channelId);
-      if (!channel?.casino) {
+      if (channel?.kind !== 'voice') {
         t.close();
         tables.delete(channelId);
         continue;
@@ -451,7 +454,7 @@ export function casino(ctx: CasinoContext) {
         else if (!offlineSince.has(s.userId)) offlineSince.set(s.userId, now);
         if (!s.sittingOut) outSince.delete(s.userId);
         else if (!outSince.has(s.userId)) outSince.set(s.userId, now);
-        const gone = !ctx.canSee(channel as never, s.userId);
+        const gone = ctx.inVoice.get(s.userId) !== channelId;
         if (gone || now - (offlineSince.get(s.userId) ?? now) >= AWAY_STAND_MS || now - (outSince.get(s.userId) ?? now) >= SITTING_OUT_STAND_MS) {
           offlineSince.delete(s.userId);
           outSince.delete(s.userId);
@@ -465,16 +468,21 @@ export function casino(ctx: CasinoContext) {
   sweeper.unref();
 
   return {
-    /** The app is showing a casino room (or stopped showing it): it hears about that room's table. */
+    /** The app is showing the casino at a fire (or stopped showing it): it hears about that fire's table. */
     watch(ws: WebSocket, userId: number, channelId: number | null) {
       watching.delete(ws);
       if (channelId === null) return;
-      casinoRoom(channelId, userId);
+      fireOf(channelId, userId);
       watching.set(ws, { userId, channelId });
       ctx.sendTo([userId], tableEvent(channelId, userId));
     },
     closed(ws: WebSocket) {
       watching.delete(ws);
+    },
+    /** Someone left a fire, so they get up from its table (after the hand, if they're in one). */
+    left(channelId: number, userId: number) {
+      for (const [ws, w] of watching) if (w.userId === userId && w.channelId === channelId) watching.delete(ws);
+      tables.get(channelId)?.stand(userId);
     },
     sweep,
     stop() {
