@@ -515,3 +515,14 @@
   .vstrip .item-name span { display: none; }
   .b-items { grid-template-columns: repeat(auto-fill, minmax(48px, 1fr)); }
 }
+
+/* Floats, to 14 places like CS */
+.item-float { display: flex; align-items: baseline; justify-content: space-between; gap: 4px; font: 600 10px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: rgba(251, 244, 236, .82); font-variant-numeric: tabular-nums; }
+.item-float span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.item-float b { flex: none; font-family: var(--font-body, inherit); font-weight: 900; color: #fbf4ec; }
+.drop-float { font: 600 13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color: rgba(251, 244, 236, .8); }
+.drop-float b { color: #fbf4ec; }
+.float-bar { position: relative; display: block; width: min(100%, 260px); height: 6px; margin: 4px 0 2px; border-radius: 3px;
+  background: linear-gradient(90deg, #3fb37f 0 7%, #8fcf5a 7% 15%, #e8c94a 15% 38%, #ee8a3c 38% 45%, #e0533e 45%); }
+.float-bar i { position: absolute; top: -3px; width: 2px; height: 12px; margin-left: -1px; background: #fbf4ec; box-shadow: 0 0 0 1px rgba(0, 0, 0, .6); }
+.vstrip .item-float { font-size: 10px; }

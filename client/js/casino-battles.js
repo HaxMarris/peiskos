@@ -237,9 +237,9 @@ function drawBattle(b, shown) {
     return `<div class="b-col ${done ? (won ? 'won' : 'lost') : ''}" data-col="${i}">
       <div class="b-who">${s.bot ? '<span class="bot-face" aria-hidden="true">🤖</span>' : `<span class="avatar b-av" data-avatar="${s.userId}"></span>`}<b>${escapeHtml(seatName(s))}</b></div>
       <div class="b-total"><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(totals[i])}</div>
-      <div class="vreel"><div class="vstrip">${last ? itemTile(skinById(last.skinId), '', { float: last.float }) : ''}</div><span class="vmarker" aria-hidden="true"></span></div>
+      <div class="vreel"><div class="vstrip">${last ? itemTile(skinById(last.skinId), floatLine(last.float), { float: last.float }) : ''}</div><span class="vmarker" aria-hidden="true"></span></div>
       ${done ? `<div class="b-result">${won ? (s.bot ? 'Winner' : `Won ${chipsText(b.won[i] ?? 0)}`) : 'Lost'}</div>` : ''}
-      <div class="b-items">${s.rolls.slice(0, shown).map((r) => `<div class="b-item r-${skinById(r.skinId).rarity}" style="--rarity:${RARITY[skinById(r.skinId).rarity].color}" title="${escapeHtml(skinTitle(skinById(r.skinId), r.stattrak))}">${skinArt(skinById(r.skinId), r.float)}<span>${chipsText(r.value)}</span></div>`).reverse().join('')}</div>
+      <div class="b-items">${s.rolls.slice(0, shown).map((r) => `<div class="b-item r-${skinById(r.skinId).rarity}" style="--rarity:${RARITY[skinById(r.skinId).rarity].color}" title="${escapeHtml(`${skinTitle(skinById(r.skinId), r.stattrak)} · ${r.float.toFixed(14)}`)}">${skinArt(skinById(r.skinId), r.float)}<span>${chipsText(r.value)}</span></div>`).reverse().join('')}</div>
     </div>`;
   };
   main.innerHTML = `

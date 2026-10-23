@@ -15,7 +15,8 @@ const casino = {
   tableRoom: null,
   blackjack: null,
   inventory: [],
-  found: [], // the collection book: every skin you've ever unboxed
+  found: [],
+  hearthId: null, // whose casino is open: chips and skins belong to a hearth // the collection book: every skin you've ever unboxed
 };
 const CASINO_TABS = [
   ['poker', "Hold 'em"],
@@ -24,6 +25,8 @@ const CASINO_TABS = [
   ['cases', 'Cases'],
   ['battles', 'Battles'],
 ];
+/** The casino of the hearth whose fire you're at: its own chips, skins and book. */
+const casinoApi = (path = '') => `/api/servers/${casino.hearthId}/casino${path}`;
 const chipsText = (n) => Number(n ?? 0).toLocaleString();
 const casinoPanes = {};
 let casinoBuilt = false;
@@ -40,6 +43,17 @@ function openCasino(tab = casino.tab) {
   const channelId = state.voice.channelId;
   if (casino.tableRoom !== channelId) casino.table = null;
   casino.channelId = channelId;
+  // Chips and skins belong to the hearth, so a fire in another hearth means another casino.
+  const hearth = roomById(channelId)?.s.id ?? null;
+  if (casino.hearthId !== hearth) {
+    casino.hearthId = hearth;
+    casino.data = null;
+    casino.wallet = null;
+    casino.inventory = [];
+    casino.found = [];
+    casino.blackjack = null;
+    casino.loading = null;
+  }
   buildCasino();
   sendCasino(channelId);
   loadCasino();
@@ -78,8 +92,11 @@ function casinoReconnected() {
 
 async function loadCasino(fresh = false) {
   if (casino.data && !fresh) return casino.data;
-  casino.loading ??= api('/api/casino')
+  const hearth = casino.hearthId;
+  if (casino.loading) return casino.loading;
+  const loading = (casino.loading = api(casinoApi())
     .then((d) => {
+      if (hearth !== casino.hearthId) return d;
       casino.data = d;
       casino.wallet = d.wallet;
       casino.blackjack = d.blackjack;
@@ -88,8 +105,10 @@ async function loadCasino(fresh = false) {
       renderCasino();
       return d;
     })
-    .finally(() => (casino.loading = null));
-  return casino.loading;
+    .finally(() => {
+      if (casino.loading === loading) casino.loading = null;
+    }));
+  return loading;
 }
 
 $('#casino-back').onclick = closeCasino;
@@ -166,15 +185,15 @@ const untilText = (at) => {
 };
 setInterval(() => { if (casino.channelId !== null) renderWallet(); }, 30_000);
 
-function setWallet(w) {
-  if (!w) return;
+function setWallet(w, serverId = casino.hearthId) {
+  if (!w || serverId !== casino.hearthId) return;
   casino.wallet = w;
   renderWallet();
 }
 
 async function claimFreeChips() {
   try {
-    const r = await api('/api/casino/free', { method: 'POST', body: {} });
+    const r = await api(casinoApi('/free'), { method: 'POST', body: {} });
     setWallet(r.wallet);
     toast(`+${chipsText(r.got)} chips. Have fun!`);
   } catch (err) { toast(err.message); }
@@ -532,7 +551,7 @@ async function onBlackjackClick(e) {
   b.disabled = true;
   try {
     const before = casino.blackjack;
-    const r = await api('/api/casino/blackjack', { method: 'POST', body: action === 'deal' ? { action, bet: bjBet } : { action } });
+    const r = await api(casinoApi('/blackjack'), { method: 'POST', body: action === 'deal' ? { action, bet: bjBet } : { action } });
     casino.blackjack = r.blackjack;
     setWallet(r.wallet);
     renderBlackjack(action === 'deal' ? null : before);
@@ -657,7 +676,7 @@ async function spin() {
   casinoPanes.slots.querySelectorAll('.slot-sym.hit').forEach((x) => x.classList.remove('hit'));
   let r;
   try {
-    r = await api('/api/casino/slots', { method: 'POST', body: { bet: slotBet } });
+    r = await api(casinoApi('/slots'), { method: 'POST', body: { bet: slotBet } });
   } catch (err) {
     spinning = false;
     renderSlotControls();
@@ -840,7 +859,7 @@ async function openTheCase(c) {
   lastDrops = null;
   let r;
   try {
-    r = await api(`/api/casino/cases/${c.id}/open`, { method: 'POST', body: n > 1 ? { count: n } : {} });
+    r = await api(casinoApi(`/cases/${c.id}/open`), { method: 'POST', body: n > 1 ? { count: n } : {} });
   } catch (err) {
     opening = false;
     if (btn) btn.disabled = false;
@@ -904,9 +923,9 @@ function showDrops() {
       <span class="small muted">Spent ${chipsText(c.price * items.length)}${fresh.size ? ` · ${fresh.size} new in your book` : ''}</span>
     </div>
     <div class="item-grid">${items.map((i) => {
-      const { skin, wear } = itemDetails(i);
+      const { skin } = itemDetails(i);
       const sold = !left.includes(i);
-      return `<button type="button" class="inv-item drop-item ${sold ? 'sold' : ''}" data-drop-item="${i.id}" ${sold ? 'disabled' : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}${sold ? ' · Sold' : ''}</span>`, { float: i.float })}${fresh.has(i.id) ? '<span class="new-mark">New</span>' : ''}</button>`;
+      return `<button type="button" class="inv-item drop-item ${sold ? 'sold' : ''}" data-drop-item="${i.id}" ${sold ? 'disabled' : ''}>${itemTile(skin, `${floatLine(i.float)}<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${chipValue(i.value)}${sold ? ' · Sold' : ''}</span>`, { float: i.float })}${fresh.has(i.id) ? '<span class="new-mark">New</span>' : ''}</button>`;
     }).join('')}</div>
     <div class="drop-actions">
       <button type="button" class="btn" data-open="${c.id}">Open ${items.length} more (${chipsText(c.price * items.length)})</button>
@@ -932,7 +951,8 @@ function dropHtml(item) {
     <div class="drop-info">
       <span class="drop-rarity">${RARITY[skin.rarity].name}${item.stattrak ? ' · <span class="stattrak">StatTrak™</span>' : ''}</span>
       <h3>${escapeHtml(title)}</h3>
-      <span class="small muted">${wear.name} · Float ${item.float.toFixed(6)}</span>
+      <span class="small muted">${wear.name}</span>
+      <span class="drop-float">Float <b>${item.float.toFixed(14)}</b></span>${floatBar(item.float)}
       <span class="drop-value"><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(item.value)}</span>
     </div>
   </div>`;
@@ -963,7 +983,6 @@ let bookMissing = false;
 
 function renderBook() {
   const found = new Map(casino.found.map((f) => [f.skinId, f]));
-  const wears = casino.data.wears;
   const cases = casino.data.cases;
   const all = allSkins();
   const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
@@ -974,7 +993,7 @@ function renderBook() {
     const f = found.get(s.id);
     if (f) {
       const times = f.count > 1 ? `×${f.count} · ` : '';
-      return itemTile(s, `<span class="item-meta small">${f.stattrak ? '<span class="stattrak">ST</span> ' : ''}${times}Best ${wearOf(f.bestFloat, wears).short} ${f.bestFloat.toFixed(4)}</span>`, { float: f.bestFloat });
+      return itemTile(s, `<span class="item-meta small">${f.stattrak ? '<span class="stattrak">ST</span> ' : ''}${times}Best float</span>${floatLine(f.bestFloat)}`, { float: f.bestFloat });
     }
     // Not found yet: a shadow of the gun. Knives and gloves stay a mystery, like in the case.
     if (s.rarity === 'rare') return `<div class="item-tile r-rare missing" style="--rarity:${RARITY.rare.color}"><div class="item-art"><span class="rare-mark">★</span></div><div class="item-name"><span class="small">${escapeHtml(s.weapon)}</span><b>???</b></div><span class="item-meta small">Not found yet</span></div>`;
@@ -1004,6 +1023,15 @@ function renderBook() {
 
 const caseOfSkin = (skinId) => casino.data?.cases.find((c) => c.skins.some((x) => x.id === skinId));
 
+/** A skin's float the way CS lists it, to 14 places, with its wear. */
+const floatLine = (float) => {
+  const wear = wearOf(float, casino.data.wears);
+  return `<span class="item-float" title="${wear.name}"><span>${float.toFixed(14)}</span><b>${wear.short}</b></span>`;
+};
+/** Where the float sits from 0 (factory new) to 1 (battle-scarred). */
+const floatBar = (float) => `<span class="float-bar" aria-hidden="true"><i style="left:${(float * 100).toFixed(2)}%"></i></span>`;
+const chipValue = (n) => `<span class="chip-icon sm" aria-hidden="true"></span>${chipsText(n)}`;
+
 /** The inventory items that pass the filters, sorted. */
 function shownItems() {
   const wears = casino.data.wears;
@@ -1016,7 +1044,7 @@ function shownItems() {
     if (invFilter.box !== 'all' && caseOfSkin(i.skinId)?.id !== invFilter.box) return false;
     if (invFilter.stattrak && !i.stattrak) return false;
     return true;
-  }).sort((a, b) => (invSort === 'value' ? b.value - a.value : invSort === 'rarity'
+  }).sort((a, b) => (invSort === 'value' ? b.value - a.value : invSort === 'float' ? a.float - b.float : invSort === 'rarity'
     ? RARITY_ORDER.indexOf(skinById(a.skinId).rarity) - RARITY_ORDER.indexOf(skinById(b.skinId).rarity) || b.value - a.value
     : b.id - a.id));
 }
@@ -1052,6 +1080,7 @@ function renderInventory() {
         <option value="new" ${invSort === 'new' ? 'selected' : ''}>Newest</option>
         <option value="value" ${invSort === 'value' ? 'selected' : ''}>Most valuable</option>
         <option value="rarity" ${invSort === 'rarity' ? 'selected' : ''}>Rarest</option>
+        <option value="float" ${invSort === 'float' ? 'selected' : ''}>Lowest float</option>
       </select>
     </div>
     <div class="inv-head">
@@ -1061,9 +1090,9 @@ function renderInventory() {
       ${items.length ? `<button type="button" class="link-btn danger-link" data-sell-all>${filtered ? `Sell these ${items.length}` : 'Sell everything'}</button>` : ''}
     </div>
     ${items.length ? `<div class="item-grid inv ${invPicking ? 'picking' : ''}">${items.map((i) => {
-      const { skin, wear } = itemDetails(i);
+      const { skin } = itemDetails(i);
       const on = invPicked.has(i.id);
-      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}<span class="pick-mark" aria-hidden="true"></span></button>`;
+      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `${floatLine(i.float)}<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${chipValue(i.value)}</span>`, { float: i.float })}<span class="pick-mark" aria-hidden="true"></span></button>`;
     }).join('')}</div>` : '<p class="muted empty-inv">Nothing matches these filters.</p>'}
     ${invPicking ? `<div class="sell-bar">
       <span><b>${picked.length}</b> selected${picked.length ? ` · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(pickedValue)}` : ''}</span>
@@ -1075,7 +1104,7 @@ function renderInventory() {
 
 async function sellItems(ids) {
   try {
-    const r = await api('/api/casino/items/sell', { method: 'POST', body: { ids } });
+    const r = await api(casinoApi('/items/sell'), { method: 'POST', body: { ids } });
     casino.inventory = casino.inventory.filter((i) => !ids.includes(i.id));
     setWallet(r.wallet);
     toast(`Sold for ${chipsText(r.got)} chips.`);

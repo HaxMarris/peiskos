@@ -157,20 +157,22 @@ test('the slot machine wins often and pays back nearly everything', () => {
 test('chips: slots, cases, blackjack and free chips', async () => {
   const max = await reg('maxc');
   const t = max.token;
-  const lobby = (await call('/api/casino', { token: t })).data;
+  const home = (await call('/api/servers', { body: { name: 'Chips' }, token: t })).data;
+  const C = `/api/servers/${home.id}/casino`;
+  const lobby = (await call(C, { token: t })).data;
   assert.equal(lobby.wallet.chips, START_CHIPS);
   assert.equal(lobby.wallet.freeAt, 0);
   assert.equal(lobby.cases.length, 3);
 
   // Free chips once, then not again for a while.
-  const free = await call('/api/casino/free', { token: t, body: {} });
+  const free = await call(`${C}/free`, { token: t, body: {} });
   assert.equal(free.data.wallet.chips, START_CHIPS + 1000);
-  assert.equal((await call('/api/casino/free', { token: t, body: {} })).status, 400);
+  assert.equal((await call(`${C}/free`, { token: t, body: {} })).status, 400);
   let chips = START_CHIPS + 1000;
 
   // A spin takes the bet and pays what the lines say.
-  assert.equal((await call('/api/casino/slots', { token: t, body: { bet: 7 } })).status, 400);
-  const spin = (await call('/api/casino/slots', { token: t, body: { bet: 100 } })).data;
+  assert.equal((await call(`${C}/slots`, { token: t, body: { bet: 7 } })).status, 400);
+  const spin = (await call(`${C}/slots`, { token: t, body: { bet: 100 } })).data;
   assert.equal(spin.grid.length, 3);
   const expected = spin.wins.reduce((n: number, w: any) => n + w.pays, 0);
   assert.equal(spin.won, expected);
@@ -179,42 +181,54 @@ test('chips: slots, cases, blackjack and free chips', async () => {
 
   // A case: its price, and an item worth something that sells back.
   const box = CASES[0];
-  const opened = (await call(`/api/casino/cases/${box.id}/open`, { token: t, body: {} })).data;
+  const opened = (await call(`${C}/cases/${box.id}/open`, { token: t, body: {} })).data;
   chips -= box.price;
   assert.equal(opened.wallet.chips, chips);
   assert.ok(box.skins.some((s) => s.id === opened.item.skinId));
   assert.ok(opened.item.float >= 0 && opened.item.float <= 1);
-  assert.equal((await call('/api/casino', { token: t })).data.inventory.length, 1);
-  const sold = (await call('/api/casino/items/sell', { token: t, body: { ids: [opened.item.id] } })).data;
+  assert.equal((await call(C, { token: t })).data.inventory.length, 1);
+  const sold = (await call(`${C}/items/sell`, { token: t, body: { ids: [opened.item.id] } })).data;
   chips += opened.item.value;
   assert.equal(sold.got, opened.item.value);
   assert.equal(sold.wallet.chips, chips);
   // The collection book keeps it after it's sold.
   assert.deepEqual(opened.found.map((f: any) => [f.skinId, f.count]), [[opened.item.skinId, 1]]);
-  const after = (await call('/api/casino', { token: t })).data;
+  const after = (await call(C, { token: t })).data;
   assert.equal(after.inventory.length, 0);
   assert.equal(after.found[0].skinId, opened.item.skinId);
   assert.equal(after.found[0].bestFloat, opened.item.float);
 
   // Several at once: paid together, all into the inventory. Only the listed counts.
-  assert.equal((await call(`/api/casino/cases/${box.id}/open`, { token: t, body: { count: 3 } })).status, 400);
-  const five = (await call(`/api/casino/cases/${box.id}/open`, { token: t, body: { count: 5 } })).data;
+  assert.equal((await call(`${C}/cases/${box.id}/open`, { token: t, body: { count: 3 } })).status, 400);
+  const five = (await call(`${C}/cases/${box.id}/open`, { token: t, body: { count: 5 } })).data;
   chips -= box.price * 5;
   assert.equal(five.items.length, 5);
   assert.equal(five.wallet.chips, chips);
-  assert.equal((await call('/api/casino', { token: t })).data.inventory.length, 5);
-  const back = (await call('/api/casino/items/sell', { token: t, body: { ids: five.items.map((i: any) => i.id) } })).data;
+  assert.equal((await call(C, { token: t })).data.inventory.length, 5);
+  const back = (await call(`${C}/items/sell`, { token: t, body: { ids: five.items.map((i: any) => i.id) } })).data;
   chips += five.items.reduce((n: number, i: any) => n + i.value, 0);
   assert.equal(back.wallet.chips, chips);
 
+  // Another hearth is a fresh start: its own chips, inventory and book, and nothing crosses over.
+  const other = (await call('/api/servers', { body: { name: 'Elsewhere' }, token: t })).data;
+  const O = `/api/servers/${other.id}/casino`;
+  const there = (await call(O, { token: t })).data;
+  assert.deepEqual([there.wallet.chips, there.inventory.length, there.found.length], [START_CHIPS, 0, 0]);
+  const kept = (await call(`${O}/cases/${box.id}/open`, { token: t, body: {} })).data.item;
+  assert.equal((await call(C, { token: t })).data.inventory.length, 0);
+  assert.equal((await call(`${C}/items/sell`, { token: t, body: { ids: [kept.id] } })).data.got, 0);
+  assert.equal((await call(O, { token: t })).data.wallet.chips, START_CHIPS - box.price);
+  // Only for hearths you're in.
+  assert.equal((await call(`/api/servers/${other.id}/casino`, { token: (await reg('outsider')).token })).status, 404);
+
   // Blackjack: 10 and 9 against a 7; standing on 19 beats the dealer's 17.
   nextDeck = dealt('Th', '7c', '9d', 'Ks', '5h');
-  let hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'deal', bet: 100 } })).data;
+  let hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'deal', bet: 100 } })).data;
   assert.deepEqual(hand.blackjack.dealer, ['7c', '??']);
   assert.equal(hand.blackjack.hands[0].total, 19);
   assert.equal(hand.wallet.chips, chips - 100);
-  assert.equal((await call('/api/casino/blackjack', { token: t, body: { action: 'deal', bet: 100 } })).status, 400);
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'stand' } })).data;
+  assert.equal((await call(`${C}/blackjack`, { token: t, body: { action: 'deal', bet: 100 } })).status, 400);
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'stand' } })).data;
   assert.equal(hand.blackjack.over, true);
   assert.equal(hand.blackjack.hands[0].result, 'win');
   chips += 100;
@@ -222,7 +236,7 @@ test('chips: slots, cases, blackjack and free chips', async () => {
 
   // A natural pays 3 to 2 straight away.
   nextDeck = dealt('Ah', '9c', 'Kd', '7s');
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'deal', bet: 100 } })).data;
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'deal', bet: 100 } })).data;
   assert.equal(hand.blackjack.over, true);
   assert.equal(hand.blackjack.hands[0].result, 'blackjack');
   chips += 150;
@@ -230,15 +244,15 @@ test('chips: slots, cases, blackjack and free chips', async () => {
 
   // Splitting eights against a 6: one hand busts, the other wins when the dealer busts.
   nextDeck = dealt('8h', '6c', '8d', 'Ts', '3c', 'Kd', '9h', 'Tc');
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'deal', bet: 50 } })).data;
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'deal', bet: 50 } })).data;
   assert.equal(hand.blackjack.can.split, true);
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'split' } })).data;
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'split' } })).data;
   assert.equal(hand.wallet.chips, chips - 100);
   assert.deepEqual(hand.blackjack.hands.map((h: any) => h.cards), [['8h', '3c'], ['8d', 'Kd']]);
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'hit' } })).data; // 8 3 9 = 20
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'stand' } })).data;
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'hit' } })).data; // 8 3 9 = 20
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'stand' } })).data;
   assert.equal(hand.blackjack.active, 1);
-  hand = (await call('/api/casino/blackjack', { token: t, body: { action: 'stand' } })).data; // 18; dealer 6 T 2 T = 28
+  hand = (await call(`${C}/blackjack`, { token: t, body: { action: 'stand' } })).data; // 18; dealer 6 T 2 T = 28
   assert.equal(hand.blackjack.over, true);
   assert.deepEqual(hand.blackjack.hands.map((h: any) => h.result), ['win', 'win']);
   chips += 100;
@@ -247,10 +261,10 @@ test('chips: slots, cases, blackjack and free chips', async () => {
 
   // Not enough chips.
   db.prepare('UPDATE casino_wallets SET chips = 20 WHERE user_id = ?').run(max.user.id);
-  assert.equal((await call('/api/casino/slots', { token: t, body: { bet: 50 } })).status, 400);
+  assert.equal((await call(`${C}/slots`, { token: t, body: { bet: 50 } })).status, 400);
   // Nearly broke: a smaller top-up comes after an hour instead of a day.
   db.prepare('UPDATE casino_wallets SET free_at = ? WHERE user_id = ?').run(Date.now() - 2 * 3600_000, max.user.id);
-  const topUp = await call('/api/casino/free', { token: t, body: {} });
+  const topUp = await call(`${C}/free`, { token: t, body: {} });
   assert.equal(topUp.data.got, 500);
 });
 
@@ -287,8 +301,8 @@ test("hold 'em at the fire's table", async (t) => {
   assert.equal((await call(`/api/channels/${room.id}/poker`, { body: { action: 'sit', seat: 3, buyIn: 1000 }, token: max.token })).status, 200);
   assert.equal((await call(`/api/channels/${room.id}/poker`, { body: { action: 'sit', seat: 3, buyIn: 1000 }, token: sam.token })).status, 400);
   assert.equal((await call(`/api/channels/${room.id}/poker`, { body: { action: 'sit', seat: 5, buyIn: 1000 }, token: sam.token })).status, 200);
-  assert.equal((await call('/api/casino', { token: max.token })).data.wallet.chips, START_CHIPS - 1000);
-  assert.equal((await call('/api/casino', { token: max.token })).data.wallet.atTable, 1000);
+  assert.equal((await call(`/api/servers/${hearth.id}/casino`, { token: max.token })).data.wallet.chips, START_CHIPS - 1000);
+  assert.equal((await call(`/api/servers/${hearth.id}/casino`, { token: max.token })).data.wallet.atTable, 1000);
   await wait(400); // the first hand deals
 
   const latest = (events: any[]) => events.filter((e) => e.type === 'poker').at(-1).table;
@@ -331,7 +345,7 @@ test("hold 'em at the fire's table", async (t) => {
     while (!latest(m.events).done) await wait(50);
   } else await call(`/api/channels/${room.id}/poker`, { body: { action: 'stand' }, token: max.token });
   await wait(300);
-  const w = (await call('/api/casino', { token: max.token })).data.wallet;
+  const w = (await call(`/api/servers/${hearth.id}/casino`, { token: max.token })).data.wallet;
   assert.equal(w.atTable, 0);
   assert.ok([START_CHIPS - 100, START_CHIPS - 120].includes(w.chips), String(w.chips));
 
@@ -340,13 +354,13 @@ test("hold 'em at the fire's table", async (t) => {
   assert.equal(leaders.length, 2);
 
   // Leaving the fire gets you up from its table, and your stack goes back to your wallet.
-  const before = (await call('/api/casino', { token: sam.token })).data.wallet;
+  const before = (await call(`/api/servers/${hearth.id}/casino`, { token: sam.token })).data.wallet;
   assert.ok(before.atTable > 0);
   s.ws.send(JSON.stringify({ type: 'voice_leave' }));
   await wait(300);
   while (!latest(m.events).done) await wait(50);
   await wait(200);
-  const after = (await call('/api/casino', { token: sam.token })).data.wallet;
+  const after = (await call(`/api/servers/${hearth.id}/casino`, { token: sam.token })).data.wallet;
   assert.equal(after.atTable, 0);
   assert.equal(after.chips, before.chips + before.atTable);
 });
@@ -357,7 +371,8 @@ test('the chip reset happens once', () => {
   // A database from before the reset: someone down to their last chips, mid blackjack hand.
   d.prepare("DELETE FROM app_secrets WHERE name = 'casino_reset_2026_10'").run();
   d.prepare("INSERT INTO users (username, password_hash, created_at) VALUES ('old', 'x', 0)").run();
-  d.prepare("INSERT INTO casino_wallets (user_id, chips, at_table, blackjack, created_at) VALUES (1, 40, 300, '{}', 0)").run();
+  d.prepare("INSERT INTO servers (name, owner_id, invite_code, created_at) VALUES ('Home', 1, 'abc', 0)").run();
+  d.prepare("INSERT INTO casino_wallets (user_id, server_id, chips, at_table, blackjack, created_at) VALUES (1, 1, 40, 300, '{}', 0)").run();
   d.close();
   d = openDb(file);
   assert.deepEqual({ ...(d.prepare('SELECT chips, at_table, blackjack FROM casino_wallets').get() as object) }, { chips: 10_000, at_table: 0, blackjack: null });
@@ -365,6 +380,43 @@ test('the chip reset happens once', () => {
   d.close();
   d = openDb(file);
   assert.equal((d.prepare('SELECT chips FROM casino_wallets').get() as { chips: number }).chips, 25);
+  d.close();
+});
+
+test('one shared casino moves to each person\'s first hearth', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'peiskos-casino-')), 'chat.db');
+  let d = openDb(file);
+  // The tables as they were when everyone had one balance and one inventory.
+  d.exec(`
+    DROP TABLE casino_wallets; DROP TABLE casino_items; DROP TABLE casino_found;
+    CREATE TABLE casino_wallets (user_id INTEGER PRIMARY KEY, chips INTEGER NOT NULL, at_table INTEGER NOT NULL DEFAULT 0,
+      in_battle INTEGER NOT NULL DEFAULT 0, blackjack TEXT, free_at INTEGER NOT NULL DEFAULT 0, created_at INTEGER NOT NULL);
+    CREATE TABLE casino_items (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, skin_id TEXT NOT NULL, float REAL NOT NULL,
+      stattrak INTEGER NOT NULL DEFAULT 0, value INTEGER NOT NULL, created_at INTEGER NOT NULL);
+    CREATE TABLE casino_found (user_id INTEGER NOT NULL, skin_id TEXT NOT NULL, count INTEGER NOT NULL, best_float REAL NOT NULL,
+      stattrak INTEGER NOT NULL DEFAULT 0, first_at INTEGER NOT NULL, PRIMARY KEY (user_id, skin_id));
+    INSERT INTO users (username, password_hash, created_at) VALUES ('a', 'x', 0), ('b', 'x', 0), ('loner', 'x', 0);
+    INSERT INTO servers (name, owner_id, invite_code, created_at) VALUES ('Later', 1, 'l', 0), ('First', 1, 'f', 0);
+    INSERT INTO servers (name, owner_id, invite_code, created_at, kind) VALUES ('DM', 1, 'd', 0, 'dm');
+    INSERT INTO members (server_id, user_id, joined_at) VALUES (3, 1, 1), (2, 1, 5), (1, 1, 9), (1, 2, 3);
+    INSERT INTO casino_wallets (user_id, chips, at_table, in_battle, created_at) VALUES (1, 700, 200, 100, 0), (2, 50, 0, 0, 0), (3, 999, 0, 0, 0);
+    INSERT INTO casino_items (user_id, skin_id, float, value, created_at) VALUES (1, 'ember-rare-0', 0.1, 5000, 0), (2, 'ember-milspec-0', 0.5, 40, 0);
+    INSERT INTO casino_found (user_id, skin_id, count, best_float, first_at) VALUES (1, 'ember-rare-0', 2, 0.1, 0);
+  `);
+  d.close();
+  d = openDb(file);
+  const rows = (sql: string) => (d.prepare(sql).all() as object[]).map((r) => ({ ...r }));
+  // a's first hearth (not the DM) is First; b only has Later; the loner, in no hearth, has nowhere to go.
+  assert.deepEqual(rows('SELECT user_id, server_id, chips FROM casino_wallets ORDER BY user_id'), [
+    { user_id: 1, server_id: 2, chips: 1000 },
+    { user_id: 2, server_id: 1, chips: 50 },
+  ]);
+  assert.deepEqual(rows('SELECT user_id, server_id, skin_id FROM casino_items ORDER BY user_id'), [
+    { user_id: 1, server_id: 2, skin_id: 'ember-rare-0' },
+    { user_id: 2, server_id: 1, skin_id: 'ember-milspec-0' },
+  ]);
+  assert.deepEqual(rows('SELECT user_id, server_id, count FROM casino_found'), [{ user_id: 1, server_id: 2, count: 2 }]);
+  assert.equal(rows("SELECT name FROM sqlite_master WHERE name LIKE '%_shared'").length, 0);
   d.close();
 });
 
@@ -385,7 +437,7 @@ test('case battles at the fire', async (t) => {
   assert.equal((await call(fire, { body: two, token: max.token })).status, 400);
   for (const x of socks) x.ws.send(JSON.stringify({ type: 'voice_join', channelId: room.id }));
   await wait(100);
-  const wallet = async (u: any) => (await call('/api/casino', { token: u.token })).data;
+  const wallet = async (u: any) => (await call(`/api/servers/${hearth.id}/casino`, { token: u.token })).data;
 
   // Free for all, two players: the price of both cases is held until it starts.
   assert.equal((await call(fire, { body: { ...two, cases: [] }, token: max.token })).status, 400);
