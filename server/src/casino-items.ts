@@ -185,7 +185,8 @@ export const SLOT_LINES = [
   [0, 1, 2],
   [2, 1, 0],
 ];
-export const SLOT_BETS = [5, 25, 50, 100, 250, 500, 1000];
+/** Even amounts, so half a bet (two cherries) is always a whole number of chips. */
+export const SLOT_BETS = [10, 20, 50, 100, 200, 500, 1000];
 /** Each reel's strip, top to bottom, as counts of each symbol (spread out evenly when the strip is built). */
 const STRIP_COUNTS: Record<SlotSymbol, number>[] = [
   { cherry: 8, lemon: 8, bell: 4, star: 4, diamond: 2, seven: 2, flame: 1 },
