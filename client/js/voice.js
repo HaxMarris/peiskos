@@ -676,6 +676,10 @@ function renderStage() {
   const room = state.voice?.room;
   const LK = window.LivekitClient;
   $('#stage').dataset.show = state.stageShow;
+  // A phone has no voice bar beside the stream, so the fire's buttons (Mute, Leave...) come along.
+  const controls = $('.fire-controls');
+  const controlsHome = state.stageShow === 'video' && matchMedia('(max-width: 760px)').matches ? $('.video-view') : $('.fire-main');
+  if (controls.parentElement !== controlsHome) controlsHome.append(controls);
   if (!LK) return;
   const people = room ? [room.localParticipant, ...room.remoteParticipants.values()] : [];
   const showing = (p, source) => {

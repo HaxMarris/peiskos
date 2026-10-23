@@ -1228,6 +1228,13 @@ button.seat-face { cursor: pointer; }
   .game-view .stage-head, .video-view .stage-head, .casino-view .stage-head { padding: 8px 10px; padding-top: max(8px, env(safe-area-inset-top)); }
   .game-view .stage-head h1, .video-view .stage-head h1, .casino-view .stage-head h1 { font-size: 20px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .video-view .stage-head .btn { flex: none; }
+  /* Watching something: everyone else is a small square, so the stream gets the room. */
+  .stage-grid, .stage-grid.focused { padding: 4px 10px 12px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stage-grid.focused { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+  .stage-grid .vtile.focus { width: 100%; justify-self: stretch; }
+  .stage-grid.focused .vtile:not(.focus) { aspect-ratio: 1; }
+  .stage-grid.focused .vtile:not(.focus) .avatar.lg { width: 36px; height: 36px; font-size: 15px; margin-bottom: 16px; }
+  .stage-grid.focused .vtile:not(.focus) .vtile-name { left: 4px; bottom: 4px; max-width: calc(100% - 8px); padding: 2px 6px; font-size: 11px; }
   .listen-video { width: 128px; }
   .listen-controls input[type="range"] { width: 70px; }
   .call-bar { margin: 8px 12px 0; }
