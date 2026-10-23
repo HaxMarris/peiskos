@@ -143,6 +143,8 @@ function renderWallet() {
   if (!casinoBuilt) return;
   const w = casino.wallet;
   $('#casino-chips').textContent = w ? chipsText(w.chips) : '…';
+  const credits = $('#slot-credits');
+  if (credits) credits.textContent = w ? chipsText(w.chips) : '0';
   $('#casino-at-table').textContent = w?.atTable ? `+${chipsText(w.atTable)} at the table` : '';
   const free = $('#casino-free');
   const ready = !!w && !w.freeAt;
@@ -540,17 +542,35 @@ const SLOT_ROW = 84; // px per symbol, set again from the CSS when the reels are
 
 function buildSlots() {
   casinoPanes.slots.innerHTML = `
+    ${SLOT_DEFS}
     <div class="slots">
-      <div class="slot-machine">
-        <div class="slot-marquee"><span class="logo-mark" aria-hidden="true"></span>Ember Sevens<span class="slot-lights" aria-hidden="true"></span></div>
-        <div class="slot-window" id="slot-window">
-          <div class="slot-reel"><div class="slot-strip"></div></div>
-          <div class="slot-reel"><div class="slot-strip"></div></div>
-          <div class="slot-reel"><div class="slot-strip"></div></div>
-          <svg class="slot-lines" id="slot-lines" viewBox="0 0 300 300" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="slot-cabinet">
+        <div class="slot-machine">
+          <div class="slot-marquee">
+            <span class="slot-bulbs" aria-hidden="true">${'<i></i>'.repeat(18)}</span>
+            <span class="slot-title"><span class="logo-mark" aria-hidden="true"></span>Ember Sevens</span>
+            <span class="slot-sub">Five lines · flames are wild</span>
+          </div>
+          <div class="slot-bezel">
+            <div class="slot-paylines left" aria-hidden="true"><b data-line="3">4</b><b data-line="1">2</b><b data-line="0">1</b><b data-line="2">3</b><b data-line="4">5</b></div>
+            <div class="slot-window" id="slot-window">
+              <div class="slot-reel"><div class="slot-strip"></div></div>
+              <div class="slot-reel"><div class="slot-strip"></div></div>
+              <div class="slot-reel"><div class="slot-strip"></div></div>
+              <svg class="slot-lines" id="slot-lines" viewBox="0 0 300 300" preserveAspectRatio="none" aria-hidden="true"></svg>
+            </div>
+            <div class="slot-paylines right" aria-hidden="true"><b data-line="4">5</b><b data-line="1">2</b><b data-line="0">1</b><b data-line="2">3</b><b data-line="3">4</b></div>
+          </div>
+          <div class="slot-leds">
+            <div class="slot-led"><span>Chips</span><b id="slot-credits">0</b></div>
+            <div class="slot-led"><span>Bet</span><b id="slot-bet-led">0</b></div>
+            <div class="slot-led win"><span>Win</span><b id="slot-win">0</b></div>
+          </div>
+          <div class="slot-result" id="slot-result" aria-live="polite">Pull the lever or press Spin.</div>
+          <div class="slot-controls" id="slot-controls"></div>
+          <div class="slot-tray" aria-hidden="true"></div>
         </div>
-        <div class="slot-result" id="slot-result" aria-live="polite">Five lines: the three rows and both diagonals.</div>
-        <div class="slot-controls" id="slot-controls"></div>
+        <button type="button" class="slot-lever" id="slot-lever" aria-label="Pull the lever to spin"><span class="lever-arm"><span class="lever-ball"></span></span><span class="lever-base"></span></button>
       </div>
       <details class="paytable"><summary>What pays</summary><div id="paytable"></div></details>
     </div>`;
@@ -573,16 +593,19 @@ function renderSlotControls() {
     $('#paytable').innerHTML = `<table class="pays">${Object.entries(d.slots.pays).reverse().map(([sym, x]) =>
       `<tr><td>${SLOT_ART[sym].repeat(3)}</td><td>${x}×</td></tr>`).join('')}
       <tr><td>${SLOT_ART.cherry.repeat(2)}<span class="muted"> + any</span></td><td>${d.slots.twoCherries}×</td></tr></table>
-      <p class="small muted">Wins are per line, times your bet on that line (a fifth of the spin). The ${SLOT_ART.flame} stands in for anything.</p>`;
+      <p class="small muted">Each winning line pays that many times your bet, and wins on different lines add up. The ${SLOT_ART.flame} stands in for anything.</p>`;
   }
   if (!d.slots.bets.includes(slotBet)) slotBet = d.slots.bets[1];
   $('#slot-controls').innerHTML = `
     <div class="slot-bet">
-      <button type="button" class="icon-btn" data-slot-bet="-1" aria-label="Smaller bet">−</button>
-      <span><span class="small muted">Bet</span><b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(slotBet)}</b></span>
-      <button type="button" class="icon-btn" data-slot-bet="1" aria-label="Bigger bet">+</button>
+      <button type="button" class="slot-key" data-slot-bet="-1" aria-label="Smaller bet">−</button>
+      <button type="button" class="slot-key" data-slot-bet="1" aria-label="Bigger bet">+</button>
+      <button type="button" class="slot-key wide" data-slot-bet="max">Max bet</button>
     </div>
-    <button type="button" class="btn spin-btn" id="slot-spin" ${spinning ? 'disabled' : ''}>Spin</button>`;
+    <button type="button" class="spin-btn" id="slot-spin" ${spinning ? 'disabled' : ''}><span>Spin</span></button>`;
+  $('#slot-bet-led').textContent = chipsText(slotBet);
+  $('#slot-credits').textContent = chipsText(casino.wallet?.chips);
+  $('#slot-lever').disabled = spinning;
 }
 const randomStart = (n) => Math.floor(Math.random() * n);
 
@@ -598,12 +621,15 @@ function onSlotsClick(e) {
   const bet = e.target.closest('[data-slot-bet]');
   if (bet && !spinning) {
     const bets = casino.data.slots.bets;
-    const i = Math.max(0, Math.min(bets.length - 1, bets.indexOf(slotBet) + Number(bet.dataset.slotBet)));
-    slotBet = bets[i];
+    const step = bet.dataset.slotBet;
+    // Max bet: the biggest you can afford.
+    slotBet = step === 'max'
+      ? [...bets].reverse().find((b) => b <= (casino.wallet?.chips ?? 0)) ?? bets[0]
+      : bets[Math.max(0, Math.min(bets.length - 1, bets.indexOf(slotBet) + Number(step)))];
     store.set('slotBet', String(slotBet));
     return renderSlotControls();
   }
-  if (e.target.closest('#slot-spin')) spin();
+  if (e.target.closest('#slot-spin, #slot-lever')) spin();
 }
 
 async function spin() {
@@ -611,6 +637,12 @@ async function spin() {
   spinning = true;
   renderSlotControls();
   $('#slot-lines').innerHTML = '';
+  casinoPanes.slots.querySelectorAll('.slot-paylines b.on').forEach((b) => b.classList.remove('on'));
+  const lever = $('#slot-lever');
+  lever.classList.remove('pulled');
+  lever.getBoundingClientRect();
+  lever.classList.add('pulled');
+  $('#slot-win').textContent = '0';
   $('#slot-result').textContent = 'Good luck…';
   $('#slot-result').className = 'slot-result';
   casinoPanes.slots.querySelectorAll('.slot-sym.hit').forEach((x) => x.classList.remove('hit'));
@@ -641,6 +673,17 @@ async function spin() {
   showSlotWins(r, strips);
 }
 
+/** The win meter counts up to the win, like a real machine's. */
+function countUp(el, to) {
+  const start = performance.now(), ms = Math.min(1600, 300 + to / 4);
+  const tick = (now) => {
+    const k = Math.min(1, (now - start) / ms);
+    el.textContent = chipsText(Math.round(to * k));
+    if (k < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
 function showSlotWins(r, strips) {
   const res = $('#slot-result');
   if (!r.won) {
@@ -648,6 +691,11 @@ function showSlotWins(r, strips) {
     return;
   }
   const lines = casino.data.slots.lines;
+  for (const w of r.wins) casinoPanes.slots.querySelectorAll(`.slot-paylines b[data-line="${w.line}"]`).forEach((b) => b.classList.add('on'));
+  countUp($('#slot-win'), r.won);
+  const machine = casinoPanes.slots.querySelector('.slot-machine');
+  machine.classList.add('won');
+  setTimeout(() => machine.classList.remove('won'), 2500);
   const svg = $('#slot-lines');
   svg.innerHTML = r.wins.map((w) => {
     const pts = lines[w.line].map((row, reel) => `${50 + reel * 100},${50 + row * 100}`).join(' ');
@@ -711,9 +759,10 @@ function renderCases() {
     </button>`).join('')}</div>`;
 }
 
-function itemTile(skin, extra = '') {
+/** A skin on a tile. In the case's reel a knife or gloves spins past as a gold star, like in CS. */
+function itemTile(skin, extra = '', { float, star = false } = {}) {
   return `<div class="item-tile r-${skin.rarity}" style="--rarity:${RARITY[skin.rarity].color}">
-    <div class="item-art">${skin.rarity === 'rare' ? '<span class="rare-mark">★</span>' : skinArt(skin)}</div>
+    <div class="item-art">${star && skin.rarity === 'rare' ? '<span class="rare-mark">★</span>' : skinArt(skin, float)}</div>
     <div class="item-name"><span class="small">${escapeHtml(skin.weapon)}</span><b>${escapeHtml(skin.name)}</b></div>${extra}</div>`;
 }
 
@@ -768,7 +817,7 @@ async function openTheCase(c) {
   const reel = $('#case-reel');
   const strip = $('#case-strip');
   reel.classList.remove('hidden');
-  strip.innerHTML = items.map((s) => itemTile(s)).join('');
+  strip.innerHTML = items.map((s, k) => itemTile(s, '', k === WIN_AT ? { float: r.item.float } : { star: true })).join('');
   strip.style.transition = 'none';
   strip.style.transform = 'translateX(0)';
   const tile = strip.firstElementChild;
@@ -797,7 +846,7 @@ function itemDetails(item) {
 function dropHtml(item) {
   const { skin, wear, title } = itemDetails(item);
   return `<div class="drop r-${skin.rarity}" style="--rarity:${RARITY[skin.rarity].color}">
-    <div class="drop-art">${skinArt(skin)}</div>
+    <div class="drop-art">${skinArt(skin, item.float)}</div>
     <div class="drop-info">
       <span class="drop-rarity">${RARITY[skin.rarity].name}${item.stattrak ? ' · <span class="stattrak">StatTrak™</span>' : ''}</span>
       <h3>${escapeHtml(title)}</h3>
@@ -832,7 +881,7 @@ function renderInventory() {
       </div>
       <div class="item-grid inv">${items.map((i) => {
         const { skin, wear } = itemDetails(i);
-        return `<button type="button" class="inv-item" data-item="${i.id}">${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`)}</button>`;
+        return `<button type="button" class="inv-item" data-item="${i.id}">${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}</button>`;
       }).join('')}</div>`;
 }
 

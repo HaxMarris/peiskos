@@ -2,11 +2,14 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { bestHand, PokerTable, type Card } from '../src/poker.ts';
 import { START_CHIPS } from '../src/casino.ts';
-import { CASES, linePays } from '../src/casino-items.ts';
+import { CASES, SLOT_LINES, SLOT_STRIPS, linePays } from '../src/casino-items.ts';
 
 /** Cards come off the end of a deck, so the ones listed first are dealt first. */
 const dealt = (...cards: Card[]) => () => [...cards].reverse();
@@ -122,11 +125,31 @@ test('an incomplete all-in raise does not reopen the betting', () => {
 });
 
 test('slot lines pay with flames standing in', () => {
-  assert.equal(linePays(['seven', 'seven', 'seven']), 150);
-  assert.equal(linePays(['seven', 'flame', 'seven']), 150);
-  assert.equal(linePays(['flame', 'flame', 'flame']), 500);
-  assert.equal(linePays(['cherry', 'flame', 'lemon']), 1);
+  assert.equal(linePays(['seven', 'seven', 'seven']), 20);
+  assert.equal(linePays(['seven', 'flame', 'seven']), 20);
+  assert.equal(linePays(['flame', 'flame', 'flame']), 100);
+  assert.equal(linePays(['cherry', 'flame', 'lemon']), 0.5);
   assert.equal(linePays(['lemon', 'cherry', 'cherry']), 0);
+});
+
+test('the slot machine wins often and pays back nearly everything', () => {
+  // Every stop of every reel, so these are the exact odds.
+  const [a, b, c] = SLOT_STRIPS;
+  let spins = 0, paid = 0, wins = 0, profits = 0;
+  for (let x = 0; x < a.length; x++)
+    for (let y = 0; y < b.length; y++)
+      for (let z = 0; z < c.length; z++) {
+        const grid = [x, y, z].map((stop, r) => [0, 1, 2].map((row) => SLOT_STRIPS[r][(stop + row) % SLOT_STRIPS[r].length]));
+        const won = SLOT_LINES.reduce((n, rows) => n + linePays(rows.map((row, r) => grid[r][row])), 0);
+        spins++;
+        paid += won;
+        if (won) wins++;
+        if (won > 1) profits++;
+      }
+  const rtp = paid / spins;
+  assert.ok(rtp > 0.97 && rtp < 1, `pays back ${rtp}`);
+  assert.ok(wins / spins > 0.45, `wins ${wins / spins}`);
+  assert.ok(profits / spins > 0.2, `profits ${profits / spins}`);
 });
 
 test('chips: slots, cases, blackjack and free chips', async () => {
@@ -308,4 +331,21 @@ test("hold 'em at the fire's table", async (t) => {
   const after = (await call('/api/casino', { token: sam.token })).data.wallet;
   assert.equal(after.atTable, 0);
   assert.equal(after.chips, before.chips + before.atTable);
+});
+
+test('the chip reset happens once', () => {
+  const file = join(mkdtempSync(join(tmpdir(), 'peiskos-casino-')), 'chat.db');
+  let d = openDb(file);
+  // A database from before the reset: someone down to their last chips, mid blackjack hand.
+  d.prepare("DELETE FROM app_secrets WHERE name = 'casino_reset_2026_10'").run();
+  d.prepare("INSERT INTO users (username, password_hash, created_at) VALUES ('old', 'x', 0)").run();
+  d.prepare("INSERT INTO casino_wallets (user_id, chips, at_table, blackjack, created_at) VALUES (1, 40, 300, '{}', 0)").run();
+  d.close();
+  d = openDb(file);
+  assert.deepEqual({ ...(d.prepare('SELECT chips, at_table, blackjack FROM casino_wallets').get() as object) }, { chips: 10_000, at_table: 0, blackjack: null });
+  d.prepare('UPDATE casino_wallets SET chips = 25').run();
+  d.close();
+  d = openDb(file);
+  assert.equal((d.prepare('SELECT chips FROM casino_wallets').get() as { chips: number }).chips, 25);
+  d.close();
 });

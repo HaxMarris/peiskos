@@ -12,7 +12,7 @@ import {
   linePays, type Rarity, type Skin,
 } from './casino-items.ts';
 
-export const START_CHIPS = 5000;
+export const START_CHIPS = 10_000;
 const DAILY_CHIPS = 1000;
 const DAILY_MS = 20 * 3600_000;
 const BROKE_CHIPS = 500; // when you're nearly out, you don't have to wait a whole day
@@ -141,10 +141,9 @@ export function casino(ctx: CasinoContext) {
     take(user.id, bet);
     const stops = SLOT_STRIPS.map((strip) => randomInt(strip.length));
     const grid = stops.map((stop, r) => [0, 1, 2].map((row) => SLOT_STRIPS[r][(stop + row) % SLOT_STRIPS[r].length]));
-    const perLine = bet / SLOT_LINES.length;
     const wins = SLOT_LINES.flatMap((rows, line) => {
       const pays = linePays(rows.map((row, r) => grid[r][row]));
-      return pays ? [{ line, pays: pays * perLine }] : [];
+      return pays ? [{ line, pays: Math.floor(pays * bet) }] : [];
     });
     const won = wins.reduce((n, w) => n + w.pays, 0);
     give(user.id, won);
