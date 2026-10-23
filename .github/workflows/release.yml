@@ -1,0 +1,106 @@
+# Starts a release that goes out everywhere at once. Run it from the Actions tab ("Start release",
+# Run workflow) with the new version:
+#
+# 1. It makes a draft release (hidden from everyone) and builds the desktop apps and the Android
+#    app into it.
+# 2. Unless you untick it, the iPhone app goes to TestFlight and is sent for Apple's review.
+# 3. Once Apple approves, "Finish release" (release-finish.yml) publishes the draft. Without the
+#    iPhone app, it's published as soon as the builds are done.
+# 4. Publishing is the go signal: desktop apps offer the update, and a server with AUTO_UPDATE=releases
+#    installs it by itself within a few minutes (see "Updates" in the README).
+name: Start release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The new version, like v0.8.12
+        required: true
+      iphone:
+        description: Send the iPhone app to TestFlight, and wait for Apple's approval before releasing
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  draft:
+    name: Draft the release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the version
+        id: tag
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          tag="$(echo "$VERSION" | tr -d '[:space:]')"
+          [[ "$tag" == v* ]] || tag="v$tag"
+          # Same rule as the desktop build: the app's version comes from this, and a typo'd major
+          # number would leave installed apps never seeing an update again.
+          major="$(node -p "require('./desktop/package.json').version.split('.')[0]")"
+          if ! [[ "$tag" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]] || [ "${BASH_REMATCH[1]}" != "$major" ]; then
+            echo "::error::'$VERSION' isn't a version like v$major.8.12."
+            exit 1
+          fi
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::There's already a release called $tag. Pick the next version, or delete that release first."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      # The tag is only made when the draft is published, on exactly the commit being built here.
+      - name: Make the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          gh release create "$TAG" --draft --target "$GITHUB_SHA" --title "$TAG" --generate-notes --repo "$GITHUB_REPOSITORY"
+          echo "Draft release $TAG made from $GITHUB_SHA. It stays hidden until everything is ready." >> "$GITHUB_STEP_SUMMARY"
+
+  desktop:
+    needs: draft
+    uses: ./.github/workflows/desktop-release.yml
+    with:
+      tag: ${{ needs.draft.outputs.tag }}
+    secrets: inherit
+
+  mobile:
+    needs: draft
+    uses: ./.github/workflows/mobile-release.yml
+    with:
+      tag: ${{ needs.draft.outputs.tag }}
+      iphone: ${{ inputs.iphone }}
+    secrets: inherit
+
+  # Everything built: publish now, or leave a note in the draft for "Finish release" to publish it
+  # once Apple approves the iPhone build.
+  ready:
+    name: Publish or wait for Apple
+    needs: [draft, desktop, mobile]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.draft.outputs.tag }}
+          BUILD: ${{ needs.mobile.outputs.ios_build_id }}
+          REVIEW: ${{ needs.mobile.outputs.ios_review }}
+        run: |
+          if [ "$REVIEW" = true ] && [ -n "$BUILD" ]; then
+            notes="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes "$notes
+
+          <!-- waiting-for-apple: $BUILD -->"
+            echo "$TAG is built and waiting for Apple to approve the iPhone build. \"Finish release\" checks every 15 minutes and publishes it then. To release without waiting, run \"Finish release\" with this version and tick \"now\"." >> "$GITHUB_STEP_SUMMARY"
+          else
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+            echo "$TAG is published." >> "$GITHUB_STEP_SUMMARY"
+          fi

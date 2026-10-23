@@ -28,9 +28,11 @@ The `Mobile release` workflow (`.github/workflows/mobile-release.yml`) runs:
 
 - **On every pull request** that changes `mobile/` or `client/`: it builds both apps to check
   they still build. The Android test build can be downloaded from the run's page under *Artifacts*.
-- **When you publish a release** (tag `v1.2.3`, the same as the desktop app): the Android app is
-  attached to the release as `Peiskos-1.2.3.apk`, and the iPhone app goes to TestFlight. Each step
-  only happens once its secrets below are set; until then the release just gets the desktop apps.
+- **For each release** (*Start release* in the Actions tab, see "Releasing a new version" in the
+  main README): the Android app is attached to the release as `Peiskos-1.2.3.apk`, and the iPhone
+  app goes to TestFlight and is sent for Apple's review; the release is published once Apple
+  approves. Each step only happens once its secrets below are set; until then the release just
+  gets the desktop apps.
 
 The tag becomes the version number (1.2.3), so phones can tell which one is newer.
 
@@ -81,7 +83,7 @@ each new release sends a new build).
    - `APP_STORE_CONNECT_KEY_ID`: the Key ID
    - `APP_STORE_CONNECT_ISSUER_ID`: the Issuer ID
    - `APPLE_TEAM_ID`: your Team ID, from [Membership details](https://developer.apple.com/account#MembershipDetailsCard)
-5. Publish a release. The build appears in App Store Connect under **TestFlight** after Apple has
+5. Run *Start release*. The build appears in App Store Connect under **TestFlight** after Apple has
    processed it. Add friends under *External Testing* (the first build there gets a short review by
    Apple) or *Internal Testing*, and they get an email to install the TestFlight app and then Peiskos.
 

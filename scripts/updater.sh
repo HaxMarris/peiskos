@@ -4,6 +4,8 @@
 # data folder at /data and Docker's control socket. Every few seconds it writes what it knows to
 # /data/updater/status.json; when the admin page asks (by creating /data/updater/request) it does
 # what you'd do by hand: git pull, then rebuild and restart Burrow.
+# With AUTO_UPDATE=releases in .env it also installs each new release by itself, a few minutes
+# after it's published on GitHub (the "Start release" workflow publishes it once every app is ready).
 set -u
 DIR=/data/updater
 mkdir -p "$DIR"
@@ -18,6 +20,7 @@ PROJECT=$(docker inspect "$(hostname)" --format '{{ index .Config.Labels "com.do
 OWNER=$(stat -c %u:%g /repo)
 
 json() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t'; }
+AUTO=${AUTO_UPDATE:-}
 result=""
 result_at=0
 updating=false
@@ -36,22 +39,44 @@ JSON
   mv "$DIR/status.json.tmp" "$DIR/status.json"
 }
 
+# The newest published release (vX.Y.Z tag) that's ahead of what's running, if any. A release that
+# already failed to install isn't tried again until there's a newer one.
+release_to_install() {
+  [ "$AUTO" = releases ] || return 0
+  tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+  [ -n "$tag" ] || return 0
+  [ "$tag" != "$(cat "$DIR/auto-failed" 2>/dev/null)" ] || return 0
+  [ "$(git rev-parse "$tag^{commit}")" != "$(git rev-parse HEAD)" ] || return 0
+  git merge-base --is-ancestor HEAD "$tag" 2>/dev/null || return 0
+  echo "$tag"
+}
+
 while true; do
   now=$(date +%s)
-  if [ $((now - last_fetch)) -ge 3600 ] || [ -f "$DIR/request" ]; then
-    git fetch --quiet origin 2>"$DIR/fetch-error.txt" && last_fetch=$now
+  every=3600
+  [ "$AUTO" = releases ] && every=300
+  if [ $((now - last_fetch)) -ge $every ] || [ -f "$DIR/request" ]; then
+    git fetch --quiet --tags origin 2>"$DIR/fetch-error.txt" && last_fetch=$now
   fi
-  if [ -f "$DIR/request" ]; then
+  auto_tag=$(release_to_install)
+  if [ -f "$DIR/request" ] || [ -n "$auto_tag" ]; then
     rm -f "$DIR/request"
     updating=true
     write_status
-    echo "Updating at $(date)" > "$DIR/log.txt"
-    if git pull --ff-only >> "$DIR/log.txt" 2>&1 \
+    if [ -n "$auto_tag" ]; then
+      echo "Installing release $auto_tag at $(date)" > "$DIR/log.txt"
+      step="git merge --ff-only $auto_tag"
+    else
+      echo "Updating at $(date)" > "$DIR/log.txt"
+      step="git pull --ff-only"
+    fi
+    if $step >> "$DIR/log.txt" 2>&1 \
       && chown -R "$OWNER" /repo \
       && docker compose -p "$PROJECT" up -d --build burrow >> "$DIR/log.txt" 2>&1; then
       result=ok
     else
       result=failed
+      [ -z "$auto_tag" ] || echo "$auto_tag" > "$DIR/auto-failed"
     fi
     chown -R "$OWNER" /repo 2>/dev/null
     result_at=$(date +%s)

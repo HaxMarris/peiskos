@@ -331,6 +331,26 @@ hourly; the admin page then lists what's new and has *Update now*, which pulls, 
 restarts Peiskos (a minute or two away; voice reconnects after). The updater can control Docker on
 the machine, which is what lets it rebuild Peiskos, so leave it off if you'd rather not.
 
+To have each new release installed by itself, also add `AUTO_UPDATE=releases` to `.env` and run
+`docker compose up -d` again. The updater then checks every 5 minutes and installs any release
+published on GitHub that's newer than what's running, so the server, the web app and the desktop
+apps all move to it together. Updates that are only on `main` still wait for *Update now*.
+
+### Releasing a new version
+
+In GitHub's Actions tab, run **Start release** with the new version (like `v0.8.12`). It builds
+the desktop and Android apps into a draft release that nobody sees yet, and sends the iPhone app
+to TestFlight for Apple's review (untick *iPhone* to leave it out). **Finish release** checks
+every 15 minutes and publishes the draft once Apple approves; without the iPhone app it's
+published as soon as the builds finish. To publish without waiting, run *Finish release* with the
+version and tick *now*. Don't publish the draft by hand on the Releases page: that builds every
+app a second time.
+
+The iPhone app's version only changes with the middle number (`v0.8.12` is version 0.8), so
+patch releases are new builds of a version Apple has already reviewed, which usually pass in
+minutes. Apple only reviews builds for external TestFlight groups; internal testers get every
+build straight away.
+
 ## 2. Get your friends the app
 
 **Browser:** they open your server address (e.g. `https://chat.example.com`), click *Register*, and enter the registration code.
