@@ -294,6 +294,28 @@
 .inv-item { border: 0; padding: 0; background: none; font: inherit; cursor: pointer; text-align: left; border-radius: 12px; transition: transform .12s; }
 .inv-item:hover { transform: translateY(-2px); }
 .empty-inv { text-align: center; padding: 40px 10px; }
+.inv-types { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+.chip-filter { border: 1px solid var(--line); background: var(--surface); color: var(--text); font: inherit; font-weight: 800; font-size: 14px; padding: 6px 12px; border-radius: 999px; cursor: pointer; }
+.chip-filter span { color: var(--muted); font-weight: 700; margin-left: 2px; }
+.chip-filter[aria-pressed="true"] { background: var(--text-strong); color: var(--bg); border-color: var(--text-strong); }
+.chip-filter[aria-pressed="true"] span { color: inherit; opacity: .7; }
+.inv-filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+.inv-filters select { font: inherit; font-size: 14px; padding: 6px 10px; border-radius: 10px; border: 1px solid var(--field-line); background: var(--surface); color: var(--text); }
+.inv-filters #inv-sort { margin-left: auto; }
+.inv-st { display: flex; flex-direction: row; align-items: center; gap: 6px; font-size: 14px; font-weight: 700; color: var(--text); cursor: pointer; }
+.inv-st input { width: auto; margin: 0; }
+.inv-pick-btn { padding: 6px 14px; }
+.inv-pick-btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.inv-item { position: relative; }
+.pick-mark { display: none; position: absolute; top: 8px; right: 8px; width: 24px; height: 24px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, .8); background: rgba(0, 0, 0, .35); }
+.inv.picking .pick-mark { display: block; }
+.inv-item.picked .pick-mark { background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M9.5 16.2 5.3 12l-1.4 1.4 5.6 5.6 11-11-1.4-1.4z' fill='%23fff'/%3E%3C/svg%3E") center / 16px no-repeat; border-color: var(--accent); }
+.inv-item.picked .item-tile { box-shadow: 0 0 0 3px var(--accent); }
+.inv.picking .inv-item:not(.picked) .item-tile { opacity: .8; }
+.sell-bar { position: sticky; bottom: 0; z-index: 2; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 12px; padding: 10px 14px; border-radius: 16px;
+  background: var(--surface); box-shadow: 0 -4px 20px rgba(0, 0, 0, .15), 0 0 0 1px var(--line); }
+.sell-bar > span { flex: 1; color: var(--text-strong); }
+.sell-bar .btn:disabled { opacity: .5; }
 
 /* ---------- leaderboard ---------- */
 .leaders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }

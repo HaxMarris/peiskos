@@ -719,6 +719,13 @@ let openCase = null; // the case being looked at
 let caseView = 'cases'; // or 'inventory'
 let opening = false;
 let invSort = 'new';
+// Inventory filters, and the skins picked to sell together.
+const invFilter = { type: 'all', rarity: 'all', wear: 'all', box: 'all', stattrak: false };
+let invPicking = false;
+const invPicked = new Set();
+const INV_TYPES = [
+  ['knife', 'Knives'], ['gloves', 'Gloves'], ['rifle', 'Rifles'], ['sniper', 'Snipers'], ['pistol', 'Pistols'], ['smg', 'SMGs'], ['shotgun', 'Shotguns'],
+];
 
 function buildCases() {
   casinoPanes.cases.innerHTML = `
@@ -732,6 +739,11 @@ function buildCases() {
   casinoPanes.cases.addEventListener('click', onCasesClick);
   casinoPanes.cases.addEventListener('change', (e) => {
     if (e.target.id === 'inv-sort') { invSort = e.target.value; renderInventory(); }
+    const f = e.target.dataset.invFilter;
+    if (f) {
+      invFilter[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      renderInventory();
+    }
   });
 }
 
@@ -870,20 +882,75 @@ function showDrop(item, c) {
   if (['covert', 'rare'].includes(skin.rarity)) playSound('message');
 }
 
+const caseOfSkin = (skinId) => casino.data?.cases.find((c) => c.skins.some((x) => x.id === skinId));
+
+/** The inventory items that pass the filters, sorted. */
+function shownItems() {
+  const wears = casino.data.wears;
+  return casino.inventory.filter((i) => {
+    const skin = skinById(i.skinId);
+    if (!skin) return false;
+    if (invFilter.type !== 'all' && skin.kind !== invFilter.type) return false;
+    if (invFilter.rarity !== 'all' && skin.rarity !== invFilter.rarity) return false;
+    if (invFilter.wear !== 'all' && wearOf(i.float, wears).short !== invFilter.wear) return false;
+    if (invFilter.box !== 'all' && caseOfSkin(i.skinId)?.id !== invFilter.box) return false;
+    if (invFilter.stattrak && !i.stattrak) return false;
+    return true;
+  }).sort((a, b) => (invSort === 'value' ? b.value - a.value : invSort === 'rarity'
+    ? RARITY_ORDER.indexOf(skinById(a.skinId).rarity) - RARITY_ORDER.indexOf(skinById(b.skinId).rarity) || b.value - a.value
+    : b.id - a.id));
+}
+const RARITY_ORDER = ['rare', 'covert', 'classified', 'restricted', 'milspec'];
+
 function renderInventory() {
-  const items = [...casino.inventory].sort((a, b) => (invSort === 'value' ? b.value - a.value : b.id - a.id));
+  // Sold or gone: no longer picked.
+  for (const id of invPicked) if (!casino.inventory.some((i) => i.id === id)) invPicked.delete(id);
+  if (!casino.inventory.length) {
+    invPicking = false;
+    $('#cases-main').innerHTML = '<p class="muted empty-inv">Nothing here yet. What you open from cases lands here, and you can sell it back for chips.</p>';
+    return;
+  }
+  const items = shownItems();
   const total = items.reduce((n, i) => n + i.value, 0);
-  $('#cases-main').innerHTML = !items.length
-    ? '<p class="muted empty-inv">Nothing here yet. What you open from cases lands here, and you can sell it back for chips.</p>'
-    : `<div class="inv-head">
-        <span>Worth <b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(total)}</b></span>
-        <select id="inv-sort" aria-label="Sort"><option value="new" ${invSort === 'new' ? 'selected' : ''}>Newest</option><option value="value" ${invSort === 'value' ? 'selected' : ''}>Most valuable</option></select>
-        <button type="button" class="link-btn danger-link" data-sell-all>Sell everything</button>
-      </div>
-      <div class="item-grid inv">${items.map((i) => {
-        const { skin, wear } = itemDetails(i);
-        return `<button type="button" class="inv-item" data-item="${i.id}">${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}</button>`;
-      }).join('')}</div>`;
+  const filtered = invFilter.type !== 'all' || invFilter.rarity !== 'all' || invFilter.wear !== 'all' || invFilter.box !== 'all' || invFilter.stattrak;
+  const kinds = new Set(casino.inventory.map((i) => skinById(i.skinId)?.kind));
+  const count = (kind) => casino.inventory.filter((i) => skinById(i.skinId)?.kind === kind).length;
+  const option = (key, value, label) => `<option value="${value}" ${invFilter[key] === value ? 'selected' : ''}>${label}</option>`;
+  const picked = casino.inventory.filter((i) => invPicked.has(i.id));
+  const pickedValue = picked.reduce((n, i) => n + i.value, 0);
+  $('#cases-main').innerHTML = `
+    <div class="inv-types" role="group" aria-label="Show">
+      <button type="button" class="chip-filter" data-inv-type="all" aria-pressed="${invFilter.type === 'all'}">All <span>${casino.inventory.length}</span></button>
+      ${INV_TYPES.filter(([k]) => kinds.has(k)).map(([k, label]) => `<button type="button" class="chip-filter" data-inv-type="${k}" aria-pressed="${invFilter.type === k}">${label} <span>${count(k)}</span></button>`).join('')}
+    </div>
+    <div class="inv-filters">
+      <select data-inv-filter="rarity" aria-label="Rarity">${option('rarity', 'all', 'Any rarity')}${RARITY_ORDER.map((r) => option('rarity', r, RARITY[r].name)).join('')}</select>
+      <select data-inv-filter="wear" aria-label="Wear">${option('wear', 'all', 'Any wear')}${casino.data.wears.map((w) => option('wear', w.short, w.name)).join('')}</select>
+      <select data-inv-filter="box" aria-label="Case">${option('box', 'all', 'Any case')}${casino.data.cases.map((c) => option('box', c.id, escapeHtml(c.name))).join('')}</select>
+      <label class="inv-st"><input type="checkbox" data-inv-filter="stattrak" ${invFilter.stattrak ? 'checked' : ''} /> StatTrak™ only</label>
+      <select id="inv-sort" aria-label="Sort">
+        <option value="new" ${invSort === 'new' ? 'selected' : ''}>Newest</option>
+        <option value="value" ${invSort === 'value' ? 'selected' : ''}>Most valuable</option>
+        <option value="rarity" ${invSort === 'rarity' ? 'selected' : ''}>Rarest</option>
+      </select>
+    </div>
+    <div class="inv-head">
+      <span>${filtered ? `${items.length} of ${casino.inventory.length} shown · ` : ''}Worth <b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(total)}</b></span>
+      ${filtered ? '<button type="button" class="link-btn" data-inv-clear>Clear filters</button>' : ''}
+      <button type="button" class="btn secondary inv-pick-btn" data-inv-pick aria-pressed="${invPicking}">${invPicking ? 'Done' : 'Select'}</button>
+      ${items.length ? `<button type="button" class="link-btn danger-link" data-sell-all>${filtered ? `Sell these ${items.length}` : 'Sell everything'}</button>` : ''}
+    </div>
+    ${items.length ? `<div class="item-grid inv ${invPicking ? 'picking' : ''}">${items.map((i) => {
+      const { skin, wear } = itemDetails(i);
+      const on = invPicked.has(i.id);
+      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}<span class="pick-mark" aria-hidden="true"></span></button>`;
+    }).join('')}</div>` : '<p class="muted empty-inv">Nothing matches these filters.</p>'}
+    ${invPicking ? `<div class="sell-bar">
+      <span><b>${picked.length}</b> selected${picked.length ? ` · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(pickedValue)}` : ''}</span>
+      <button type="button" class="link-btn" data-pick-all>Select all ${items.length} shown</button>
+      ${picked.length ? '<button type="button" class="link-btn" data-pick-none>Clear</button>' : ''}
+      <button type="button" class="btn" data-sell-picked ${picked.length ? '' : 'disabled'}>Sell ${picked.length || ''} for ${chipsText(pickedValue)}</button>
+    </div>` : ''}`;
 }
 
 async function sellItems(ids) {
@@ -920,13 +987,44 @@ async function onCasesClick(e) {
   }
   if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.brag);
   if (t.closest('[data-sell-all]')) {
-    const total = casino.inventory.reduce((n, i) => n + i.value, 0);
-    if (!confirm(`Sell all ${casino.inventory.length} items for ${chipsText(total)} chips?`)) return;
-    if (await sellItems(casino.inventory.map((i) => i.id))) renderCases();
+    const items = shownItems();
+    const total = items.reduce((n, i) => n + i.value, 0);
+    if (!confirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?`)) return;
+    if (await sellItems(items.map((i) => i.id))) renderCases();
+    return;
+  }
+  const type = t.closest('[data-inv-type]');
+  if (type) { invFilter.type = type.dataset.invType; return renderInventory(); }
+  if (t.closest('[data-inv-clear]')) {
+    Object.assign(invFilter, { type: 'all', rarity: 'all', wear: 'all', box: 'all', stattrak: false });
+    return renderInventory();
+  }
+  if (t.closest('[data-inv-pick]')) {
+    invPicking = !invPicking;
+    if (!invPicking) invPicked.clear();
+    return renderInventory();
+  }
+  if (t.closest('[data-pick-all]')) { for (const i of shownItems()) invPicked.add(i.id); return renderInventory(); }
+  if (t.closest('[data-pick-none]')) { invPicked.clear(); return renderInventory(); }
+  if (t.closest('[data-sell-picked]')) {
+    const items = casino.inventory.filter((i) => invPicked.has(i.id));
+    const total = items.reduce((n, i) => n + i.value, 0);
+    if (!items.length || !confirm(`Sell ${items.length} item${items.length === 1 ? '' : 's'} for ${chipsText(total)} chips?`)) return;
+    if (await sellItems(items.map((i) => i.id))) { invPicked.clear(); invPicking = false; renderCases(); }
     return;
   }
   const inv = t.closest('[data-item]');
-  if (inv) return openItem(casino.inventory.find((i) => i.id === Number(inv.dataset.item)));
+  if (inv) {
+    const id = Number(inv.dataset.item);
+    // Picking (or Ctrl/Cmd-click, which starts picking): toggle it; otherwise open it.
+    if (invPicking || e.ctrlKey || e.metaKey) {
+      invPicking = true;
+      if (invPicked.has(id)) invPicked.delete(id);
+      else invPicked.add(id);
+      return renderInventory();
+    }
+    return openItem(casino.inventory.find((i) => i.id === id));
+  }
 }
 
 function openItem(item) {
