@@ -536,7 +536,7 @@ async function onBlackjackClick(e) {
 
 // ---- slots
 
-let slotBet = Number(store.get('slotBet')) || 25;
+let slotBet = Number(store.get('slotBet')) || 20;
 let spinning = false;
 const SLOT_ROW = 84; // px per symbol, set again from the CSS when the reels are measured
 
@@ -577,12 +577,13 @@ function buildSlots() {
   casinoPanes.slots.addEventListener('click', onSlotsClick);
 }
 
-let slotsReady = false;
+let slotsShown = ''; // the reels and pay table on screen, so they're redrawn when the server's change (after an update)
 function renderSlotControls() {
   const d = casino.data;
   if (!d) return;
-  if (!slotsReady) {
-    slotsReady = true;
+  const machine = JSON.stringify([d.slots.strips, d.slots.pays, d.slots.twoCherries]);
+  if (slotsShown !== machine) {
+    slotsShown = machine;
     // Each reel shows its strip several times over, so a spin has somewhere to go.
     casinoPanes.slots.querySelectorAll('.slot-strip').forEach((strip, r) => {
       const cells = d.slots.strips[r].map((sym) => `<span class="slot-sym" data-sym="${sym}">${SLOT_ART[sym]}</span>`).join('');

@@ -9,7 +9,7 @@ import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { bestHand, PokerTable, type Card } from '../src/poker.ts';
 import { START_CHIPS } from '../src/casino.ts';
-import { CASES, SLOT_LINES, SLOT_STRIPS, linePays } from '../src/casino-items.ts';
+import { CASES, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, linePays } from '../src/casino-items.ts';
 
 /** Cards come off the end of a deck, so the ones listed first are dealt first. */
 const dealt = (...cards: Card[]) => () => [...cards].reverse();
@@ -150,6 +150,8 @@ test('the slot machine wins often and pays back nearly everything', () => {
   assert.ok(rtp > 0.97 && rtp < 1, `pays back ${rtp}`);
   assert.ok(wins / spins > 0.45, `wins ${wins / spins}`);
   assert.ok(profits / spins > 0.2, `profits ${profits / spins}`);
+  // Every win on every bet is a whole number of chips, so nothing is rounded away.
+  for (const bet of SLOT_BETS) for (const x of [SLOT_TWO_CHERRIES, ...Object.values(SLOT_PAYS)]) assert.ok(Number.isInteger(bet * x), `${bet} × ${x}`);
 });
 
 test('chips: slots, cases, blackjack and free chips', async () => {
@@ -229,7 +231,7 @@ test('chips: slots, cases, blackjack and free chips', async () => {
 
   // Not enough chips.
   db.prepare('UPDATE casino_wallets SET chips = 20 WHERE user_id = ?').run(max.user.id);
-  assert.equal((await call('/api/casino/slots', { token: t, body: { bet: 25 } })).status, 400);
+  assert.equal((await call('/api/casino/slots', { token: t, body: { bet: 50 } })).status, 400);
   // Nearly broke: a smaller top-up comes after an hour instead of a day.
   db.prepare('UPDATE casino_wallets SET free_at = ? WHERE user_id = ?').run(Date.now() - 2 * 3600_000, max.user.id);
   const topUp = await call('/api/casino/free', { token: t, body: {} });
