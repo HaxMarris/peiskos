@@ -720,6 +720,8 @@ function showSlotWins(r, strips) {
 let openCase = null; // the case being looked at
 let caseView = 'cases'; // or 'inventory' or 'book'
 let opening = false;
+let caseCount = 1; // how many to open at once
+let lastDrops = null; // what the last multi-open got: { items, c, fresh }
 let invSort = 'new';
 // Inventory filters, and the skins picked to sell together.
 const invFilter = { type: 'all', rarity: 'all', wear: 'all', box: 'all', stattrak: false };
@@ -786,8 +788,13 @@ function itemTile(skin, extra = '', { float, star = false } = {}) {
     <div class="item-name"><span class="small">${escapeHtml(skin.weapon)}</span><b>${escapeHtml(skin.name)}</b></div>${extra}</div>`;
 }
 
+const caseCounts = () => casino.data.caseCounts ?? [1];
+const openLabel = (c) => `Open ${caseCount > 1 ? `${caseCount} ` : ''}for <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(c.price * caseCount)}`;
+
 function renderCaseDetail() {
   const c = openCase;
+  const counts = caseCounts();
+  if (!counts.includes(caseCount)) caseCount = 1;
   const odds = casino.data.rarityOdds;
   const groups = Object.keys(RARITY).map((r) => {
     const skins = c.skins.filter((s) => s.rarity === r);
@@ -800,9 +807,10 @@ function renderCaseDetail() {
     <div class="case-head">
       <button type="button" class="icon-btn" data-case-back aria-label="All cases"><svg viewBox="0 0 24 24"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12l6.6-6.6Z"/></svg></button>
       <h3>${escapeHtml(c.name)}</h3>
-      <button type="button" class="btn open-btn" data-open="${c.id}">Open for <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(c.price)}</button>
+      ${counts.length > 1 ? `<div class="count-pick" role="group" aria-label="How many to open">${counts.map((n) => `<button type="button" data-case-count="${n}" aria-pressed="${n === caseCount}">×${n}</button>`).join('')}</div>` : ''}
+      <button type="button" class="btn open-btn" data-open="${c.id}">${openLabel(c)}</button>
     </div>
-    <div class="case-reel hidden" id="case-reel"><div class="case-strip" id="case-strip"></div><span class="case-marker" aria-hidden="true"></span></div>
+    <div id="case-reels"></div>
     <div id="case-drop"></div>
     <div class="case-contents">${groups}</div>`;
 }
@@ -819,45 +827,90 @@ function fillerSkin(c) {
 async function openTheCase(c) {
   if (opening) return;
   opening = true;
+  const n = caseCount;
   const btn = $('#cases-main .open-btn');
   if (btn) btn.disabled = true;
   $('#case-drop').innerHTML = '';
+  lastDrops = null;
   let r;
   try {
-    r = await api(`/api/casino/cases/${c.id}/open`, { method: 'POST', body: {} });
+    r = await api(`/api/casino/cases/${c.id}/open`, { method: 'POST', body: n > 1 ? { count: n } : {} });
   } catch (err) {
     opening = false;
     if (btn) btn.disabled = false;
     return toast(err.message);
   }
   setWallet({ ...casino.wallet, chips: r.wallet.chips });
-  const won = skinById(r.item.skinId);
-  const WIN_AT = 46;
-  const items = Array.from({ length: 54 }, (_, k) => (k === WIN_AT ? won : fillerSkin(c)));
-  const reel = $('#case-reel');
-  const strip = $('#case-strip');
-  reel.classList.remove('hidden');
-  strip.innerHTML = items.map((s, k) => itemTile(s, '', k === WIN_AT ? { float: r.item.float } : { star: true })).join('');
-  strip.style.transition = 'none';
-  strip.style.transform = 'translateX(0)';
-  const tile = strip.firstElementChild;
-  const step = tile.offsetWidth + parseFloat(getComputedStyle(strip).columnGap || '8');
-  const land = WIN_AT * step + tile.offsetWidth * (0.15 + Math.random() * 0.7) - reel.clientWidth / 2;
-  strip.getBoundingClientRect();
-  const ms = 5600;
-  strip.style.transition = `transform ${ms}ms cubic-bezier(.08,.6,.12,1)`;
-  strip.style.transform = `translateX(${-land}px)`;
-  reel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  await new Promise((done) => setTimeout(done, ms + 150));
-  strip.children[WIN_AT].classList.add('landed');
+  const got = r.items ?? [r.item];
+  // One reel per case, all spinning at once. With several, the reels are smaller and a bit shorter.
+  const WIN_AT = got.length > 1 ? 30 : 46;
+  const reels = $('#case-reels');
+  reels.className = got.length > 1 ? `multi n${got.length}` : '';
+  reels.innerHTML = got.map(() => '<div class="case-reel"><div class="case-strip"></div><span class="case-marker" aria-hidden="true"></span></div>').join('');
+  const strips = [...reels.querySelectorAll('.case-strip')];
+  strips.forEach((strip, i) => {
+    const items = Array.from({ length: WIN_AT + 8 }, (_, k) => (k === WIN_AT ? skinById(got[i].skinId) : fillerSkin(c)));
+    strip.innerHTML = items.map((s, k) => itemTile(s, '', k === WIN_AT ? { float: got[i].float } : { star: true })).join('');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateX(0)';
+  });
+  const ms = got.length > 1 ? 4200 : 5600;
+  reels.getBoundingClientRect();
+  strips.forEach((strip, i) => {
+    const reel = strip.parentElement;
+    const tile = strip.firstElementChild;
+    const step = tile.offsetWidth + parseFloat(getComputedStyle(strip).columnGap || '8');
+    const land = WIN_AT * step + tile.offsetWidth * (0.15 + Math.random() * 0.7) - reel.clientWidth / 2;
+    const t = ms + i * 60;
+    strip.style.transition = `transform ${t}ms cubic-bezier(.08,.6,.12,1)`;
+    strip.style.transform = `translateX(${-land}px)`;
+  });
+  reels.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  await new Promise((done) => setTimeout(done, ms + (got.length - 1) * 60 + 150));
+  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   opening = false;
-  casino.inventory.unshift(r.item);
+  casino.inventory.unshift(...[...got].reverse());
   $('#inv-count').textContent = `(${casino.inventory.length})`;
-  const isNew = !casino.found.some((f) => f.skinId === r.item.skinId);
+  // New to the book: skins you didn't have before (the first of each, if one came up twice).
+  const had = new Set(casino.found.map((f) => f.skinId));
+  const fresh = new Set();
+  for (const item of got) if (!had.has(item.skinId)) { had.add(item.skinId); fresh.add(item.id); }
   if (r.found) casino.found = r.found;
   $('#book-count').textContent = bookCount();
   if (btn) btn.disabled = false;
-  showDrop(r.item, c, isNew);
+  if (got.length === 1) return showDrop(got[0], c, fresh.size > 0);
+  lastDrops = { items: got, c, fresh };
+  showDrops();
+  // With many reels the results are far down (on a phone especially), so bring them up.
+  setTimeout(() => $('#case-drop')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 700);
+}
+
+/** What several cases gave, as a grid: click one to keep, sell or show it; or sell them all. */
+function showDrops() {
+  const { items, c, fresh } = lastDrops;
+  const left = items.filter((i) => casino.inventory.some((x) => x.id === i.id));
+  const worth = left.reduce((n, i) => n + i.value, 0);
+  const best = [...items].sort((a, b) => b.value - a.value)[0];
+  const box = $('#case-drop');
+  box.innerHTML = `<div class="drops">
+    <div class="drops-head">
+      <b>${items.length} skins · worth <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(items.reduce((n, i) => n + i.value, 0))}</b>
+      <span class="small muted">Spent ${chipsText(c.price * items.length)}${fresh.size ? ` · ${fresh.size} new in your book` : ''}</span>
+    </div>
+    <div class="item-grid">${items.map((i) => {
+      const { skin, wear } = itemDetails(i);
+      const sold = !left.includes(i);
+      return `<button type="button" class="inv-item drop-item ${sold ? 'sold' : ''}" data-drop-item="${i.id}" ${sold ? 'disabled' : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}${sold ? ' · Sold' : ''}</span>`, { float: i.float })}${fresh.has(i.id) ? '<span class="new-mark">New</span>' : ''}</button>`;
+    }).join('')}</div>
+    <div class="drop-actions">
+      <button type="button" class="btn" data-open="${c.id}">Open ${items.length} more (${chipsText(c.price * items.length)})</button>
+      ${left.length ? `<button type="button" class="btn secondary" data-sell-drops>Sell ${left.length === items.length ? 'all' : `the other ${left.length}`} for ${chipsText(worth)}</button>` : ''}
+      <button type="button" class="btn secondary" data-brag>Show the fire</button>
+    </div>
+  </div>`;
+  const { title, wear } = itemDetails(best);
+  box.dataset.brag = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
+  if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('message');
 }
 
 function itemDetails(item) {
@@ -1034,6 +1087,21 @@ async function onCasesClick(e) {
   const card = t.closest('[data-case]');
   if (card) { openCase = casino.data.cases.find((c) => c.id === card.dataset.case); return renderCases(); }
   if (t.closest('[data-case-back]') && !opening) { openCase = null; return renderCases(); }
+  const count = t.closest('[data-case-count]');
+  if (count && !opening) {
+    caseCount = Number(count.dataset.caseCount);
+    casinoPanes.cases.querySelectorAll('[data-case-count]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.caseCount) === caseCount)));
+    $('#cases-main .open-btn').innerHTML = openLabel(openCase);
+    return;
+  }
+  const drop = t.closest('[data-drop-item]');
+  if (drop) return openItem(casino.inventory.find((i) => i.id === Number(drop.dataset.dropItem)), () => lastDrops && showDrops());
+  if (t.closest('[data-sell-drops]') && lastDrops) {
+    const ids = lastDrops.items.filter((i) => casino.inventory.some((x) => x.id === i.id)).map((i) => i.id);
+    if (await sellItems(ids)) showDrops();
+    $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
+    return;
+  }
   const open = t.closest('[data-open]');
   if (open) {
     if (!openCase || openCase.id !== open.dataset.open) { openCase = casino.data.cases.find((c) => c.id === open.dataset.open); renderCases(); }
@@ -1088,7 +1156,7 @@ async function onCasesClick(e) {
   }
 }
 
-function openItem(item) {
+function openItem(item, onSold = renderCases) {
   if (!item) return;
   const { wear, title } = itemDetails(item);
   modal(`${dropHtml(item)}
@@ -1098,7 +1166,7 @@ function openItem(item) {
       <button type="button" class="btn" id="item-sell">Sell for ${chipsText(item.value)}</button>
     </div>`, 'drop-modal');
   $('#item-sell').onclick = async () => {
-    if (await sellItems([item.id])) { closeModal(); renderCases(); }
+    if (await sellItems([item.id])) { closeModal(); onSold(); }
   };
   $('#item-brag').onclick = () => { closeModal(); brag(`🎒 Showing off ${title} (${wear.name}), worth ${chipsText(item.value)} chips`); };
 }

@@ -394,3 +394,34 @@
   .cases-nav { overflow-x: auto; scrollbar-width: none; }
   .cases-nav .seg { white-space: nowrap; flex: none; padding: 7px 12px; font-size: 14px; }
 }
+
+/* Opening several cases at once */
+.count-pick { display: flex; border: 1px solid var(--line); border-radius: 999px; overflow: hidden; background: var(--surface); }
+.count-pick button { border: 0; background: none; color: var(--muted); font: inherit; font-weight: 800; padding: 8px 12px; cursor: pointer; }
+.count-pick button + button { border-left: 1px solid var(--line); }
+.count-pick button[aria-pressed="true"] { background: var(--text-strong); color: var(--bg); }
+#case-reels:empty { display: none; }
+#case-reels.multi { display: grid; gap: 8px; }
+#case-reels.n10, #case-reels.n20 { grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); }
+#case-reels.multi .case-reel { padding: 6px 0; }
+#case-reels.multi .case-strip { gap: 6px; }
+#case-reels.multi .case-strip .item-tile { width: 104px; padding: 6px 7px 8px; gap: 2px; border-bottom-width: 3px; }
+#case-reels.multi .item-art { height: 46px; }
+#case-reels.multi .item-art .skin-art { max-height: 44px; }
+#case-reels.multi .rare-mark { font-size: 28px; }
+#case-reels.multi .item-name { font-size: 11px; }
+#case-reels.multi .item-name b { font-size: 12px; }
+#case-reels.multi .case-marker::before, #case-reels.multi .case-marker::after { border-width: 6px; }
+#case-reels.multi .case-strip .item-tile.landed { box-shadow: 0 0 0 2px var(--rarity), 0 0 16px var(--rarity); }
+.drops { display: flex; flex-direction: column; gap: 12px; }
+.drops-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px; color: var(--text-strong); font-size: 17px; }
+.drop-item { position: relative; }
+.drop-item.sold { cursor: default; }
+.drop-item.sold .item-tile { opacity: .45; filter: grayscale(.7); }
+.new-mark { position: absolute; top: 8px; right: 8px; font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .06em; color: #1c1612; background: #ffd36b; padding: 2px 7px; border-radius: 999px; }
+@media (max-width: 600px) {
+  .count-pick { order: 3; width: 100%; justify-content: space-between; }
+  .count-pick button { flex: 1; }
+  #case-reels.n10, #case-reels.n20 { grid-template-columns: 1fr; }
+  #case-reels.multi .case-strip .item-tile { width: 88px; }
+}
