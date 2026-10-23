@@ -4,7 +4,7 @@
 // per person, used at every fire. The server deals, spins and opens everything, so nobody's app decides what it wins.
 import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
-import type { Db } from './db.ts';
+import { inTransaction, type Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 import { PokerTable, MAX_SEATS, shuffledDeck, type Action, type Card } from './poker.ts';
 import {
@@ -19,6 +19,8 @@ const BROKE_CHIPS = 500; // when you're nearly out, you don't have to wait a who
 const BROKE_BELOW = 100;
 const BROKE_MS = 3600_000;
 const MAX_ITEMS = 500;
+/** How many cases can be opened at once. */
+const CASE_COUNTS = [1, 2, 5, 10, 20];
 const BLACKJACK_MIN = 10;
 const BLACKJACK_MAX = 10_000;
 export const POKER = { smallBlind: 10, bigBlind: 20, minBuyIn: 400, maxBuyIn: 4000 };
@@ -105,7 +107,9 @@ export function casino(ctx: CasinoContext) {
     wears: WEARS,
     slots: { strips: SLOT_STRIPS, lines: SLOT_LINES, pays: SLOT_PAYS, twoCherries: SLOT_TWO_CHERRIES, bets: SLOT_BETS },
     poker: POKER,
+    caseCounts: CASE_COUNTS,
     inventory: inventory(user.id),
+    found: found(user.id),
   }));
 
   route('POST', '/api/casino/free', ({ user }) => {
@@ -164,13 +168,35 @@ export function casino(ctx: CasinoContext) {
     ).map(itemView);
   }
 
-  route('POST', '/api/casino/cases/:code/open', ({ user, params }) => {
+  type FoundRow = { skinId: string; count: number; bestFloat: number; stattrak: number; firstAt: number };
+  /** The collection book: each skin someone has ever unboxed, how many times, and the best float they got. */
+  function found(userId: number) {
+    return (
+      db
+        .prepare('SELECT skin_id AS skinId, count, best_float AS bestFloat, stattrak, first_at AS firstAt FROM casino_found WHERE user_id = ?')
+        .all(userId) as FoundRow[]
+    ).map((r) => ({ ...r, stattrak: !!r.stattrak }));
+  }
+
+  /** Opens one case, or several at once (CASE_COUNTS); paid for together. */
+  route('POST', '/api/casino/cases/:code/open', ({ user, params, body }) => {
     play(user);
     const box = CASES.find((c) => c.id === params[0]);
     if (!box) throw fail(404, 'That case isn\'t here');
+    const n = body.count === undefined ? 1 : Number(body.count);
+    if (!CASE_COUNTS.includes(n)) throw fail(400, `Open ${CASE_COUNTS.join(', ')} at a time`);
     const count = (db.prepare('SELECT COUNT(*) AS n FROM casino_items WHERE user_id = ?').get(user.id) as { n: number }).n;
-    if (count >= MAX_ITEMS) throw fail(400, `Your inventory is full (${MAX_ITEMS} items). Sell some first.`);
-    take(user.id, box.price);
+    if (count + n > MAX_ITEMS) throw fail(400, count >= MAX_ITEMS ? `Your inventory is full (${MAX_ITEMS} items). Sell some first.` : `That won't fit: your inventory holds ${MAX_ITEMS} items. Sell some first.`);
+    const items = inTransaction(db, () => {
+      take(user.id, box.price * n);
+      return Array.from({ length: n }, () => unbox(user.id, box));
+    });
+    walletChanged(user.id);
+    return { item: items[0], items, wallet: walletView(user.id), found: found(user.id) };
+  });
+
+  /** One skin out of a case, into the inventory and the collection book. */
+  function unbox(userId: number, box: (typeof CASES)[number]) {
     // Rarity first, at CS's odds, then any skin of that rarity, then how worn it is.
     let roll = randomInt(10_000);
     const rarity = (Object.keys(RARITY_ODDS) as Rarity[]).find((r) => (roll -= RARITY_ODDS[r]) < 0)!;
@@ -184,10 +210,13 @@ export function casino(ctx: CasinoContext) {
     const createdAt = Date.now();
     const r = db
       .prepare('INSERT INTO casino_items (user_id, skin_id, float, stattrak, value, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(user.id, skin.id, float, stattrak ? 1 : 0, value, createdAt);
-    walletChanged(user.id);
-    return { item: itemView({ id: Number(r.lastInsertRowid), skinId: skin.id, float, stattrak: stattrak ? 1 : 0, value, createdAt }), wallet: walletView(user.id) };
-  });
+      .run(userId, skin.id, float, stattrak ? 1 : 0, value, createdAt);
+    db.prepare(
+      `INSERT INTO casino_found (user_id, skin_id, count, best_float, stattrak, first_at) VALUES (?, ?, 1, ?, ?, ?)
+       ON CONFLICT (user_id, skin_id) DO UPDATE SET count = count + 1, best_float = MIN(best_float, excluded.best_float), stattrak = MAX(stattrak, excluded.stattrak)`,
+    ).run(userId, skin.id, float, stattrak ? 1 : 0, createdAt);
+    return itemView({ id: Number(r.lastInsertRowid), skinId: skin.id, float, stattrak: stattrak ? 1 : 0, value, createdAt });
+  }
 
   /** Sells items back for what they're worth. */
   route('POST', '/api/casino/items/sell', ({ user, body }) => {

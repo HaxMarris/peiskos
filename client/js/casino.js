@@ -15,6 +15,7 @@ const casino = {
   tableRoom: null,
   blackjack: null,
   inventory: [],
+  found: [], // the collection book: every skin you've ever unboxed
 };
 const CASINO_TABS = [
   ['poker', "Hold 'em"],
@@ -79,6 +80,7 @@ async function loadCasino(fresh = false) {
       casino.wallet = d.wallet;
       casino.blackjack = d.blackjack;
       casino.inventory = d.inventory;
+      casino.found = d.found ?? [];
       renderCasino();
       return d;
     })
@@ -716,9 +718,18 @@ function showSlotWins(r, strips) {
 // ---- cases
 
 let openCase = null; // the case being looked at
-let caseView = 'cases'; // or 'inventory'
+let caseView = 'cases'; // or 'inventory' or 'book'
 let opening = false;
+let caseCount = 1; // how many to open at once
+let lastDrops = null; // what the last multi-open got: { items, c, fresh }
 let invSort = 'new';
+// Inventory filters, and the skins picked to sell together.
+const invFilter = { type: 'all', rarity: 'all', wear: 'all', box: 'all', stattrak: false };
+let invPicking = false;
+const invPicked = new Set();
+const INV_TYPES = [
+  ['knife', 'Knives'], ['gloves', 'Gloves'], ['rifle', 'Rifles'], ['sniper', 'Snipers'], ['pistol', 'Pistols'], ['smg', 'SMGs'], ['shotgun', 'Shotguns'],
+];
 
 function buildCases() {
   casinoPanes.cases.innerHTML = `
@@ -726,12 +737,20 @@ function buildCases() {
       <div class="cases-nav">
         <button type="button" class="seg" data-case-view="cases">Cases</button>
         <button type="button" class="seg" data-case-view="inventory">Inventory <span id="inv-count"></span></button>
+        <button type="button" class="seg" data-case-view="book">Collection <span id="book-count"></span></button>
       </div>
       <div id="cases-main"></div>
     </div>`;
   casinoPanes.cases.addEventListener('click', onCasesClick);
   casinoPanes.cases.addEventListener('change', (e) => {
     if (e.target.id === 'inv-sort') { invSort = e.target.value; renderInventory(); }
+    if (e.target.matches('[data-book-case]')) { bookCase = e.target.value; renderBook(); }
+    if (e.target.matches('[data-book-missing]')) { bookMissing = e.target.checked; renderBook(); }
+    const f = e.target.dataset.invFilter;
+    if (f) {
+      invFilter[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+      renderInventory();
+    }
   });
 }
 
@@ -748,8 +767,10 @@ function renderCases() {
   if (!casino.data) return;
   casinoPanes.cases.querySelectorAll('[data-case-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.caseView === caseView)));
   $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
+  $('#book-count').textContent = bookCount();
   if (opening) return;
   if (caseView === 'inventory') return renderInventory();
+  if (caseView === 'book') return renderBook();
   if (openCase) return renderCaseDetail();
   $('#cases-main').innerHTML = `<div class="case-grid">${casino.data.cases.map((c) => `
     <button type="button" class="case-card" data-case="${c.id}">
@@ -767,8 +788,13 @@ function itemTile(skin, extra = '', { float, star = false } = {}) {
     <div class="item-name"><span class="small">${escapeHtml(skin.weapon)}</span><b>${escapeHtml(skin.name)}</b></div>${extra}</div>`;
 }
 
+const caseCounts = () => casino.data.caseCounts ?? [1];
+const openLabel = (c) => `Open ${caseCount > 1 ? `${caseCount} ` : ''}for <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(c.price * caseCount)}`;
+
 function renderCaseDetail() {
   const c = openCase;
+  const counts = caseCounts();
+  if (!counts.includes(caseCount)) caseCount = 1;
   const odds = casino.data.rarityOdds;
   const groups = Object.keys(RARITY).map((r) => {
     const skins = c.skins.filter((s) => s.rarity === r);
@@ -781,9 +807,10 @@ function renderCaseDetail() {
     <div class="case-head">
       <button type="button" class="icon-btn" data-case-back aria-label="All cases"><svg viewBox="0 0 24 24"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12l6.6-6.6Z"/></svg></button>
       <h3>${escapeHtml(c.name)}</h3>
-      <button type="button" class="btn open-btn" data-open="${c.id}">Open for <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(c.price)}</button>
+      ${counts.length > 1 ? `<div class="count-pick" role="group" aria-label="How many to open">${counts.map((n) => `<button type="button" data-case-count="${n}" aria-pressed="${n === caseCount}">×${n}</button>`).join('')}</div>` : ''}
+      <button type="button" class="btn open-btn" data-open="${c.id}">${openLabel(c)}</button>
     </div>
-    <div class="case-reel hidden" id="case-reel"><div class="case-strip" id="case-strip"></div><span class="case-marker" aria-hidden="true"></span></div>
+    <div id="case-reels"></div>
     <div id="case-drop"></div>
     <div class="case-contents">${groups}</div>`;
 }
@@ -800,42 +827,90 @@ function fillerSkin(c) {
 async function openTheCase(c) {
   if (opening) return;
   opening = true;
+  const n = caseCount;
   const btn = $('#cases-main .open-btn');
   if (btn) btn.disabled = true;
   $('#case-drop').innerHTML = '';
+  lastDrops = null;
   let r;
   try {
-    r = await api(`/api/casino/cases/${c.id}/open`, { method: 'POST', body: {} });
+    r = await api(`/api/casino/cases/${c.id}/open`, { method: 'POST', body: n > 1 ? { count: n } : {} });
   } catch (err) {
     opening = false;
     if (btn) btn.disabled = false;
     return toast(err.message);
   }
   setWallet({ ...casino.wallet, chips: r.wallet.chips });
-  const won = skinById(r.item.skinId);
-  const WIN_AT = 46;
-  const items = Array.from({ length: 54 }, (_, k) => (k === WIN_AT ? won : fillerSkin(c)));
-  const reel = $('#case-reel');
-  const strip = $('#case-strip');
-  reel.classList.remove('hidden');
-  strip.innerHTML = items.map((s, k) => itemTile(s, '', k === WIN_AT ? { float: r.item.float } : { star: true })).join('');
-  strip.style.transition = 'none';
-  strip.style.transform = 'translateX(0)';
-  const tile = strip.firstElementChild;
-  const step = tile.offsetWidth + parseFloat(getComputedStyle(strip).columnGap || '8');
-  const land = WIN_AT * step + tile.offsetWidth * (0.15 + Math.random() * 0.7) - reel.clientWidth / 2;
-  strip.getBoundingClientRect();
-  const ms = 5600;
-  strip.style.transition = `transform ${ms}ms cubic-bezier(.08,.6,.12,1)`;
-  strip.style.transform = `translateX(${-land}px)`;
-  reel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-  await new Promise((done) => setTimeout(done, ms + 150));
-  strip.children[WIN_AT].classList.add('landed');
+  const got = r.items ?? [r.item];
+  // One reel per case, all spinning at once. With several, the reels are smaller and a bit shorter.
+  const WIN_AT = got.length > 1 ? 30 : 46;
+  const reels = $('#case-reels');
+  reels.className = got.length > 1 ? `multi n${got.length}` : '';
+  reels.innerHTML = got.map(() => '<div class="case-reel"><div class="case-strip"></div><span class="case-marker" aria-hidden="true"></span></div>').join('');
+  const strips = [...reels.querySelectorAll('.case-strip')];
+  strips.forEach((strip, i) => {
+    const items = Array.from({ length: WIN_AT + 8 }, (_, k) => (k === WIN_AT ? skinById(got[i].skinId) : fillerSkin(c)));
+    strip.innerHTML = items.map((s, k) => itemTile(s, '', k === WIN_AT ? { float: got[i].float } : { star: true })).join('');
+    strip.style.transition = 'none';
+    strip.style.transform = 'translateX(0)';
+  });
+  const ms = got.length > 1 ? 4200 : 5600;
+  reels.getBoundingClientRect();
+  strips.forEach((strip, i) => {
+    const reel = strip.parentElement;
+    const tile = strip.firstElementChild;
+    const step = tile.offsetWidth + parseFloat(getComputedStyle(strip).columnGap || '8');
+    const land = WIN_AT * step + tile.offsetWidth * (0.15 + Math.random() * 0.7) - reel.clientWidth / 2;
+    const t = ms + i * 60;
+    strip.style.transition = `transform ${t}ms cubic-bezier(.08,.6,.12,1)`;
+    strip.style.transform = `translateX(${-land}px)`;
+  });
+  reels.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  await new Promise((done) => setTimeout(done, ms + (got.length - 1) * 60 + 150));
+  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   opening = false;
-  casino.inventory.unshift(r.item);
+  casino.inventory.unshift(...[...got].reverse());
   $('#inv-count').textContent = `(${casino.inventory.length})`;
+  // New to the book: skins you didn't have before (the first of each, if one came up twice).
+  const had = new Set(casino.found.map((f) => f.skinId));
+  const fresh = new Set();
+  for (const item of got) if (!had.has(item.skinId)) { had.add(item.skinId); fresh.add(item.id); }
+  if (r.found) casino.found = r.found;
+  $('#book-count').textContent = bookCount();
   if (btn) btn.disabled = false;
-  showDrop(r.item, c);
+  if (got.length === 1) return showDrop(got[0], c, fresh.size > 0);
+  lastDrops = { items: got, c, fresh };
+  showDrops();
+  // With many reels the results are far down (on a phone especially), so bring them up.
+  setTimeout(() => $('#case-drop')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 700);
+}
+
+/** What several cases gave, as a grid: click one to keep, sell or show it; or sell them all. */
+function showDrops() {
+  const { items, c, fresh } = lastDrops;
+  const left = items.filter((i) => casino.inventory.some((x) => x.id === i.id));
+  const worth = left.reduce((n, i) => n + i.value, 0);
+  const best = [...items].sort((a, b) => b.value - a.value)[0];
+  const box = $('#case-drop');
+  box.innerHTML = `<div class="drops">
+    <div class="drops-head">
+      <b>${items.length} skins · worth <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(items.reduce((n, i) => n + i.value, 0))}</b>
+      <span class="small muted">Spent ${chipsText(c.price * items.length)}${fresh.size ? ` · ${fresh.size} new in your book` : ''}</span>
+    </div>
+    <div class="item-grid">${items.map((i) => {
+      const { skin, wear } = itemDetails(i);
+      const sold = !left.includes(i);
+      return `<button type="button" class="inv-item drop-item ${sold ? 'sold' : ''}" data-drop-item="${i.id}" ${sold ? 'disabled' : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}${sold ? ' · Sold' : ''}</span>`, { float: i.float })}${fresh.has(i.id) ? '<span class="new-mark">New</span>' : ''}</button>`;
+    }).join('')}</div>
+    <div class="drop-actions">
+      <button type="button" class="btn" data-open="${c.id}">Open ${items.length} more (${chipsText(c.price * items.length)})</button>
+      ${left.length ? `<button type="button" class="btn secondary" data-sell-drops>Sell ${left.length === items.length ? 'all' : `the other ${left.length}`} for ${chipsText(worth)}</button>` : ''}
+      <button type="button" class="btn secondary" data-brag>Show the fire</button>
+    </div>
+  </div>`;
+  const { title, wear } = itemDetails(best);
+  box.dataset.brag = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
+  if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('message');
 }
 
 function itemDetails(item) {
@@ -857,10 +932,10 @@ function dropHtml(item) {
   </div>`;
 }
 
-function showDrop(item, c) {
+function showDrop(item, c, isNew = false) {
   const { skin, wear, title } = itemDetails(item);
   const box = $('#case-drop');
-  box.innerHTML = `${dropHtml(item)}
+  box.innerHTML = `${dropHtml(item)}${isNew ? '<p class="drop-new">New in your collection book!</p>' : ''}
     <div class="drop-actions">
       <button type="button" class="btn" data-open="${c.id}">Open another (${chipsText(c.price)})</button>
       <button type="button" class="btn secondary" data-sell="${item.id}">Sell for ${chipsText(item.value)}</button>
@@ -870,20 +945,126 @@ function showDrop(item, c) {
   if (['covert', 'rare'].includes(skin.rarity)) playSound('message');
 }
 
-function renderInventory() {
-  const items = [...casino.inventory].sort((a, b) => (invSort === 'value' ? b.value - a.value : b.id - a.id));
-  const total = items.reduce((n, i) => n + i.value, 0);
-  $('#cases-main').innerHTML = !items.length
-    ? '<p class="muted empty-inv">Nothing here yet. What you open from cases lands here, and you can sell it back for chips.</p>'
-    : `<div class="inv-head">
-        <span>Worth <b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(total)}</b></span>
-        <select id="inv-sort" aria-label="Sort"><option value="new" ${invSort === 'new' ? 'selected' : ''}>Newest</option><option value="value" ${invSort === 'value' ? 'selected' : ''}>Most valuable</option></select>
-        <button type="button" class="link-btn danger-link" data-sell-all>Sell everything</button>
+// ---- the collection book: every skin in every case, lit up once you've unboxed it (selling doesn't take it out)
+
+const allSkins = () => (casino.data?.cases ?? []).flatMap((c) => c.skins);
+function bookCount() {
+  const total = allSkins().length;
+  return total ? `${casino.found.length}/${total}` : '';
+}
+let bookCase = 'all';
+let bookMissing = false;
+
+function renderBook() {
+  const found = new Map(casino.found.map((f) => [f.skinId, f]));
+  const wears = casino.data.wears;
+  const cases = casino.data.cases;
+  const all = allSkins();
+  const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
+  const bar = (n, of) => `<span class="book-bar" role="progressbar" aria-valuenow="${n}" aria-valuemax="${of}"><span style="width:${pct(n, of)}%"></span></span>`;
+  // Rarest first within each case, like the case's own list.
+  const order = (a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) || b.value - a.value;
+  const tile = (s) => {
+    const f = found.get(s.id);
+    if (f) {
+      const times = f.count > 1 ? `×${f.count} · ` : '';
+      return itemTile(s, `<span class="item-meta small">${f.stattrak ? '<span class="stattrak">ST</span> ' : ''}${times}Best ${wearOf(f.bestFloat, wears).short} ${f.bestFloat.toFixed(4)}</span>`, { float: f.bestFloat });
+    }
+    // Not found yet: a shadow of the gun. Knives and gloves stay a mystery, like in the case.
+    if (s.rarity === 'rare') return `<div class="item-tile r-rare missing" style="--rarity:${RARITY.rare.color}"><div class="item-art"><span class="rare-mark">★</span></div><div class="item-name"><span class="small">${escapeHtml(s.weapon)}</span><b>???</b></div><span class="item-meta small">Not found yet</span></div>`;
+    return `<div class="item-tile r-${s.rarity} missing" style="--rarity:${RARITY[s.rarity].color}"><div class="item-art">${skinArt(s)}</div><div class="item-name"><span class="small">${escapeHtml(s.weapon)}</span><b>${escapeHtml(s.name)}</b></div><span class="item-meta small">Not found yet</span></div>`;
+  };
+  const shown = cases.filter((c) => bookCase === 'all' || c.id === bookCase);
+  $('#cases-main').innerHTML = `
+    <div class="book">
+      <div class="book-head">
+        <div class="book-total"><b>${casino.found.length} of ${all.length}</b> skins found ${bar(casino.found.length, all.length)}<span class="small muted">${pct(casino.found.length, all.length)}%</span></div>
+        <div class="inv-filters">
+          <select data-book-case aria-label="Case"><option value="all">Every case</option>${cases.map((c) => `<option value="${c.id}" ${bookCase === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+          <label class="inv-st"><input type="checkbox" data-book-missing ${bookMissing ? 'checked' : ''}> Missing only</label>
+        </div>
       </div>
-      <div class="item-grid inv">${items.map((i) => {
-        const { skin, wear } = itemDetails(i);
-        return `<button type="button" class="inv-item" data-item="${i.id}">${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}</button>`;
-      }).join('')}</div>`;
+      ${shown.map((c) => {
+        const have = c.skins.filter((s) => found.has(s.id)).length;
+        const skins = [...c.skins].sort(order).filter((s) => !bookMissing || !found.has(s.id));
+        return `<section class="book-case">
+          <h4>${escapeHtml(c.name)} <span class="small muted">${have}/${c.skins.length}</span>${bar(have, c.skins.length)}${have === c.skins.length ? '<span class="book-done">Complete!</span>' : ''}</h4>
+          ${skins.length ? `<div class="item-grid">${skins.map(tile).join('')}</div>` : '<p class="small muted">You have every skin in this case.</p>'}
+        </section>`;
+      }).join('')}
+      <p class="small muted">Skins stay in your book after you sell them. Ones you opened before the book existed count if they were still in your inventory.</p>
+    </div>`;
+}
+
+const caseOfSkin = (skinId) => casino.data?.cases.find((c) => c.skins.some((x) => x.id === skinId));
+
+/** The inventory items that pass the filters, sorted. */
+function shownItems() {
+  const wears = casino.data.wears;
+  return casino.inventory.filter((i) => {
+    const skin = skinById(i.skinId);
+    if (!skin) return false;
+    if (invFilter.type !== 'all' && skin.kind !== invFilter.type) return false;
+    if (invFilter.rarity !== 'all' && skin.rarity !== invFilter.rarity) return false;
+    if (invFilter.wear !== 'all' && wearOf(i.float, wears).short !== invFilter.wear) return false;
+    if (invFilter.box !== 'all' && caseOfSkin(i.skinId)?.id !== invFilter.box) return false;
+    if (invFilter.stattrak && !i.stattrak) return false;
+    return true;
+  }).sort((a, b) => (invSort === 'value' ? b.value - a.value : invSort === 'rarity'
+    ? RARITY_ORDER.indexOf(skinById(a.skinId).rarity) - RARITY_ORDER.indexOf(skinById(b.skinId).rarity) || b.value - a.value
+    : b.id - a.id));
+}
+const RARITY_ORDER = ['rare', 'covert', 'classified', 'restricted', 'milspec'];
+
+function renderInventory() {
+  // Sold or gone: no longer picked.
+  for (const id of invPicked) if (!casino.inventory.some((i) => i.id === id)) invPicked.delete(id);
+  if (!casino.inventory.length) {
+    invPicking = false;
+    $('#cases-main').innerHTML = '<p class="muted empty-inv">Nothing here yet. What you open from cases lands here, and you can sell it back for chips.</p>';
+    return;
+  }
+  const items = shownItems();
+  const total = items.reduce((n, i) => n + i.value, 0);
+  const filtered = invFilter.type !== 'all' || invFilter.rarity !== 'all' || invFilter.wear !== 'all' || invFilter.box !== 'all' || invFilter.stattrak;
+  const kinds = new Set(casino.inventory.map((i) => skinById(i.skinId)?.kind));
+  const count = (kind) => casino.inventory.filter((i) => skinById(i.skinId)?.kind === kind).length;
+  const option = (key, value, label) => `<option value="${value}" ${invFilter[key] === value ? 'selected' : ''}>${label}</option>`;
+  const picked = casino.inventory.filter((i) => invPicked.has(i.id));
+  const pickedValue = picked.reduce((n, i) => n + i.value, 0);
+  $('#cases-main').innerHTML = `
+    <div class="inv-types" role="group" aria-label="Show">
+      <button type="button" class="chip-filter" data-inv-type="all" aria-pressed="${invFilter.type === 'all'}">All <span>${casino.inventory.length}</span></button>
+      ${INV_TYPES.filter(([k]) => kinds.has(k)).map(([k, label]) => `<button type="button" class="chip-filter" data-inv-type="${k}" aria-pressed="${invFilter.type === k}">${label} <span>${count(k)}</span></button>`).join('')}
+    </div>
+    <div class="inv-filters">
+      <select data-inv-filter="rarity" aria-label="Rarity">${option('rarity', 'all', 'Any rarity')}${RARITY_ORDER.map((r) => option('rarity', r, RARITY[r].name)).join('')}</select>
+      <select data-inv-filter="wear" aria-label="Wear">${option('wear', 'all', 'Any wear')}${casino.data.wears.map((w) => option('wear', w.short, w.name)).join('')}</select>
+      <select data-inv-filter="box" aria-label="Case">${option('box', 'all', 'Any case')}${casino.data.cases.map((c) => option('box', c.id, escapeHtml(c.name))).join('')}</select>
+      <label class="inv-st"><input type="checkbox" data-inv-filter="stattrak" ${invFilter.stattrak ? 'checked' : ''} /> StatTrak™ only</label>
+      <select id="inv-sort" aria-label="Sort">
+        <option value="new" ${invSort === 'new' ? 'selected' : ''}>Newest</option>
+        <option value="value" ${invSort === 'value' ? 'selected' : ''}>Most valuable</option>
+        <option value="rarity" ${invSort === 'rarity' ? 'selected' : ''}>Rarest</option>
+      </select>
+    </div>
+    <div class="inv-head">
+      <span>${filtered ? `${items.length} of ${casino.inventory.length} shown · ` : ''}Worth <b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(total)}</b></span>
+      ${filtered ? '<button type="button" class="link-btn" data-inv-clear>Clear filters</button>' : ''}
+      <button type="button" class="btn secondary inv-pick-btn" data-inv-pick aria-pressed="${invPicking}">${invPicking ? 'Done' : 'Select'}</button>
+      ${items.length ? `<button type="button" class="link-btn danger-link" data-sell-all>${filtered ? `Sell these ${items.length}` : 'Sell everything'}</button>` : ''}
+    </div>
+    ${items.length ? `<div class="item-grid inv ${invPicking ? 'picking' : ''}">${items.map((i) => {
+      const { skin, wear } = itemDetails(i);
+      const on = invPicked.has(i.id);
+      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${wear.short} · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(i.value)}</span>`, { float: i.float })}<span class="pick-mark" aria-hidden="true"></span></button>`;
+    }).join('')}</div>` : '<p class="muted empty-inv">Nothing matches these filters.</p>'}
+    ${invPicking ? `<div class="sell-bar">
+      <span><b>${picked.length}</b> selected${picked.length ? ` · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(pickedValue)}` : ''}</span>
+      <button type="button" class="link-btn" data-pick-all>Select all ${items.length} shown</button>
+      ${picked.length ? '<button type="button" class="link-btn" data-pick-none>Clear</button>' : ''}
+      <button type="button" class="btn" data-sell-picked ${picked.length ? '' : 'disabled'}>Sell ${picked.length || ''} for ${chipsText(pickedValue)}</button>
+    </div>` : ''}`;
 }
 
 async function sellItems(ids) {
@@ -906,6 +1087,21 @@ async function onCasesClick(e) {
   const card = t.closest('[data-case]');
   if (card) { openCase = casino.data.cases.find((c) => c.id === card.dataset.case); return renderCases(); }
   if (t.closest('[data-case-back]') && !opening) { openCase = null; return renderCases(); }
+  const count = t.closest('[data-case-count]');
+  if (count && !opening) {
+    caseCount = Number(count.dataset.caseCount);
+    casinoPanes.cases.querySelectorAll('[data-case-count]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.caseCount) === caseCount)));
+    $('#cases-main .open-btn').innerHTML = openLabel(openCase);
+    return;
+  }
+  const drop = t.closest('[data-drop-item]');
+  if (drop) return openItem(casino.inventory.find((i) => i.id === Number(drop.dataset.dropItem)), () => lastDrops && showDrops());
+  if (t.closest('[data-sell-drops]') && lastDrops) {
+    const ids = lastDrops.items.filter((i) => casino.inventory.some((x) => x.id === i.id)).map((i) => i.id);
+    if (await sellItems(ids)) showDrops();
+    $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
+    return;
+  }
   const open = t.closest('[data-open]');
   if (open) {
     if (!openCase || openCase.id !== open.dataset.open) { openCase = casino.data.cases.find((c) => c.id === open.dataset.open); renderCases(); }
@@ -920,16 +1116,47 @@ async function onCasesClick(e) {
   }
   if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.brag);
   if (t.closest('[data-sell-all]')) {
-    const total = casino.inventory.reduce((n, i) => n + i.value, 0);
-    if (!confirm(`Sell all ${casino.inventory.length} items for ${chipsText(total)} chips?`)) return;
-    if (await sellItems(casino.inventory.map((i) => i.id))) renderCases();
+    const items = shownItems();
+    const total = items.reduce((n, i) => n + i.value, 0);
+    if (!confirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?`)) return;
+    if (await sellItems(items.map((i) => i.id))) renderCases();
+    return;
+  }
+  const type = t.closest('[data-inv-type]');
+  if (type) { invFilter.type = type.dataset.invType; return renderInventory(); }
+  if (t.closest('[data-inv-clear]')) {
+    Object.assign(invFilter, { type: 'all', rarity: 'all', wear: 'all', box: 'all', stattrak: false });
+    return renderInventory();
+  }
+  if (t.closest('[data-inv-pick]')) {
+    invPicking = !invPicking;
+    if (!invPicking) invPicked.clear();
+    return renderInventory();
+  }
+  if (t.closest('[data-pick-all]')) { for (const i of shownItems()) invPicked.add(i.id); return renderInventory(); }
+  if (t.closest('[data-pick-none]')) { invPicked.clear(); return renderInventory(); }
+  if (t.closest('[data-sell-picked]')) {
+    const items = casino.inventory.filter((i) => invPicked.has(i.id));
+    const total = items.reduce((n, i) => n + i.value, 0);
+    if (!items.length || !confirm(`Sell ${items.length} item${items.length === 1 ? '' : 's'} for ${chipsText(total)} chips?`)) return;
+    if (await sellItems(items.map((i) => i.id))) { invPicked.clear(); invPicking = false; renderCases(); }
     return;
   }
   const inv = t.closest('[data-item]');
-  if (inv) return openItem(casino.inventory.find((i) => i.id === Number(inv.dataset.item)));
+  if (inv) {
+    const id = Number(inv.dataset.item);
+    // Picking (or Ctrl/Cmd-click, which starts picking): toggle it; otherwise open it.
+    if (invPicking || e.ctrlKey || e.metaKey) {
+      invPicking = true;
+      if (invPicked.has(id)) invPicked.delete(id);
+      else invPicked.add(id);
+      return renderInventory();
+    }
+    return openItem(casino.inventory.find((i) => i.id === id));
+  }
 }
 
-function openItem(item) {
+function openItem(item, onSold = renderCases) {
   if (!item) return;
   const { wear, title } = itemDetails(item);
   modal(`${dropHtml(item)}
@@ -939,7 +1166,7 @@ function openItem(item) {
       <button type="button" class="btn" id="item-sell">Sell for ${chipsText(item.value)}</button>
     </div>`, 'drop-modal');
   $('#item-sell').onclick = async () => {
-    if (await sellItems([item.id])) { closeModal(); renderCases(); }
+    if (await sellItems([item.id])) { closeModal(); onSold(); }
   };
   $('#item-brag').onclick = () => { closeModal(); brag(`🎒 Showing off ${title} (${wear.name}), worth ${chipsText(item.value)} chips`); };
 }
