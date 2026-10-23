@@ -725,46 +725,80 @@ function addIdFloor(db: Db) {
  * blackjack is their hand as it stands.
  */
 function addCasino(db: Db) {
+  // Chips, skins and the collection book belong to a hearth (2026-10-23): what someone has in one
+  // hearth can't be used in another. Tables from before then get moved over below.
+  const cols = (table: string) => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  const shared = cols('casino_wallets').length > 0 && !cols('casino_wallets').includes('server_id');
+  if (shared) {
+    db.exec('DROP INDEX IF EXISTS casino_items_by_user');
+    for (const t of ['casino_wallets', 'casino_items', 'casino_found']) if (cols(t).length) db.exec(`ALTER TABLE ${t} RENAME TO ${t}_shared`);
+  }
   db.exec(`
     CREATE TABLE IF NOT EXISTS casino_wallets (
-      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
       chips      INTEGER NOT NULL,
       at_table   INTEGER NOT NULL DEFAULT 0,
       in_battle  INTEGER NOT NULL DEFAULT 0,
       blackjack  TEXT,
       free_at    INTEGER NOT NULL DEFAULT 0,
-      created_at INTEGER NOT NULL
+      created_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, server_id)
     );
     CREATE TABLE IF NOT EXISTS casino_items (
       id         INTEGER PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
       skin_id    TEXT NOT NULL,
       float      REAL NOT NULL,
       stattrak   INTEGER NOT NULL DEFAULT 0,
       value      INTEGER NOT NULL,
       created_at INTEGER NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS casino_items_by_user ON casino_items(user_id, id);
+    CREATE INDEX IF NOT EXISTS casino_items_by_user ON casino_items(user_id, server_id, id);
     -- The collection book: every skin someone has ever unboxed, kept after they sell it.
     CREATE TABLE IF NOT EXISTS casino_found (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
       skin_id    TEXT NOT NULL,
       count      INTEGER NOT NULL,
       best_float REAL NOT NULL,
       stattrak   INTEGER NOT NULL DEFAULT 0,
       first_at   INTEGER NOT NULL,
-      PRIMARY KEY (user_id, skin_id)
+      PRIMARY KEY (user_id, server_id, skin_id)
     );
   `);
-  // What someone has put into a case battle that hasn't started; given back if the server restarts.
-  if (!(db.prepare('PRAGMA table_info(casino_wallets)').all() as { name: string }[]).some((c) => c.name === 'in_battle'))
-    db.exec('ALTER TABLE casino_wallets ADD COLUMN in_battle INTEGER NOT NULL DEFAULT 0');
+  if (shared) moveCasinoToHearths(db, cols);
+  addColumn(db, 'casino_items', 'locked', 'INTEGER NOT NULL DEFAULT 0'); // locked skins can't be sold, traded up or upgraded
+  addColumn(db, 'casino_wallets', 'pet', 'TEXT'); // the premium pet they have by their seat at this hearth's fires
+  db.exec(`
+    -- Premium pets someone bought with a hearth's chips.
+    CREATE TABLE IF NOT EXISTS casino_pets (
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      pet_id    TEXT NOT NULL,
+      bought_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, server_id, pet_id)
+    );
+    -- Every skin out of a case (opened alone or in a battle), for the day's top pulls. Kept a few days.
+    CREATE TABLE IF NOT EXISTS casino_pulls (
+      id        INTEGER PRIMARY KEY,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      skin_id   TEXT NOT NULL,
+      float     REAL NOT NULL,
+      stattrak  INTEGER NOT NULL DEFAULT 0,
+      value     INTEGER NOT NULL,
+      at        INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS casino_pulls_by_hearth ON casino_pulls(server_id, at);
+  `);
   // The book started 2026-10-23; skins opened before then count if they're still in someone's inventory.
   inTransaction(db, () => {
     if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_found_backfill'").get()) return;
     db.prepare(
-      `INSERT OR IGNORE INTO casino_found (user_id, skin_id, count, best_float, stattrak, first_at)
-       SELECT user_id, skin_id, COUNT(*), MIN(float), MAX(stattrak), MIN(created_at) FROM casino_items GROUP BY user_id, skin_id`,
+      `INSERT OR IGNORE INTO casino_found (user_id, server_id, skin_id, count, best_float, stattrak, first_at)
+       SELECT user_id, server_id, skin_id, COUNT(*), MIN(float), MAX(stattrak), MIN(created_at) FROM casino_items GROUP BY user_id, server_id, skin_id`,
     ).run();
     db.prepare("INSERT INTO app_secrets (name, value) VALUES ('casino_found_backfill', ?)").run(String(Date.now()));
   });
@@ -774,6 +808,32 @@ function addCasino(db: Db) {
     if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_reset_2026_10'").get()) return;
     db.prepare('UPDATE casino_wallets SET chips = 10000, at_table = 0, blackjack = NULL').run();
     db.prepare("INSERT INTO app_secrets (name, value) VALUES ('casino_reset_2026_10', ?)").run(String(Date.now()));
+  });
+}
+
+/**
+ * When the casino was one balance per person, everyone's chips, skins and book move to the first
+ * hearth they joined (not a DM). Every other hearth starts them fresh. Chips that were at a table or
+ * in a battle go back into the balance.
+ */
+function moveCasinoToHearths(db: Db, cols: (table: string) => string[]) {
+  const home = `(SELECT m.server_id FROM members m JOIN servers s ON s.id = m.server_id
+    WHERE m.user_id = t.user_id AND s.kind != 'dm' ORDER BY m.joined_at, m.server_id LIMIT 1)`;
+  const inBattle = cols('casino_wallets_shared').includes('in_battle') ? ' + t.in_battle' : '';
+  inTransaction(db, () => {
+    db.exec(`
+      INSERT INTO casino_wallets (user_id, server_id, chips, blackjack, free_at, created_at)
+        SELECT t.user_id, ${home} AS home, t.chips + t.at_table${inBattle}, t.blackjack, t.free_at, t.created_at
+        FROM casino_wallets_shared t WHERE home IS NOT NULL;
+      INSERT INTO casino_items (id, user_id, server_id, skin_id, float, stattrak, value, created_at)
+        SELECT t.id, t.user_id, ${home} AS home, t.skin_id, t.float, t.stattrak, t.value, t.created_at
+        FROM casino_items_shared t WHERE home IS NOT NULL;
+    `);
+    if (cols('casino_found_shared').length)
+      db.exec(`INSERT INTO casino_found (user_id, server_id, skin_id, count, best_float, stattrak, first_at)
+        SELECT t.user_id, ${home} AS home, t.skin_id, t.count, t.best_float, t.stattrak, t.first_at
+        FROM casino_found_shared t WHERE home IS NOT NULL`);
+    for (const t of ['casino_wallets', 'casino_items', 'casino_found']) db.exec(`DROP TABLE IF EXISTS ${t}_shared`);
   });
 }
 

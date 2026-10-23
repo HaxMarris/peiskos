@@ -1602,6 +1602,10 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 
 /* Things by people's seats: a little pixel picture sitting just beside their face. */
 .seat-item { position: absolute; left: calc(100% + 2px); bottom: -2px; width: calc(var(--face) * .5); height: calc(var(--face) * .5); pointer-events: auto; }
+/* Premium pets (bought in the casino) glow a little and breathe. */
+.seat-item.premium { filter: drop-shadow(0 0 3px rgba(255, 207, 90, .75)); animation: pet-bob 2.4s ease-in-out infinite; }
+@keyframes pet-bob { 50% { transform: translateY(-8%); } }
+@media (prefers-reduced-motion: reduce) { .seat-item.premium { animation: none; } }
 .pixel-art { display: block; width: 100%; height: 100%; image-rendering: pixelated; filter: drop-shadow(0 1px 0 rgba(43, 29, 22, .35)); }
 .decor-art .pixel-art { width: 32px; height: 32px; margin: 2px 0; }
 .fire-core { cursor: pointer; }
@@ -1632,6 +1636,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .decor-pick:hover:not(:disabled) { border-color: var(--line); }
 .decor-pick.chosen { border-color: var(--accent); background: var(--accent-soft); }
 .decor-pick:disabled { cursor: default; opacity: .55; }
+.decor-pick.premium .decor-art svg { filter: drop-shadow(0 0 3px rgba(255, 207, 90, .75)); }
+.decor-price { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; }
 .decor-art { font-size: 28px; line-height: 1.2; }
 
 /* Birthdays. */
