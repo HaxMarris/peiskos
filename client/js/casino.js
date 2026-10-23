@@ -15,6 +15,7 @@ const casino = {
   tableRoom: null,
   blackjack: null,
   inventory: [],
+  found: [], // the collection book: every skin you've ever unboxed
 };
 const CASINO_TABS = [
   ['poker', "Hold 'em"],
@@ -79,6 +80,7 @@ async function loadCasino(fresh = false) {
       casino.wallet = d.wallet;
       casino.blackjack = d.blackjack;
       casino.inventory = d.inventory;
+      casino.found = d.found ?? [];
       renderCasino();
       return d;
     })
@@ -716,7 +718,7 @@ function showSlotWins(r, strips) {
 // ---- cases
 
 let openCase = null; // the case being looked at
-let caseView = 'cases'; // or 'inventory'
+let caseView = 'cases'; // or 'inventory' or 'book'
 let opening = false;
 let invSort = 'new';
 // Inventory filters, and the skins picked to sell together.
@@ -733,12 +735,15 @@ function buildCases() {
       <div class="cases-nav">
         <button type="button" class="seg" data-case-view="cases">Cases</button>
         <button type="button" class="seg" data-case-view="inventory">Inventory <span id="inv-count"></span></button>
+        <button type="button" class="seg" data-case-view="book">Collection <span id="book-count"></span></button>
       </div>
       <div id="cases-main"></div>
     </div>`;
   casinoPanes.cases.addEventListener('click', onCasesClick);
   casinoPanes.cases.addEventListener('change', (e) => {
     if (e.target.id === 'inv-sort') { invSort = e.target.value; renderInventory(); }
+    if (e.target.matches('[data-book-case]')) { bookCase = e.target.value; renderBook(); }
+    if (e.target.matches('[data-book-missing]')) { bookMissing = e.target.checked; renderBook(); }
     const f = e.target.dataset.invFilter;
     if (f) {
       invFilter[f] = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
@@ -760,8 +765,10 @@ function renderCases() {
   if (!casino.data) return;
   casinoPanes.cases.querySelectorAll('[data-case-view]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.caseView === caseView)));
   $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
+  $('#book-count').textContent = bookCount();
   if (opening) return;
   if (caseView === 'inventory') return renderInventory();
+  if (caseView === 'book') return renderBook();
   if (openCase) return renderCaseDetail();
   $('#cases-main').innerHTML = `<div class="case-grid">${casino.data.cases.map((c) => `
     <button type="button" class="case-card" data-case="${c.id}">
@@ -846,8 +853,11 @@ async function openTheCase(c) {
   opening = false;
   casino.inventory.unshift(r.item);
   $('#inv-count').textContent = `(${casino.inventory.length})`;
+  const isNew = !casino.found.some((f) => f.skinId === r.item.skinId);
+  if (r.found) casino.found = r.found;
+  $('#book-count').textContent = bookCount();
   if (btn) btn.disabled = false;
-  showDrop(r.item, c);
+  showDrop(r.item, c, isNew);
 }
 
 function itemDetails(item) {
@@ -869,10 +879,10 @@ function dropHtml(item) {
   </div>`;
 }
 
-function showDrop(item, c) {
+function showDrop(item, c, isNew = false) {
   const { skin, wear, title } = itemDetails(item);
   const box = $('#case-drop');
-  box.innerHTML = `${dropHtml(item)}
+  box.innerHTML = `${dropHtml(item)}${isNew ? '<p class="drop-new">New in your collection book!</p>' : ''}
     <div class="drop-actions">
       <button type="button" class="btn" data-open="${c.id}">Open another (${chipsText(c.price)})</button>
       <button type="button" class="btn secondary" data-sell="${item.id}">Sell for ${chipsText(item.value)}</button>
@@ -880,6 +890,57 @@ function showDrop(item, c) {
     </div>`;
   box.dataset.brag = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
   if (['covert', 'rare'].includes(skin.rarity)) playSound('message');
+}
+
+// ---- the collection book: every skin in every case, lit up once you've unboxed it (selling doesn't take it out)
+
+const allSkins = () => (casino.data?.cases ?? []).flatMap((c) => c.skins);
+function bookCount() {
+  const total = allSkins().length;
+  return total ? `${casino.found.length}/${total}` : '';
+}
+let bookCase = 'all';
+let bookMissing = false;
+
+function renderBook() {
+  const found = new Map(casino.found.map((f) => [f.skinId, f]));
+  const wears = casino.data.wears;
+  const cases = casino.data.cases;
+  const all = allSkins();
+  const pct = (n, of) => (of ? Math.round((n / of) * 100) : 0);
+  const bar = (n, of) => `<span class="book-bar" role="progressbar" aria-valuenow="${n}" aria-valuemax="${of}"><span style="width:${pct(n, of)}%"></span></span>`;
+  // Rarest first within each case, like the case's own list.
+  const order = (a, b) => RARITY_ORDER.indexOf(a.rarity) - RARITY_ORDER.indexOf(b.rarity) || b.value - a.value;
+  const tile = (s) => {
+    const f = found.get(s.id);
+    if (f) {
+      const times = f.count > 1 ? `×${f.count} · ` : '';
+      return itemTile(s, `<span class="item-meta small">${f.stattrak ? '<span class="stattrak">ST</span> ' : ''}${times}Best ${wearOf(f.bestFloat, wears).short} ${f.bestFloat.toFixed(4)}</span>`, { float: f.bestFloat });
+    }
+    // Not found yet: a shadow of the gun. Knives and gloves stay a mystery, like in the case.
+    if (s.rarity === 'rare') return `<div class="item-tile r-rare missing" style="--rarity:${RARITY.rare.color}"><div class="item-art"><span class="rare-mark">★</span></div><div class="item-name"><span class="small">${escapeHtml(s.weapon)}</span><b>???</b></div><span class="item-meta small">Not found yet</span></div>`;
+    return `<div class="item-tile r-${s.rarity} missing" style="--rarity:${RARITY[s.rarity].color}"><div class="item-art">${skinArt(s)}</div><div class="item-name"><span class="small">${escapeHtml(s.weapon)}</span><b>${escapeHtml(s.name)}</b></div><span class="item-meta small">Not found yet</span></div>`;
+  };
+  const shown = cases.filter((c) => bookCase === 'all' || c.id === bookCase);
+  $('#cases-main').innerHTML = `
+    <div class="book">
+      <div class="book-head">
+        <div class="book-total"><b>${casino.found.length} of ${all.length}</b> skins found ${bar(casino.found.length, all.length)}<span class="small muted">${pct(casino.found.length, all.length)}%</span></div>
+        <div class="inv-filters">
+          <select data-book-case aria-label="Case"><option value="all">Every case</option>${cases.map((c) => `<option value="${c.id}" ${bookCase === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}</select>
+          <label class="inv-st"><input type="checkbox" data-book-missing ${bookMissing ? 'checked' : ''}> Missing only</label>
+        </div>
+      </div>
+      ${shown.map((c) => {
+        const have = c.skins.filter((s) => found.has(s.id)).length;
+        const skins = [...c.skins].sort(order).filter((s) => !bookMissing || !found.has(s.id));
+        return `<section class="book-case">
+          <h4>${escapeHtml(c.name)} <span class="small muted">${have}/${c.skins.length}</span>${bar(have, c.skins.length)}${have === c.skins.length ? '<span class="book-done">Complete!</span>' : ''}</h4>
+          ${skins.length ? `<div class="item-grid">${skins.map(tile).join('')}</div>` : '<p class="small muted">You have every skin in this case.</p>'}
+        </section>`;
+      }).join('')}
+      <p class="small muted">Skins stay in your book after you sell them. Ones you opened before the book existed count if they were still in your inventory.</p>
+    </div>`;
 }
 
 const caseOfSkin = (skinId) => casino.data?.cases.find((c) => c.skins.some((x) => x.id === skinId));

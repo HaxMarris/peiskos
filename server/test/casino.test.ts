@@ -189,7 +189,12 @@ test('chips: slots, cases, blackjack and free chips', async () => {
   chips += opened.item.value;
   assert.equal(sold.got, opened.item.value);
   assert.equal(sold.wallet.chips, chips);
-  assert.equal((await call('/api/casino', { token: t })).data.inventory.length, 0);
+  // The collection book keeps it after it's sold.
+  assert.deepEqual(opened.found.map((f: any) => [f.skinId, f.count]), [[opened.item.skinId, 1]]);
+  const after = (await call('/api/casino', { token: t })).data;
+  assert.equal(after.inventory.length, 0);
+  assert.equal(after.found[0].skinId, opened.item.skinId);
+  assert.equal(after.found[0].bestFloat, opened.item.float);
 
   // Blackjack: 10 and 9 against a 7; standing on 19 beats the dealer's 17.
   nextDeck = dealt('Th', '7c', '9d', 'Ks', '5h');

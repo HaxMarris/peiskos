@@ -106,6 +106,7 @@ export function casino(ctx: CasinoContext) {
     slots: { strips: SLOT_STRIPS, lines: SLOT_LINES, pays: SLOT_PAYS, twoCherries: SLOT_TWO_CHERRIES, bets: SLOT_BETS },
     poker: POKER,
     inventory: inventory(user.id),
+    found: found(user.id),
   }));
 
   route('POST', '/api/casino/free', ({ user }) => {
@@ -164,6 +165,16 @@ export function casino(ctx: CasinoContext) {
     ).map(itemView);
   }
 
+  type FoundRow = { skinId: string; count: number; bestFloat: number; stattrak: number; firstAt: number };
+  /** The collection book: each skin someone has ever unboxed, how many times, and the best float they got. */
+  function found(userId: number) {
+    return (
+      db
+        .prepare('SELECT skin_id AS skinId, count, best_float AS bestFloat, stattrak, first_at AS firstAt FROM casino_found WHERE user_id = ?')
+        .all(userId) as FoundRow[]
+    ).map((r) => ({ ...r, stattrak: !!r.stattrak }));
+  }
+
   route('POST', '/api/casino/cases/:code/open', ({ user, params }) => {
     play(user);
     const box = CASES.find((c) => c.id === params[0]);
@@ -185,8 +196,12 @@ export function casino(ctx: CasinoContext) {
     const r = db
       .prepare('INSERT INTO casino_items (user_id, skin_id, float, stattrak, value, created_at) VALUES (?, ?, ?, ?, ?, ?)')
       .run(user.id, skin.id, float, stattrak ? 1 : 0, value, createdAt);
+    db.prepare(
+      `INSERT INTO casino_found (user_id, skin_id, count, best_float, stattrak, first_at) VALUES (?, ?, 1, ?, ?, ?)
+       ON CONFLICT (user_id, skin_id) DO UPDATE SET count = count + 1, best_float = MIN(best_float, excluded.best_float), stattrak = MAX(stattrak, excluded.stattrak)`,
+    ).run(user.id, skin.id, float, stattrak ? 1 : 0, createdAt);
     walletChanged(user.id);
-    return { item: itemView({ id: Number(r.lastInsertRowid), skinId: skin.id, float, stattrak: stattrak ? 1 : 0, value, createdAt }), wallet: walletView(user.id) };
+    return { item: itemView({ id: Number(r.lastInsertRowid), skinId: skin.id, float, stattrak: stattrak ? 1 : 0, value, createdAt }), wallet: walletView(user.id), found: found(user.id) };
   });
 
   /** Sells items back for what they're worth. */

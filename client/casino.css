@@ -374,3 +374,23 @@
   .drop-art { width: 80%; }
   .drop-info { align-items: center; }
 }
+
+/* The collection book */
+.book { display: flex; flex-direction: column; gap: 18px; }
+.book-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.book-total { display: flex; align-items: center; gap: 10px; color: var(--text-strong); }
+.book-total .book-bar { width: 180px; }
+.book-bar { display: inline-block; width: 120px; height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; vertical-align: middle; }
+.book-bar > span { display: block; height: 100%; background: linear-gradient(90deg, var(--accent), #ffd36b); border-radius: inherit; }
+.book-case h4 { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 10px; color: var(--text-strong); }
+.book-done { font-size: 12px; font-weight: 800; color: #1c1612; background: #ffd36b; padding: 2px 8px; border-radius: 999px; }
+.item-tile.missing { background: #1c1612; border-bottom-color: color-mix(in srgb, var(--rarity) 35%, #1c1612); }
+.item-tile.missing .skin-art { filter: brightness(0) invert(1) opacity(.16); }
+.item-tile.missing .rare-mark { color: #4a3d33; text-shadow: none; }
+.item-tile.missing .item-name, .item-tile.missing .item-meta { opacity: .55; }
+.drop-new { margin: 8px 0 0; font-weight: 800; color: var(--accent-text, var(--accent)); }
+@media (max-width: 600px) {
+  .book-total .book-bar { width: 110px; }
+  .cases-nav { overflow-x: auto; scrollbar-width: none; }
+  .cases-nav .seg { white-space: nowrap; flex: none; padding: 7px 12px; font-size: 14px; }
+}

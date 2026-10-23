@@ -744,7 +744,26 @@ function addCasino(db: Db) {
       created_at INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS casino_items_by_user ON casino_items(user_id, id);
+    -- The collection book: every skin someone has ever unboxed, kept after they sell it.
+    CREATE TABLE IF NOT EXISTS casino_found (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      skin_id    TEXT NOT NULL,
+      count      INTEGER NOT NULL,
+      best_float REAL NOT NULL,
+      stattrak   INTEGER NOT NULL DEFAULT 0,
+      first_at   INTEGER NOT NULL,
+      PRIMARY KEY (user_id, skin_id)
+    );
   `);
+  // The book started 2026-10-23; skins opened before then count if they're still in someone's inventory.
+  inTransaction(db, () => {
+    if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_found_backfill'").get()) return;
+    db.prepare(
+      `INSERT OR IGNORE INTO casino_found (user_id, skin_id, count, best_float, stattrak, first_at)
+       SELECT user_id, skin_id, COUNT(*), MIN(float), MAX(stattrak), MIN(created_at) FROM casino_items GROUP BY user_id, skin_id`,
+    ).run();
+    db.prepare("INSERT INTO app_secrets (name, value) VALUES ('casino_found_backfill', ?)").run(String(Date.now()));
+  });
   // 2026-10-22: the slots paid too little, so everyone starts over with 10,000 chips (once). Cases and skins stay;
   // a blackjack hand in play is dropped, and nobody is at a poker table while the server starts.
   inTransaction(db, () => {
