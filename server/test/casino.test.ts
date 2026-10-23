@@ -367,3 +367,75 @@ test('the chip reset happens once', () => {
   assert.equal((d.prepare('SELECT chips FROM casino_wallets').get() as { chips: number }).chips, 25);
   d.close();
 });
+
+test('case battles at the fire', async (t) => {
+  const [max, sam, ella] = [await reg('maxb'), await reg('samb'), await reg('ellab')];
+  const hearth = (await call('/api/servers', { body: { name: 'Battles' }, token: max.token })).data;
+  for (const u of [sam, ella]) await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: u.token });
+  const made = (await call(`/api/servers/${hearth.id}/channels`, { body: { name: 'Fire', kind: 'voice' }, token: max.token })).data;
+  const room = made.channels.find((c: any) => c.kind === 'voice');
+  const fire = `/api/channels/${room.id}/battles`;
+  const socks = [max, sam, ella].map((u) => listen(u.token));
+  t.after(() => socks.forEach((x) => x.ws.close()));
+  await Promise.all(socks.map((x) => x.ready));
+  const ember = CASES.find((c) => c.id === 'ember')!;
+  const aurora = CASES.find((c) => c.id === 'aurora')!;
+  const two = { mode: 'ffa', players: 2, cases: ['ember', 'aurora'] };
+  // Only at the fire.
+  assert.equal((await call(fire, { body: two, token: max.token })).status, 400);
+  for (const x of socks) x.ws.send(JSON.stringify({ type: 'voice_join', channelId: room.id }));
+  await wait(100);
+  const wallet = async (u: any) => (await call('/api/casino', { token: u.token })).data;
+
+  // Free for all, two players: the price of both cases is held until it starts.
+  assert.equal((await call(fire, { body: { ...two, cases: [] }, token: max.token })).status, 400);
+  assert.equal((await call(fire, { body: { ...two, players: 5 }, token: max.token })).status, 400);
+  const b1 = (await call(fire, { body: two, token: max.token })).data.battle;
+  assert.equal(b1.cost, ember.price + aurora.price);
+  let w = (await wallet(max)).wallet;
+  assert.equal(w.chips, START_CHIPS - b1.cost);
+  assert.equal(w.inBattle, b1.cost);
+  assert.equal((await call(fire, { body: two, token: max.token })).status, 400); // one at a time
+  assert.equal((await call(`${fire}/${b1.id}`, { body: { action: 'join', seat: 0 }, token: sam.token })).status, 400);
+  assert.equal((await call(`${fire}/${b1.id}`, { body: { action: 'join', seat: 1 }, token: sam.token })).status, 200);
+  // It started: everyone at the fire hears, and the winner has every skin.
+  await wait(50);
+  const ev = socks[2].events.filter((e) => e.type === 'case_battles').at(-1);
+  const done = ev.battles.find((b: any) => b.id === b1.id);
+  assert.equal(done.started, true);
+  assert.equal(done.seats[0].rolls.length, 2);
+  assert.equal(done.winners.length >= 1, true);
+  const [mw, sw] = [await wallet(max), await wallet(sam)];
+  assert.equal(mw.wallet.inBattle, 0);
+  assert.equal(sw.wallet.chips, START_CHIPS - b1.cost);
+  assert.equal(mw.inventory.length + sw.inventory.length, 4);
+  const pot = done.seats.flatMap((s: any) => s.rolls).reduce((n: number, r: any) => n + r.value, 0);
+  const got = [...mw.inventory, ...sw.inventory].reduce((n: number, i: any) => n + i.value, 0);
+  assert.equal(got, pot);
+  // Both put what they opened in their collection books, win or lose.
+  assert.equal(mw.found.length > 0 && sw.found.length > 0, true);
+
+  // 2v2 with bots on the other team: Max and Sam split it all, or the bots win and it's gone.
+  const b2 = (await call(fire, { body: { mode: '2v2', cases: ['ember'] }, token: max.token })).data.battle;
+  assert.equal(b2.seats.length, 4);
+  assert.equal((await call(`${fire}/${b2.id}`, { body: { action: 'bot', seat: 2 }, token: sam.token })).status, 403);
+  await call(`${fire}/${b2.id}`, { body: { action: 'bot', seat: 2 }, token: max.token });
+  await call(`${fire}/${b2.id}`, { body: { action: 'bot', seat: 3 }, token: max.token });
+  const before = [(await wallet(max)).inventory.length, (await wallet(sam)).inventory.length];
+  await call(`${fire}/${b2.id}`, { body: { action: 'join', seat: 1 }, token: sam.token });
+  await wait(50);
+  const b2done = socks[0].events.filter((e) => e.type === 'case_battles').at(-1).battles.find((b: any) => b.id === b2.id);
+  const gained = (await wallet(max)).inventory.length - before[0] + (await wallet(sam)).inventory.length - before[1];
+  assert.equal(gained, b2done.winners.includes(0) ? 4 : 0);
+
+  // Leaving gives the chips back, and so does leaving the fire.
+  const start = (await wallet(ella)).wallet.chips;
+  const b3 = (await call(fire, { body: two, token: ella.token })).data.battle;
+  await call(`${fire}/${b3.id}`, { body: { action: 'leave' }, token: ella.token });
+  assert.equal((await wallet(ella)).wallet.chips, start);
+  await call(fire, { body: two, token: ella.token });
+  socks[2].ws.send(JSON.stringify({ type: 'voice_leave' }));
+  await wait(150);
+  w = (await wallet(ella)).wallet;
+  assert.deepEqual([w.chips, w.inBattle], [start, 0]);
+});

@@ -22,6 +22,7 @@ const CASINO_TABS = [
   ['blackjack', 'Blackjack'],
   ['slots', 'Slots'],
   ['cases', 'Cases'],
+  ['battles', 'Battles'],
 ];
 const chipsText = (n) => Number(n ?? 0).toLocaleString();
 const casinoPanes = {};
@@ -63,6 +64,9 @@ function stopCasino() {
   casino.channelId = null;
   casino.table = null;
   casino.tableRoom = null;
+  battles.list = [];
+  battles.watching = null;
+  stopBattle();
 }
 
 const sendCasino = (channelId) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify({ type: 'casino', channelId }));
@@ -125,6 +129,7 @@ function buildCasino() {
   buildBlackjack();
   buildSlots();
   buildCases();
+  buildBattles();
 }
 
 function renderCasino() {
@@ -137,6 +142,7 @@ function renderCasino() {
   renderBlackjack();
   renderSlotControls();
   renderCases();
+  renderBattles();
 }
 
 // ---- chips
@@ -147,7 +153,7 @@ function renderWallet() {
   $('#casino-chips').textContent = w ? chipsText(w.chips) : '…';
   const credits = $('#slot-credits');
   if (credits) credits.textContent = w ? chipsText(w.chips) : '0';
-  $('#casino-at-table').textContent = w?.atTable ? `+${chipsText(w.atTable)} at the table` : '';
+  $('#casino-at-table').textContent = [w?.atTable && `+${chipsText(w.atTable)} at the table`, w?.inBattle && `+${chipsText(w.inBattle)} in a battle`].filter(Boolean).join(' · ');
   const free = $('#casino-free');
   const ready = !!w && !w.freeAt;
   free.disabled = !ready;

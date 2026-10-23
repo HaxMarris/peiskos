@@ -839,6 +839,9 @@ function handleEvent(ev) {
     case 'poker':
       onCasinoPoker(ev);
       break;
+    case 'case_battles':
+      onCaseBattles(ev);
+      break;
     case 'casino_wallet':
       setWallet(ev.wallet);
       break;
