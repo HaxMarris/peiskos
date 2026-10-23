@@ -1,7 +1,6 @@
 // More to do with skins (the casino's Cases tab): today's top pulls in the hearth, trading up five
 // skins of a rarity for one of the next (like CS's contracts), and the upgrader, which puts skins on
-// a better one at a chance. Plus the Pets tab: premium pets bought with chips, by your seat at the
-// hearth's fires. The server decides every outcome; this only shows it.
+// a better one at a chance. The server decides every outcome; this only shows it.
 
 // ---- today's top pulls: the best skins out of cases in this hearth since midnight (yours, wherever you are)
 
@@ -306,68 +305,3 @@ document.addEventListener('change', (e) => {
   if (e.target.matches('[data-up-wear]')) { upWear = e.target.value; renderUpgrade(); }
   if (e.target.matches('[data-up-st]')) { upStattrak = e.target.checked; renderUpgrade(); }
 });
-
-// ---- premium pets
-
-function buildPets() {
-  casinoPanes.pets.innerHTML = '<div class="pets" id="pets-main"></div>';
-  casinoPanes.pets.addEventListener('click', onPetsClick);
-}
-
-function renderPets() {
-  const main = $('#pets-main');
-  if (!main || !casino.data) return;
-  const chips = casino.wallet?.chips ?? 0;
-  main.innerHTML = `
-    <div class="pets-head">
-      <h3>Pets</h3>
-      <p class="small muted">A premium pet sits by your seat at this hearth's fires, in place of what you picked in your fire settings, and everyone here sees it. Bought with this hearth's chips, and it stays in this hearth.</p>
-    </div>
-    <div class="pet-grid">${(casino.data.pets ?? []).map((p) => {
-      const owned = casino.myPets.includes(p.id);
-      const out = casino.pet === p.id;
-      return `<div class="pet-card ${owned ? 'owned' : ''} ${out ? 'out' : ''}">
-        <div class="pet-art">${pixelSvg(p.id)}</div>
-        <b>${escapeHtml(p.name.replace(/^An? /, ''))}</b>
-        ${owned
-          ? out ? '<span class="pet-badge">By your seat</span><button type="button" class="btn secondary" data-pet-wear="">Put away</button>'
-            : `<button type="button" class="btn" data-pet-wear="${p.id}">Bring to the fire</button>`
-          : `<button type="button" class="btn" data-pet-buy="${p.id}" ${chips < p.price ? 'disabled' : ''}>${chipValue(p.price)}</button>`}
-      </div>`;
-    }).join('')}</div>`;
-}
-
-async function onPetsClick(e) {
-  const buy = e.target.closest('[data-pet-buy]');
-  if (buy) {
-    const pet = casino.data.pets.find((p) => p.id === buy.dataset.petBuy);
-    if (!confirm(`Buy ${pet.name.toLowerCase()} for ${chipsText(pet.price)} chips? It stays in this hearth.`)) return;
-    try {
-      const r = await api(casinoApi(`/pets/${pet.id}`), { method: 'POST', body: {} });
-      Object.assign(casino, { myPets: r.myPets, pet: r.pet });
-      setWallet(r.wallet);
-      renderPets();
-      toast(`${pet.name} is by your seat now.`);
-    } catch (err) { toast(err.message); }
-    return;
-  }
-  const wear = e.target.closest('[data-pet-wear]');
-  if (wear) {
-    try {
-      const r = await api(casinoApi('/pet'), { method: 'PUT', body: { pet: wear.dataset.petWear || null } });
-      Object.assign(casino, { myPets: r.myPets, pet: r.pet });
-      renderPets();
-    } catch (err) { toast(err.message); }
-  }
-}
-
-/** Someone in a hearth got out a pet (or put it away): it shows by their seat. */
-function onCasinoPet(ev) {
-  const m = state.servers.get(ev.serverId)?.members?.find((x) => x.id === ev.userId);
-  if (m) m.pet = ev.pet;
-  if (ev.userId === state.me.id && ev.serverId === casino.hearthId) {
-    casino.pet = ev.pet;
-    renderPets();
-  }
-  if (state.voice) renderFire();
-}

@@ -140,7 +140,6 @@ export function casino(ctx: CasinoContext) {
       upgrade: { maxItems: UPGRADE_MAX_ITEMS, edge: UPGRADE_EDGE, maxChance: UPGRADE_MAX_CHANCE },
       inventory: inventory(user.id, h),
       found: found(user.id, h),
-      ...petsView(user.id, h),
     };
   });
 
@@ -404,7 +403,8 @@ export function casino(ctx: CasinoContext) {
     return { ...result, gave: ids, found: found(user.id, h) };
   });
 
-  // ---- premium pets: bought with chips, one by your seat at a time, at this hearth's fires
+  // ---- premium pets: bought with chips, one by your seat at a time, at this hearth's fires.
+  // They're picked in the fire settings, next to the animals that unlock by hours at the fire.
 
   const petsView = (userId: number, h: number) => ({
     pets: PETS,
@@ -414,6 +414,12 @@ export function casino(ctx: CasinoContext) {
   /** Everyone in the hearth sees the pet by someone's seat change. */
   const petChanged = (userId: number, h: number, pet: string | null) =>
     ctx.sendTo(ctx.serverMemberIds(h), { type: 'casino_pet', serverId: h, userId, pet });
+
+  /** For the fire settings picker: the pets, which you have here, the one out, and your chips here. */
+  route('GET', '/api/servers/:id/casino/pets', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    return { ...petsView(user.id, h), chips: wallet(user.id, h).chips };
+  });
 
   route('POST', '/api/servers/:id/casino/pets/:code', ({ user, params }) => {
     const h = hearth(params[0], user.id);

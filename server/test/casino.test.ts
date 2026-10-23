@@ -499,7 +499,9 @@ test('locks, trade ups, the upgrader and pets', async () => {
   assert.equal((await call(`${C}/pet`, { method: 'PUT', body: { pet: null }, token: t })).data.pet, null);
   // Another hearth doesn't have it.
   const other = (await call('/api/servers', { body: { name: 'No pets' }, token: t })).data;
-  assert.deepEqual((await call(`/api/servers/${other.id}/casino`, { token: t })).data.myPets, []);
+  const there = (await call(`/api/servers/${other.id}/casino/pets`, { token: t })).data;
+  assert.deepEqual([there.myPets, there.pet, there.chips], [[], null, START_CHIPS]);
+  assert.equal((await call(`${C}/pets`, { token: t })).data.myPets[0], 'blackcat');
 });
 
 test('case battles at the fire', async (t) => {

@@ -1636,6 +1636,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .decor-pick:hover:not(:disabled) { border-color: var(--line); }
 .decor-pick.chosen { border-color: var(--accent); background: var(--accent-soft); }
 .decor-pick:disabled { cursor: default; opacity: .55; }
+.decor-pick.premium .decor-art svg { filter: drop-shadow(0 0 3px rgba(255, 207, 90, .75)); }
+.decor-price { display: inline-flex; align-items: center; gap: 4px; font-weight: 800; }
 .decor-art { font-size: 28px; line-height: 1.2; }
 
 /* Birthdays. */

@@ -230,14 +230,29 @@ const hoursText = (h) => (h < 1 ? `${Math.round(h * 60)} minutes` : `${h < 10 ? 
 async function openFireDecor() {
   const s = fireServer();
   const hearth = s && !isDm(s) ? s : null;
-  let mine, fire;
+  let mine, fire, pets;
   try {
-    [mine, fire] = await Promise.all([api('/api/me/fire'), hearth ? api(`/api/servers/${hearth.id}/fire`) : null]);
+    [mine, fire, pets] = await Promise.all([
+      api('/api/me/fire'),
+      hearth ? api(`/api/servers/${hearth.id}/fire`) : null,
+      hearth ? api(`/api/servers/${hearth.id}/casino/pets`) : null,
+    ]);
   } catch (err) { return alertError(err); }
+  // A premium pet out in this hearth sits by your seat in place of the animal you picked.
+  const petOut = pets?.pet ?? null;
   const item = (it) => {
     const open = mine.hours >= it.hours;
-    return `<button type="button" class="decor-pick${mine.item === it.id ? ' chosen' : ''}" data-item="${it.id}" ${open ? '' : 'disabled'} aria-pressed="${mine.item === it.id}">
-      <span class="decor-art">${open ? pixelSvg(it.id) || '?' : '🔒'}</span><span>${escapeHtml(it.name)}</span><span class="small muted">${open ? (mine.item === it.id ? 'By your seat' : 'Unlocked') : `At ${it.hours} hours`}</span></button>`;
+    const on = !petOut && mine.item === it.id;
+    return `<button type="button" class="decor-pick${on ? ' chosen' : ''}" data-item="${it.id}" ${open ? '' : 'disabled'} aria-pressed="${on}">
+      <span class="decor-art">${open ? pixelSvg(it.id) || '?' : '🔒'}</span><span>${escapeHtml(it.name)}</span><span class="small muted">${open ? (on ? 'By your seat' : 'Unlocked') : `At ${it.hours} hours`}</span></button>`;
+  };
+  const pet = (p) => {
+    const owned = pets.myPets.includes(p.id);
+    const on = petOut === p.id;
+    if (owned) return `<button type="button" class="decor-pick premium${on ? ' chosen' : ''}" data-pet="${p.id}" aria-pressed="${on}">
+      <span class="decor-art">${pixelSvg(p.id)}</span><span>${escapeHtml(p.name)}</span><span class="small muted">${on ? 'By your seat' : 'Yours'}</span></button>`;
+    return `<button type="button" class="decor-pick premium" data-pet-buy="${p.id}" ${pets.chips >= p.price ? '' : 'disabled'}>
+      <span class="decor-art">${pixelSvg(p.id)}</span><span>${escapeHtml(p.name)}</span><span class="small decor-price"><span class="chip-icon sm" aria-hidden="true"></span>${p.price.toLocaleString()}</span></button>`;
   };
   const look = (l) => {
     const open = fire.hours >= l.hours;
@@ -253,21 +268,52 @@ async function openFireDecor() {
   modal(`<h2>By the fire</h2>
     <p class="muted">You've spent <b>${hoursText(mine.hours)}</b> at fires. More time there unlocks more to keep by your seat, which everyone at the fire sees.</p>
     <div class="decor-grid" id="decor-items">
-      <button type="button" class="decor-pick${mine.item ? '' : ' chosen'}" data-item="" aria-pressed="${!mine.item}"><span class="decor-art">·</span><span>Nothing</span><span class="small muted">Just you</span></button>
+      <button type="button" class="decor-pick${mine.item || petOut ? '' : ' chosen'}" data-item="" aria-pressed="${!mine.item && !petOut}"><span class="decor-art">·</span><span>Nothing</span><span class="small muted">Just you</span></button>
       ${mine.items.map(item).join('')}
     </div>
     <div class="admin-row"><button type="button" class="btn secondary" id="decor-toast" ${canToast && state.voice ? '' : 'disabled'}>🍡 Toast a marshmallow</button>
       <span class="small muted">${canToast ? (state.voice ? 'Or click the fire.' : 'Sit down at a fire first.') : `Marshmallows unlock after ${mine.marshmallowHours} hours at the fire.`}</span></div>
+    ${pets ? `<h3>Premium pets</h3>
+      <p class="small muted">Bought with chips from ${escapeHtml(hearth.name)}'s casino (you have <b>${pets.chips.toLocaleString()}</b> there). They're yours in ${escapeHtml(hearth.name)} only, and sit by your seat at its fires.</p>
+      <div class="decor-grid" id="decor-pets">${pets.pets.map(pet).join('')}</div>` : ''}
     ${fire ? `<h3>${escapeHtml(hearth.name)}'s fire</h3>
       <p class="small muted">Everyone's time around ${escapeHtml(hearth.name)}'s fires together: <b>${hoursText(fire.hours)}</b>. ${fire.canChange ? 'Pick how its fires burn.' : 'People who can edit the hearth pick how its fires burn.'}</p>
       <div class="decor-grid" id="decor-looks">${fire.looks.map(look).join('')}</div>
       <h3>The sky above</h3>
       <div class="decor-grid" id="decor-skies">${fire.skies.map(sky).join('')}</div>` : ''}
     <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'decor-modal');
+  /** Puts a premium pet out in this hearth (or away, with null). */
+  const setPet = (id) => {
+    const me = hearth.members?.find((m) => m.id === state.me.id);
+    if (me) me.pet = id;
+  };
   for (const b of document.querySelectorAll('#decor-items [data-item]')) b.onclick = async () => {
     try {
       const r = await api('/api/me/fire', { method: 'PUT', body: { item: b.dataset.item || null } });
       state.me.fireItem = r.item;
+      if (petOut) {
+        await api(`/api/servers/${hearth.id}/casino/pet`, { method: 'PUT', body: { pet: null } });
+        setPet(null);
+      }
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  for (const b of document.querySelectorAll('#decor-pets [data-pet]')) b.onclick = async () => {
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/pet`, { method: 'PUT', body: { pet: b.dataset.pet } });
+      setPet(r.pet);
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  for (const b of document.querySelectorAll('#decor-pets [data-pet-buy]')) b.onclick = async () => {
+    const p = pets.pets.find((x) => x.id === b.dataset.petBuy);
+    if (!confirm(`Buy ${p.name.toLowerCase()} for ${p.price.toLocaleString()} chips from ${hearth.name}'s casino?`)) return;
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/pets/${p.id}`, { method: 'POST', body: {} });
+      setPet(r.pet);
+      if (typeof setWallet === 'function') setWallet(r.wallet, hearth.id);
       renderFire();
       openFireDecor();
     } catch (err) { alertError(err); }
@@ -492,4 +538,11 @@ async function openYearReview(serverId, year = new Date().getFullYear()) {
     <section class="review-you"><h3>You</h3><p>${n(r.you.messages)} messages, ${n(r.you.reactions)} reactions and ${hoursText(r.you.fireHours)} at the fire.</p></section>`}
     <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'review-modal');
   $('#review-year')?.addEventListener('change', (e) => openYearReview(serverId, Number(e.target.value)));
+}
+
+/** Someone in a hearth put a premium pet out (or away): it shows by their seat at its fires. */
+function onCasinoPet(ev) {
+  const m = state.servers.get(ev.serverId)?.members?.find((x) => x.id === ev.userId);
+  if (m) m.pet = ev.pet;
+  if (state.voice) renderFire();
 }

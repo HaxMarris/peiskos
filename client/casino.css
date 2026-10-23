@@ -386,19 +386,6 @@
 .up-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); max-height: 520px; overflow-y: auto; padding: 4px; }
 .up-grid .inv-item.picked .pick-mark { display: block; }
 
-/* ---------- pets ---------- */
-.pets-head h3 { margin: 4px 0; }
-.pets-head p { margin: 0 0 14px; max-width: 640px; }
-.pet-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
-.pet-card { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 16px 12px 14px; border-radius: 16px; background: var(--surface-2); text-align: center; }
-.pet-card.out { box-shadow: 0 0 0 2px var(--accent); }
-.pet-art { width: 96px; height: 96px; display: grid; place-items: center; border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 196, 107, .35), transparent 70%); }
-.pet-art svg { width: 80px; height: 80px; filter: drop-shadow(0 0 4px rgba(255, 207, 90, .6)); animation: pet-bob 2.4s ease-in-out infinite; }
-.pet-card .btn { width: 100%; justify-content: center; }
-.pet-badge { font-size: 12px; font-weight: 800; color: var(--accent-text, var(--accent)); }
-@media (prefers-reduced-motion: reduce) { .pet-art svg { animation: none; } }
-
 /* ---------- leaderboard ---------- */
 .leaders { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .leaders li { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 12px; background: var(--surface-2); }
@@ -439,7 +426,6 @@
   .up-stage .up-dial { grid-column: 1 / -1; grid-row: 1; justify-self: center; width: 170px; }
   .up-pickers { grid-template-columns: 1fr; }
   .up-grid { max-height: 380px; }
-  .pet-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .pull-row { grid-auto-columns: 140px; }
   .leader-art { width: 48px; height: 32px; }
   .leader-float b { font-size: 11px; }

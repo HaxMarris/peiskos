@@ -1,5 +1,5 @@
 // The casino, in the games at the fire: Texas hold 'em, blackjack, a slot machine and cases to open.
-// Chips are play money only, and each hearth is its own casino: its own chips, skins and pets. The
+// Chips are play money only, and each hearth is its own casino: its own chips and skins. The
 // server deals, spins and opens everything; this only shows it.
 //
 // It opens on the fire's stage, like a game. Each fire has its own hold 'em table, for the people
@@ -17,8 +17,6 @@ const casino = {
   inventory: [],
   found: [],
   hearthId: null, // whose casino is open: chips and skins belong to a hearth
-  myPets: [], // premium pets bought here
-  pet: null, // the one by your seat here
 };
 const CASINO_TABS = [
   ['poker', "Hold 'em"],
@@ -26,7 +24,6 @@ const CASINO_TABS = [
   ['slots', 'Slots'],
   ['cases', 'Cases'],
   ['battles', 'Battles'],
-  ['pets', 'Pets'],
 ];
 /** The casino of the hearth whose fire you're at: its own chips, skins and book. */
 const casinoApi = (path = '') => `/api/servers/${casino.hearthId}/casino${path}`;
@@ -41,6 +38,7 @@ const casinoOnScreen = () => casino.channelId !== null && state.stageOpen && sta
 /** Opens the casino on the stage, on one of its games. */
 function openCasino(tab = casino.tab) {
   if (!state.voice) return;
+  if (!CASINO_TABS.some(([id]) => id === tab)) tab = 'poker';
   casino.tab = tab;
   store.set('casinoTab', tab);
   const channelId = state.voice.channelId;
@@ -54,8 +52,6 @@ function openCasino(tab = casino.tab) {
     casino.wallet = null;
     casino.inventory = [];
     casino.found = [];
-    casino.myPets = [];
-    casino.pet = null;
     casino.blackjack = null;
     casino.loading = null;
     topPulls = null;
@@ -108,8 +104,6 @@ async function loadCasino(fresh = false) {
       casino.blackjack = d.blackjack;
       casino.inventory = d.inventory;
       casino.found = d.found ?? [];
-      casino.myPets = d.myPets ?? [];
-      casino.pet = d.pet ?? null;
       renderCasino();
       return d;
     })
@@ -157,7 +151,6 @@ function buildCasino() {
   buildSlots();
   buildCases();
   buildBattles();
-  buildPets();
 }
 
 function renderCasino() {
@@ -171,7 +164,6 @@ function renderCasino() {
   renderSlotControls();
   renderCases();
   renderBattles();
-  renderPets();
 }
 
 // ---- chips
@@ -187,7 +179,6 @@ function renderWallet() {
   const ready = !!w && !w.freeAt;
   free.disabled = !ready;
   free.classList.toggle('ready', ready);
-  if (casino.tab === 'pets') renderPets();
   free.textContent = !w ? 'Free chips' : ready ? `Free ${chipsText(w.freeAmount)}${isPhone() ? '' : ' chips'}` : `More ${untilText(w.freeAt)}`;
 }
 const untilText = (at) => {
