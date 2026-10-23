@@ -605,7 +605,7 @@ function sizeRing(ring, total, anyoneSharing) {
   const sines = Array.from({ length: total }, (_, i) => Math.sin(angle(i)));
   const up = -Math.min(...sines), down = Math.max(...sines); // how far above and below the fire the seats reach
   // About as big as the old fixed layout on a computer; taller on a phone, which has the height.
-  const ry = Math.max(40, Math.min(phone ? 240 : 208, (H - face - below) / (up + down || 1)));
+  const ry = Math.max(40, Math.min(phone ? 320 : 208, (H - face - below) / (up + down || 1)));
   const rx = Math.max(60, Math.min(phone ? 160 : 262, (W - labelW) / 2, Math.max(ry * (phone ? 1 : 1.8), phone ? 0 : 230)));
   // Whatever height is left over is shared above and below.
   const cy = Math.max(0, (H - face - below - (up + down) * ry) / 2) + face / 2 + up * ry;
@@ -730,7 +730,10 @@ function renderFire(status) {
       seat.el.append(watch);
     } else if (!sharing?.screen && watch) watch.remove();
     const watchers = sharing?.screen ? viewersOf(id).length : 0;
-    if (watch) watch.lastChild.textContent = (me ? 'Your screen' : 'Watch screen') + (watchers ? ` · ${watchers} watching` : '');
+    // A phone's seats are narrow, so the button says less there.
+    const short = matchMedia('(max-width: 760px)').matches;
+    if (watch) watch.lastChild.textContent = (me ? (short ? 'Yours' : 'Your screen') : (short ? 'Watch' : 'Watch screen'))
+      + (watchers ? (short ? ` · ${watchers}` : ` · ${watchers} watching`) : '');
   });
 
   // Open seats fill the rest of a small circle.

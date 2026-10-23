@@ -36,6 +36,9 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   if (wantsMicProcessor()) voice.micCtx = newMicContext();
   voice.talkCtx = new AudioContext({ latencyHint: 'interactive' });
   keepAwake(voice.talkCtx);
+  // On an iPhone the call's sound is mixed with a bigger buffer: with the screen off the phone
+  // gives the app less time, and the smallest buffer runs dry, which crackles.
+  if (phonePlatform === 'ios') voice.mixCtx = keepAwake(new AudioContext({ latencyHint: 'playback' }));
   renderVoiceBar(rejoin ? 'Reconnecting…' : 'Connecting…');
   if (!rejoin) goToVoice(); // sit down at the fire
   try {
@@ -61,7 +64,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       // Opus at a higher bitrate than LiveKit's 48 kbps default; silence still costs almost nothing (DTX).
       publishDefaults: micPublishOptions(),
       // Mixing through Web Audio lets people be turned up past 100%.
-      webAudioMix: true,
+      webAudioMix: voice.mixCtx ? { audioContext: voice.mixCtx } : true,
       // Only download video someone is looking at, at the size it's shown.
       adaptiveStream: true,
       dynacast: true,
@@ -190,7 +193,10 @@ async function startMic(voice) {
 function wakeVoiceAudio() {
   const voice = state.voice;
   if (!voice?.room) return;
-  for (const ctx of [voice.micCtx, voice.talkCtx]) if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
+  // The talking rings only matter on screen, so their meters rest while Peiskos is hidden.
+  if (document.hidden && voice.talkCtx?.state === 'running') voice.talkCtx.suspend().catch(() => {});
+  const wanted = [voice.micCtx, voice.mixCtx, document.hidden ? null : voice.talkCtx];
+  for (const ctx of wanted) if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   voice.room.startAudio().catch(() => {});
   if (!document.hidden && micTrack()?.mediaStreamTrack?.readyState === 'ended' && !voice.serverMuted) republishMic();
 }
@@ -322,6 +328,7 @@ function leaveVoice(quiet) {
   voice.micCtx?.close().catch(() => {});
   clearInterval(voice.talkTimer);
   voice.talkCtx?.close().catch(() => {});
+  voice.mixCtx?.close().catch(() => {});
   closeVolume();
   closeStage();
   $('#voice-audio').replaceChildren();
@@ -669,6 +676,10 @@ function renderStage() {
   const room = state.voice?.room;
   const LK = window.LivekitClient;
   $('#stage').dataset.show = state.stageShow;
+  // A phone has no voice bar beside the stream, so the fire's buttons (Mute, Leave...) come along.
+  const controls = $('.fire-controls');
+  const controlsHome = state.stageShow === 'video' && matchMedia('(max-width: 760px)').matches ? $('.video-view') : $('.fire-main');
+  if (controls.parentElement !== controlsHome) controlsHome.append(controls);
   if (!LK) return;
   const people = room ? [room.localParticipant, ...room.remoteParticipants.values()] : [];
   const showing = (p, source) => {

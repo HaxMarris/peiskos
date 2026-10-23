@@ -9,5 +9,11 @@
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#f6f0e7"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "autoBackdropColor": "dom"
+    }
   }
 }
