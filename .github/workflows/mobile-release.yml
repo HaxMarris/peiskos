@@ -91,7 +91,8 @@ jobs:
 
   ios:
     name: iPhone app
-    runs-on: macos-15
+    # Apple only takes apps built with Xcode 26 (the iOS 26 SDK) or newer.
+    runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -100,6 +101,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: mobile/package-lock.json
+      - name: Xcode version
+        run: xcodebuild -version
       - run: npm ci
         working-directory: mobile
       - run: npm run copy-client && npx cap sync ios
