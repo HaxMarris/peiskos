@@ -186,7 +186,7 @@ export const SLOT_LINES = [
   [2, 1, 0],
 ];
 /** Even amounts, so half a bet (two cherries) is always a whole number of chips. */
-export const SLOT_BETS = [10, 20, 50, 100, 200, 500, 1000];
+export const SLOT_BETS = [10, 20, 50, 100, 200, 500, 1000, 2500, 5000, 10_000, 25_000];
 /** Each reel's strip, top to bottom, as counts of each symbol (spread out evenly when the strip is built). */
 const STRIP_COUNTS: Record<SlotSymbol, number>[] = [
   { cherry: 8, lemon: 8, bell: 4, star: 4, diamond: 2, seven: 2, flame: 1 },
@@ -219,3 +219,14 @@ export function linePays(line: SlotSymbol[]): number {
   if ((a === 'cherry' || wild(a)) && (b === 'cherry' || wild(b)) && (a === 'cherry' || b === 'cherry')) return SLOT_TWO_CHERRIES;
   return 0;
 }
+
+/** Premium pets, bought with a hearth's chips, that sit by your seat at its fires. */
+export const PETS = [
+  { id: 'blackcat', name: 'A black cat', price: 5_000 },
+  { id: 'penguin', name: 'A penguin', price: 10_000 },
+  { id: 'redpanda', name: 'A red panda', price: 25_000 },
+  { id: 'unicorn', name: 'A unicorn', price: 50_000 },
+  { id: 'dragon', name: 'A dragon', price: 100_000 },
+  { id: 'phoenix', name: 'A phoenix', price: 250_000 },
+  { id: 'goldwolf', name: 'A golden wolf', price: 500_000 },
+];

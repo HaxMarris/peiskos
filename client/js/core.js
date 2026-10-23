@@ -845,6 +845,9 @@ function handleEvent(ev) {
     case 'casino_wallet':
       setWallet(ev.wallet, ev.serverId);
       break;
+    case 'casino_pet':
+      onCasinoPet(ev);
+      break;
     case 'ring':
       onRing(ev);
       break;

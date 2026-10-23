@@ -427,6 +427,81 @@ test('one shared casino moves to each person\'s first hearth', () => {
   d.close();
 });
 
+test('locks, trade ups, the upgrader and pets', async () => {
+  const max = await reg('maxt');
+  const t = max.token;
+  const home = (await call('/api/servers', { body: { name: 'Trades' }, token: t })).data;
+  const C = `/api/servers/${home.id}/casino`;
+  await call(C, { token: t });
+  const ember = CASES.find((c) => c.id === 'ember')!;
+  const milspecs = ember.skins.filter((s) => s.rarity === 'milspec');
+  const give = (skinId: string, float: number, stattrak = 0, value = 50) =>
+    Number(db.prepare('INSERT INTO casino_items (user_id, server_id, skin_id, float, stattrak, value, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(max.user.id, home.id, skinId, float, stattrak, value, Date.now()).lastInsertRowid);
+  const inv = async () => (await call(C, { token: t })).data.inventory as any[];
+
+  // A locked skin can't be sold, even in a bulk sell, until it's unlocked.
+  const a = give(milspecs[0].id, 0.2);
+  const b = give(milspecs[1].id, 0.3);
+  assert.deepEqual((await call(`${C}/items/lock`, { body: { ids: [a] }, token: t })).data, { ids: [a], locked: true });
+  assert.equal((await inv()).find((i) => i.id === a).locked, true);
+  const sold = (await call(`${C}/items/sell`, { body: { ids: [a, b] }, token: t })).data;
+  assert.equal(sold.got, 50);
+  assert.deepEqual((await inv()).map((i) => i.id), [a]);
+  // Nor traded up or upgraded.
+  const more = [0.1, 0.2, 0.3, 0.4].map((f, k) => give(milspecs[k % milspecs.length].id, f));
+  assert.equal((await call(`${C}/tradeup`, { body: { ids: [a, ...more] }, token: t })).status, 400);
+  assert.equal((await inv()).length, 5); // nothing was taken
+  await call(`${C}/items/lock`, { body: { ids: [a], locked: false }, token: t });
+
+  // Trade up: five of a rarity for one of the next, floats averaged, from one of their cases.
+  assert.equal((await call(`${C}/tradeup`, { body: { ids: more }, token: t })).status, 400); // only four
+  const up = (await call(`${C}/tradeup`, { body: { ids: [a, ...more] }, token: t })).data;
+  const made = ember.skins.find((s) => s.id === up.item.skinId)!;
+  assert.equal(made.rarity, 'restricted');
+  assert.ok(Math.abs(up.item.float - 0.24) < 1e-9);
+  assert.deepEqual((await inv()).map((i) => i.id), [up.item.id]);
+  assert.ok(up.found.some((f: any) => f.skinId === made.id));
+  // Mixed rarities or StatTrak with normal don't go together.
+  const mixed = [give(milspecs[0].id, 0.2), give(milspecs[0].id, 0.2), give(milspecs[0].id, 0.2), give(milspecs[0].id, 0.2, 1), give(milspecs[0].id, 0.2)];
+  assert.equal((await call(`${C}/tradeup`, { body: { ids: mixed }, token: t })).status, 400);
+  assert.equal((await call(`${C}/tradeup`, { body: { ids: [...mixed.slice(0, 4), up.item.id] }, token: t })).status, 400);
+
+  // Upgrader: the chance is the skins' worth over the target's (a bit under), and they're used up either way.
+  const covert = ember.skins.find((s) => s.rarity === 'covert')!;
+  assert.equal((await call(`${C}/upgrade`, { body: { ids: [mixed[0]], skinId: covert.id, wear: 'XX' }, token: t })).status, 400);
+  assert.equal((await call(`${C}/upgrade`, { body: { ids: [mixed[0]], skinId: milspecs.at(-1)!.id, wear: 'BS' }, token: t })).status, 400); // not worth more
+  let wins = 0;
+  for (let k = 0; k < 4; k++) {
+    const r = (await call(`${C}/upgrade`, { body: { ids: [mixed[k]], skinId: covert.id, wear: 'FN' }, token: t })).data;
+    const target = Math.round(covert.value * 1.6);
+    assert.ok(Math.abs(r.chance - (50 / target) * 0.92) < 1e-9);
+    assert.equal(r.won, r.roll < r.chance);
+    if (r.won) {
+      wins++;
+      assert.equal(r.item.value, target);
+      assert.ok(r.item.float < 0.07);
+    }
+  }
+  assert.equal((await inv()).length, 2 + wins);
+
+  // Pets: bought with this hearth's chips, worn by your seat, and the hearth hears about it.
+  const bought = await call(`${C}/pets/blackcat`, { body: {}, token: t });
+  assert.equal(bought.status, 200, JSON.stringify(bought.data));
+  const pet = bought.data;
+  assert.equal(pet.wallet.chips, START_CHIPS + 50 - 5000); // plus the skin sold above
+  assert.deepEqual([pet.myPets, pet.pet], [['blackcat'], 'blackcat']);
+  assert.equal((await call(`${C}/pets/blackcat`, { body: {}, token: t })).status, 400);
+  assert.equal((await call(`${C}/pets/goldwolf`, { body: {}, token: t })).status, 400); // too dear
+  const listed = (await call('/api/servers', { token: t })).data.find((x: any) => x.id === home.id);
+  assert.equal(listed.members.find((m: any) => m.id === max.user.id).pet, 'blackcat');
+  assert.equal((await call(`${C}/pet`, { method: 'PUT', body: { pet: 'penguin' }, token: t })).status, 400);
+  assert.equal((await call(`${C}/pet`, { method: 'PUT', body: { pet: null }, token: t })).data.pet, null);
+  // Another hearth doesn't have it.
+  const other = (await call('/api/servers', { body: { name: 'No pets' }, token: t })).data;
+  assert.deepEqual((await call(`/api/servers/${other.id}/casino`, { token: t })).data.myPets, []);
+});
+
 test('case battles at the fire', async (t) => {
   const [max, sam, ella] = [await reg('maxb'), await reg('samb'), await reg('ellab')];
   const hearth = (await call('/api/servers', { body: { name: 'Battles' }, token: max.token })).data;
@@ -485,7 +560,15 @@ test('case battles at the fire', async (t) => {
   await wait(50);
   const b2done = socks[0].events.filter((e) => e.type === 'case_battles').at(-1).battles.find((b: any) => b.id === b2.id);
   const gained = (await wallet(max)).inventory.length - before[0] + (await wallet(sam)).inventory.length - before[1];
-  assert.equal(gained, b2done.winners.includes(0) ? 4 : 0);
+  // When the bots win, Max and Sam each keep what they opened themselves.
+  assert.equal(gained, b2done.winners.includes(0) ? 4 : 2);
+  assert.equal(b2done.kept, !b2done.winners.includes(0));
+
+  // Everything opened today, in the battles too, is on the day's top pulls, best first.
+  const pulls = (await call(`/api/servers/${hearth.id}/casino/pulls?since=${Date.now() - 3600_000}`, { token: ella.token })).data;
+  assert.equal(pulls.length, 6); // the bots' pulls don't count
+  assert.deepEqual(pulls.map((p: any) => p.value), [...pulls.map((p: any) => p.value)].sort((a, b) => b - a));
+  assert.equal((await call(`/api/servers/${hearth.id}/casino/pulls?since=${Date.now() + 1000}`, { token: ella.token })).data.length, 0);
 
   // Leaving gives the chips back, and so does leaving the fire.
   const start = (await wallet(ella)).wallet.chips;

@@ -1,6 +1,6 @@
 // Case battles (the casino's Battles tab): two to four people at the fire open the same cases, round
 // by round, and the highest total takes every skin. Free for all, or 2v2 (seats 1-2 against 3-4).
-// Empty seats can take a bot. The server opens everything when the last seat fills; this file
+// Empty seats can take a bot; if only bots win, everyone keeps what they opened. The server opens everything when the last seat fills; this file
 // shows it round by round, at the pace the server gives (roundMs), so everyone sees the same thing.
 
 const battles = {
@@ -26,6 +26,9 @@ function onCaseBattles(ev) {
     const was = before.get(b.id);
     // A battle you're in just started: go and watch it.
     if (b.started && was && !was.started && b.seats.some((s) => s?.userId === state.me.id)) {
+      // The skins are in inventories already; show them there once the last round has played.
+      const hearth = casino.hearthId;
+      setTimeout(() => { if (casino.hearthId === hearth) loadCasino(true); }, b.cases.length * b.roundMs - b.elapsed + 300);
       if (casinoOnScreen() && casino.tab === 'battles') battles.watching = b.id;
       else toast('Your case battle started.', { action: 'Watch', onAction: () => { battles.watching = b.id; openCasino('battles'); } });
     }
@@ -47,7 +50,7 @@ function renderBattles() {
   stopBattle();
   main.innerHTML = `
     <div class="battles-head">
-      <div><h3>Case battles</h3><p class="small muted">Everyone opens the same cases. The highest total takes every skin.</p></div>
+      <div><h3>Case battles</h3><p class="small muted">Everyone opens the same cases. The highest total takes every skin. If a bot wins, everyone keeps their own.</p></div>
       <button type="button" class="btn" data-battle-new>Create battle</button>
     </div>
     ${battles.list.length ? `<div class="battle-list">${battles.list.map(battleCard).join('')}</div>`
@@ -252,7 +255,7 @@ function drawBattle(b, shown) {
       <div class="battle-rounds">${b.cases.map((id, r) => `<span class="battle-case ${r < shown ? 'past' : r === shown && !done ? 'now' : ''}">${caseArt(battleBox(id))}</span>`).join('')}</div>
       <div class="b-cols n${b.seats.length} ${b.mode}">${sides.map((side) => `<div class="b-side">${side.map(column).join('')}</div>`).join('<span class="vs">VS</span>')}</div>
       ${done ? `<div class="battle-end">
-        <b>${iWon ? `You won ${chipsText(myWin)} worth of skins. They're in your inventory.` : b.winners.every((i) => b.seats[i].bot) ? 'The bots won this one. Their skins are gone.' : `${b.winners.filter((i) => !b.seats[i].bot).map((i) => escapeHtml(seatName(b.seats[i]))).join(' and ')} won it all.`}</b>
+        <b>${iWon ? `You won ${chipsText(myWin)} worth of skins. They're in your inventory.` : b.kept ? `The bots won this one, so everyone keeps what they opened.${myWin ? ` Yours (${chipsText(myWin)}) are in your inventory.` : ''}` : `${b.winners.filter((i) => !b.seats[i].bot).map((i) => escapeHtml(seatName(b.seats[i]))).join(' and ')} won it all.`}</b>
         ${iWon ? `<button type="button" class="btn secondary" data-battle-brag="${escapeHtml(`⚔️ Won a case battle (${modeText(b)}) worth ${chipsText(myWin)} chips`)}">Show the fire</button>` : ''}
       </div>` : ''}
     </div>`;

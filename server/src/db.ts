@@ -769,6 +769,30 @@ function addCasino(db: Db) {
     );
   `);
   if (shared) moveCasinoToHearths(db, cols);
+  addColumn(db, 'casino_items', 'locked', 'INTEGER NOT NULL DEFAULT 0'); // locked skins can't be sold, traded up or upgraded
+  addColumn(db, 'casino_wallets', 'pet', 'TEXT'); // the premium pet they have by their seat at this hearth's fires
+  db.exec(`
+    -- Premium pets someone bought with a hearth's chips.
+    CREATE TABLE IF NOT EXISTS casino_pets (
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      pet_id    TEXT NOT NULL,
+      bought_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, server_id, pet_id)
+    );
+    -- Every skin out of a case (opened alone or in a battle), for the day's top pulls. Kept a few days.
+    CREATE TABLE IF NOT EXISTS casino_pulls (
+      id        INTEGER PRIMARY KEY,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      skin_id   TEXT NOT NULL,
+      float     REAL NOT NULL,
+      stattrak  INTEGER NOT NULL DEFAULT 0,
+      value     INTEGER NOT NULL,
+      at        INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS casino_pulls_by_hearth ON casino_pulls(server_id, at);
+  `);
   // The book started 2026-10-23; skins opened before then count if they're still in someone's inventory.
   inTransaction(db, () => {
     if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_found_backfill'").get()) return;

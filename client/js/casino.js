@@ -1,6 +1,6 @@
 // The casino, in the games at the fire: Texas hold 'em, blackjack, a slot machine and cases to open.
-// Chips are play money only; everyone has one balance, used at every fire. The server deals, spins
-// and opens everything; this only shows it.
+// Chips are play money only, and each hearth is its own casino: its own chips, skins and pets. The
+// server deals, spins and opens everything; this only shows it.
 //
 // It opens on the fire's stage, like a game. Each fire has its own hold 'em table, for the people
 // sitting at it; blackjack, the slots and cases are just you.
@@ -16,7 +16,9 @@ const casino = {
   blackjack: null,
   inventory: [],
   found: [],
-  hearthId: null, // whose casino is open: chips and skins belong to a hearth // the collection book: every skin you've ever unboxed
+  hearthId: null, // whose casino is open: chips and skins belong to a hearth
+  myPets: [], // premium pets bought here
+  pet: null, // the one by your seat here
 };
 const CASINO_TABS = [
   ['poker', "Hold 'em"],
@@ -24,6 +26,7 @@ const CASINO_TABS = [
   ['slots', 'Slots'],
   ['cases', 'Cases'],
   ['battles', 'Battles'],
+  ['pets', 'Pets'],
 ];
 /** The casino of the hearth whose fire you're at: its own chips, skins and book. */
 const casinoApi = (path = '') => `/api/servers/${casino.hearthId}/casino${path}`;
@@ -51,8 +54,11 @@ function openCasino(tab = casino.tab) {
     casino.wallet = null;
     casino.inventory = [];
     casino.found = [];
+    casino.myPets = [];
+    casino.pet = null;
     casino.blackjack = null;
     casino.loading = null;
+    topPulls = null;
   }
   buildCasino();
   sendCasino(channelId);
@@ -102,6 +108,8 @@ async function loadCasino(fresh = false) {
       casino.blackjack = d.blackjack;
       casino.inventory = d.inventory;
       casino.found = d.found ?? [];
+      casino.myPets = d.myPets ?? [];
+      casino.pet = d.pet ?? null;
       renderCasino();
       return d;
     })
@@ -149,6 +157,7 @@ function buildCasino() {
   buildSlots();
   buildCases();
   buildBattles();
+  buildPets();
 }
 
 function renderCasino() {
@@ -162,6 +171,7 @@ function renderCasino() {
   renderSlotControls();
   renderCases();
   renderBattles();
+  renderPets();
 }
 
 // ---- chips
@@ -177,6 +187,7 @@ function renderWallet() {
   const ready = !!w && !w.freeAt;
   free.disabled = !ready;
   free.classList.toggle('ready', ready);
+  if (casino.tab === 'pets') renderPets();
   free.textContent = !w ? 'Free chips' : ready ? `Free ${chipsText(w.freeAmount)}${isPhone() ? '' : ' chips'}` : `More ${untilText(w.freeAt)}`;
 }
 const untilText = (at) => {
@@ -790,6 +801,8 @@ function buildCases() {
         <button type="button" class="seg" data-case-view="cases">Cases</button>
         <button type="button" class="seg" data-case-view="inventory">Inventory <span id="inv-count"></span></button>
         <button type="button" class="seg" data-case-view="book">Collection <span id="book-count"></span></button>
+        <button type="button" class="seg" data-case-view="tradeup">Trade up</button>
+        <button type="button" class="seg" data-case-view="upgrade">Upgrade</button>
       </div>
       <div id="cases-main"></div>
     </div>`;
@@ -823,6 +836,8 @@ function renderCases() {
   if (opening) return;
   if (caseView === 'inventory') return renderInventory();
   if (caseView === 'book') return renderBook();
+  if (caseView === 'tradeup') return renderTradeUp();
+  if (caseView === 'upgrade') return renderUpgrade();
   if (openCase) return renderCaseDetail();
   $('#cases-main').innerHTML = `<div class="case-grid">${casino.data.cases.map((c) => `
     <button type="button" class="case-card" data-case="${c.id}">
@@ -830,7 +845,10 @@ function renderCases() {
       <span class="case-weapon">${skinArt(c.skins.find((s) => s.rarity === 'covert'))}</span>
       <b>${escapeHtml(c.name)}</b>
       <span class="case-price"><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(c.price)}</span>
-    </button>`).join('')}</div>`;
+    </button>`).join('')}</div>
+    <section class="top-pulls" id="top-pulls"></section>`;
+  renderTopPulls();
+  loadTopPulls();
 }
 
 /** A skin on a tile. In the case's reel a knife or gloves spins past as a gold star, like in CS. */
@@ -921,6 +939,7 @@ async function openTheCase(c) {
   await new Promise((done) => setTimeout(done, ms + (got.length - 1) * 60 + 150));
   strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   opening = false;
+  topPulls = null; // so the day's top pulls are fresh next time
   casino.inventory.unshift(...[...got].reverse());
   $('#inv-count').textContent = `(${casino.inventory.length})`;
   // New to the book: skins you didn't have before (the first of each, if one came up twice).
@@ -1092,7 +1111,10 @@ function renderInventory() {
   const count = (kind) => casino.inventory.filter((i) => skinById(i.skinId)?.kind === kind).length;
   const option = (key, value, label) => `<option value="${value}" ${invFilter[key] === value ? 'selected' : ''}>${label}</option>`;
   const picked = casino.inventory.filter((i) => invPicked.has(i.id));
-  const pickedValue = picked.reduce((n, i) => n + i.value, 0);
+  const sellable = picked.filter((i) => !i.locked);
+  const pickedValue = sellable.reduce((n, i) => n + i.value, 0);
+  const allLocked = picked.length > 0 && picked.every((i) => i.locked);
+  const forSale = items.filter((i) => !i.locked);
   $('#cases-main').innerHTML = `
     <div class="inv-types" role="group" aria-label="Show">
       <button type="button" class="chip-filter" data-inv-type="all" aria-pressed="${invFilter.type === 'all'}">All <span>${casino.inventory.length}</span></button>
@@ -1114,19 +1136,37 @@ function renderInventory() {
       <span>${filtered ? `${items.length} of ${casino.inventory.length} shown · ` : ''}Worth <b><span class="chip-icon sm" aria-hidden="true"></span>${chipsText(total)}</b></span>
       ${filtered ? '<button type="button" class="link-btn" data-inv-clear>Clear filters</button>' : ''}
       <button type="button" class="btn secondary inv-pick-btn" data-inv-pick aria-pressed="${invPicking}">${invPicking ? 'Done' : 'Select'}</button>
-      ${items.length ? `<button type="button" class="link-btn danger-link" data-sell-all>${filtered ? `Sell these ${items.length}` : 'Sell everything'}</button>` : ''}
+      ${forSale.length ? `<button type="button" class="link-btn danger-link" data-sell-all>${filtered ? `Sell these ${forSale.length}` : forSale.length < items.length ? `Sell all ${forSale.length} unlocked` : 'Sell everything'}</button>` : ''}
     </div>
     ${items.length ? `<div class="item-grid inv ${invPicking ? 'picking' : ''}">${items.map((i) => {
       const { skin } = itemDetails(i);
       const on = invPicked.has(i.id);
-      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `${floatLine(i.float)}<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${chipValue(i.value)}</span>`, { float: i.float })}<span class="pick-mark" aria-hidden="true"></span></button>`;
+      return `<button type="button" class="inv-item ${on ? 'picked' : ''}" data-item="${i.id}" ${invPicking ? `aria-pressed="${on}"` : ''}>${itemTile(skin, `${floatLine(i.float)}<span class="item-meta small">${i.stattrak ? '<span class="stattrak">ST</span> ' : ''}${chipValue(i.value)}</span>`, { float: i.float })}${lockMark(i)}<span class="pick-mark" aria-hidden="true"></span></button>`;
     }).join('')}</div>` : '<p class="muted empty-inv">Nothing matches these filters.</p>'}
     ${invPicking ? `<div class="sell-bar">
       <span><b>${picked.length}</b> selected${picked.length ? ` · <span class="chip-icon sm" aria-hidden="true"></span>${chipsText(pickedValue)}` : ''}</span>
       <button type="button" class="link-btn" data-pick-all>Select all ${items.length} shown</button>
       ${picked.length ? '<button type="button" class="link-btn" data-pick-none>Clear</button>' : ''}
-      <button type="button" class="btn" data-sell-picked ${picked.length ? '' : 'disabled'}>Sell ${picked.length || ''} for ${chipsText(pickedValue)}</button>
+      ${picked.length ? `<button type="button" class="btn secondary" data-lock-picked="${allLocked ? 'off' : 'on'}">${lockIcon}${allLocked ? 'Unlock' : 'Lock'}</button>` : ''}
+      <button type="button" class="btn" data-sell-picked ${sellable.length ? '' : 'disabled'}>Sell ${sellable.length || ''} for ${chipsText(pickedValue)}</button>
     </div>` : ''}`;
+}
+
+const lockIcon = '<svg class="lock-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a5 5 0 0 0-5 5v3H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1V7a5 5 0 0 0-5-5Zm-3 8V7a3 3 0 0 1 6 0v3H9Z"/></svg>';
+const lockMark = (i) => (i.locked ? `<span class="lock-mark" title="Locked">${lockIcon}</span>` : '');
+
+/** Locks skins so they can't be sold by accident (or unlocks them). */
+async function lockItems(ids, locked) {
+  if (!ids.length) return false;
+  try {
+    await api(casinoApi('/items/lock'), { method: 'POST', body: { ids, locked } });
+    for (const i of casino.inventory) if (ids.includes(i.id)) i.locked = locked;
+    toast(locked ? `Locked ${ids.length === 1 ? 'it' : `${ids.length} skins`}. Locked skins can't be sold until you unlock them.` : 'Unlocked.');
+    return true;
+  } catch (err) {
+    toast(err.message);
+    return false;
+  }
 }
 
 async function sellItems(ids) {
@@ -1144,6 +1184,7 @@ async function sellItems(ids) {
 
 async function onCasesClick(e) {
   const t = e.target;
+  if ((caseView === 'tradeup' || caseView === 'upgrade') && !t.closest('[data-case-view]') && onTradeClick(t)) return;
   const view = t.closest('[data-case-view]');
   if (view && !opening) { caseView = view.dataset.caseView; return renderCases(); }
   const card = t.closest('[data-case]');
@@ -1159,7 +1200,7 @@ async function onCasesClick(e) {
   const drop = t.closest('[data-drop-item]');
   if (drop) return openItem(casino.inventory.find((i) => i.id === Number(drop.dataset.dropItem)), () => lastDrops && showDrops());
   if (t.closest('[data-sell-drops]') && lastDrops) {
-    const ids = lastDrops.items.filter((i) => casino.inventory.some((x) => x.id === i.id)).map((i) => i.id);
+    const ids = lastDrops.items.filter((i) => casino.inventory.some((x) => x.id === i.id && !x.locked)).map((i) => i.id);
     if (await sellItems(ids)) showDrops();
     $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
     return;
@@ -1178,9 +1219,10 @@ async function onCasesClick(e) {
   }
   if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.brag);
   if (t.closest('[data-sell-all]')) {
-    const items = shownItems();
+    const items = shownItems().filter((i) => !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);
-    if (!confirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?`)) return;
+    const locked = casino.inventory.filter((i) => i.locked).length;
+    if (!confirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?${locked ? ` Your ${locked} locked ${locked === 1 ? 'skin stays' : 'skins stay'}.` : ''}`)) return;
     if (await sellItems(items.map((i) => i.id))) renderCases();
     return;
   }
@@ -1197,8 +1239,13 @@ async function onCasesClick(e) {
   }
   if (t.closest('[data-pick-all]')) { for (const i of shownItems()) invPicked.add(i.id); return renderInventory(); }
   if (t.closest('[data-pick-none]')) { invPicked.clear(); return renderInventory(); }
+  const lockPicked = t.closest('[data-lock-picked]');
+  if (lockPicked) {
+    await lockItems([...invPicked], lockPicked.dataset.lockPicked === 'on');
+    return renderInventory();
+  }
   if (t.closest('[data-sell-picked]')) {
-    const items = casino.inventory.filter((i) => invPicked.has(i.id));
+    const items = casino.inventory.filter((i) => invPicked.has(i.id) && !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);
     if (!items.length || !confirm(`Sell ${items.length} item${items.length === 1 ? '' : 's'} for ${chipsText(total)} chips?`)) return;
     if (await sellItems(items.map((i) => i.id))) { invPicked.clear(); invPicking = false; renderCases(); }
@@ -1223,12 +1270,16 @@ function openItem(item, onSold = renderCases) {
   const { wear, title } = itemDetails(item);
   modal(`${dropHtml(item)}
     <div class="modal-row">
-      <button type="button" class="btn secondary" data-close>Keep</button>
+      <button type="button" class="btn secondary" id="item-lock" aria-pressed="${!!item.locked}">${lockIcon}${item.locked ? 'Unlock' : 'Lock'}</button>
       <button type="button" class="btn secondary" id="item-brag">Show the fire</button>
-      <button type="button" class="btn" id="item-sell">Sell for ${chipsText(item.value)}</button>
-    </div>`, 'drop-modal');
-  $('#item-sell').onclick = async () => {
+      ${item.locked ? '<button type="button" class="btn" data-close>Keep</button>' : `<button type="button" class="btn" id="item-sell">Sell for ${chipsText(item.value)}</button>`}
+    </div>
+    ${item.locked ? '<p class="small muted lock-note">Locked: it can\'t be sold, traded up or upgraded until you unlock it.</p>' : ''}`, 'drop-modal');
+  if ($('#item-sell')) $('#item-sell').onclick = async () => {
     if (await sellItems([item.id])) { closeModal(); onSold(); }
+  };
+  $('#item-lock').onclick = async () => {
+    if (await lockItems([item.id], !item.locked)) { openItem(casino.inventory.find((i) => i.id === item.id), onSold); onSold(); }
   };
   $('#item-brag').onclick = () => { closeModal(); brag(`🎒 Showing off ${title} (${wear.name}), worth ${chipsText(item.value)} chips`); };
 }

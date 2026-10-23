@@ -1,14 +1,15 @@
 // The casino, in the games at the fire: Texas hold 'em (one table at each fire), blackjack, a slot
 // machine and CS-style cases. Everything is played with chips, and chips are play money only: everyone
-// starts with some, gets more for free every day, and they can't be bought or cashed out. One balance
-// per person, used at every fire. The server deals, spins and opens everything, so nobody's app decides what it wins.
+// starts with some, gets more for free every day, and they can't be bought or cashed out. Each hearth is its
+// own casino: chips, skins and pets in one can't be used in another. The server deals, spins and opens
+// everything, so nobody's app decides what it wins.
 import { randomInt } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import { inTransaction, type Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 import { PokerTable, MAX_SEATS, shuffledDeck, type Action, type Card } from './poker.ts';
 import {
-  CASES, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
+  CASES, PETS, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
   linePays, type Rarity, type Skin,
 } from './casino-items.ts';
 
@@ -30,11 +31,19 @@ const SITTING_OUT_STAND_MS = 10 * 60_000;
 export const BATTLE_MAX_ROUNDS = 10;
 const BATTLE_ROUND_MS = 5_500; // how long each round's reels take in the app
 const BATTLE_KEEP_MS = 3 * 60_000; // a finished battle stays on the list this long
+/** Trade up: this many skins of one rarity make one of the next rarity, from one of their cases. */
+export const TRADE_UP_COUNT = 5;
+const TRADE_UP_NEXT: Partial<Record<Rarity, Rarity>> = { milspec: 'restricted', restricted: 'classified', classified: 'covert', covert: 'rare' };
+/** Upgrader: put up to this many skins on a better one; the chance is their worth over its, a little under. */
+export const UPGRADE_MAX_ITEMS = 10;
+const UPGRADE_EDGE = 0.92;
+const UPGRADE_MAX_CHANCE = 0.8;
+const PULLS_KEEP_MS = 3 * 24 * 3600_000; // the day's top pulls only need today, wherever today is
 
 type Box = (typeof CASES)[number];
 type Channel = { id: number; serverId: number; kind: string };
 type User = { id: number };
-type Handler = (ctx: { user: User; params: string[]; body: Json }) => unknown;
+type Handler = (ctx: { user: User; params: string[]; body: Json; url: URL }) => unknown;
 
 export interface CasinoContext {
   db: Db;
@@ -127,8 +136,11 @@ export function casino(ctx: CasinoContext) {
       slots: { strips: SLOT_STRIPS, lines: SLOT_LINES, pays: SLOT_PAYS, twoCherries: SLOT_TWO_CHERRIES, bets: SLOT_BETS },
       poker: POKER,
       caseCounts: CASE_COUNTS,
+      tradeUp: { count: TRADE_UP_COUNT, next: TRADE_UP_NEXT },
+      upgrade: { maxItems: UPGRADE_MAX_ITEMS, edge: UPGRADE_EDGE, maxChance: UPGRADE_MAX_CHANCE },
       inventory: inventory(user.id, h),
       found: found(user.id, h),
+      ...petsView(user.id, h),
     };
   });
 
@@ -193,12 +205,12 @@ export function casino(ctx: CasinoContext) {
   // ---- cases
 
   const skins = new Map<string, Skin>(CASES.flatMap((c) => c.skins.map((s) => [s.id, s] as const)));
-  type ItemRow = { id: number; skinId: string; float: number; stattrak: number; value: number; createdAt: number };
-  const itemView = (r: ItemRow) => ({ ...r, stattrak: !!r.stattrak });
+  type ItemRow = { id: number; skinId: string; float: number; stattrak: number; value: number; createdAt: number; locked?: number };
+  const itemView = (r: ItemRow) => ({ ...r, stattrak: !!r.stattrak, locked: !!r.locked });
   function inventory(userId: number, h: number) {
     return (
       db
-        .prepare('SELECT id, skin_id AS skinId, float, stattrak, value, created_at AS createdAt FROM casino_items WHERE user_id = ? AND server_id = ? ORDER BY id DESC')
+        .prepare('SELECT id, skin_id AS skinId, float, stattrak, value, created_at AS createdAt, locked FROM casino_items WHERE user_id = ? AND server_id = ? ORDER BY id DESC')
         .all(userId, h) as ItemRow[]
     ).map(itemView);
   }
@@ -232,7 +244,28 @@ export function casino(ctx: CasinoContext) {
   });
 
   /** One skin out of a case, into the inventory and the collection book. */
-  const unbox = (userId: number, h: number, box: Box) => keep(userId, h, rollCase(box), true);
+  const unbox = (userId: number, h: number, box: Box) => {
+    const roll = rollCase(box);
+    pulled(userId, h, roll);
+    return keep(userId, h, roll, true);
+  };
+  /** For the day's top pulls. */
+  const pulled = (userId: number, h: number, r: Roll) =>
+    db.prepare('INSERT INTO casino_pulls (server_id, user_id, skin_id, float, stattrak, value, at) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(h, userId, r.skinId, r.float, r.stattrak ? 1 : 0, r.value, Date.now());
+
+  /** The best skins out of cases in this hearth since `since` (the start of the asker's day), most valuable first. */
+  route('GET', '/api/servers/:id/casino/pulls', ({ user, params, url }) => {
+    const h = hearth(params[0], user.id);
+    const since = Math.max(Number(url.searchParams.get('since')) || 0, Date.now() - 36 * 3600_000);
+    return db
+      .prepare(
+        `SELECT user_id AS userId, skin_id AS skinId, float, stattrak, value, at FROM casino_pulls
+         WHERE server_id = ? AND at >= ? ORDER BY value DESC, at LIMIT 10`,
+      )
+      .all(h, since)
+      .map((r) => ({ ...(r as Json), stattrak: !!(r as { stattrak: number }).stattrak }));
+  });
 
   type Roll = { skinId: string; float: number; stattrak: boolean; value: number };
   /** What a case gives, before it goes to anyone. */
@@ -275,13 +308,138 @@ export function casino(ctx: CasinoContext) {
     let got = 0;
     for (const id of ids) {
       const item = db
-        .prepare('DELETE FROM casino_items WHERE id = ? AND user_id = ? AND server_id = ? RETURNING value')
+        .prepare('DELETE FROM casino_items WHERE id = ? AND user_id = ? AND server_id = ? AND locked = 0 RETURNING value')
         .get(id, user.id, h) as { value: number } | undefined;
       if (item) got += item.value;
     }
     give(user.id, h, got);
     walletChanged(user.id, h);
     return { got, wallet: walletView(user.id, h) };
+  });
+
+  /** Locks skins so they can't be sold (or traded up, or put on an upgrade) by accident, or unlocks them. */
+  route('POST', '/api/servers/:id/casino/items/lock', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    const ids = Array.isArray(body.ids) ? body.ids.map(Number).filter(Number.isInteger).slice(0, MAX_ITEMS) : [];
+    if (!ids.length) throw fail(400, 'Pick something to lock');
+    const locked = body.locked === false ? 0 : 1;
+    const set = db.prepare('UPDATE casino_items SET locked = ? WHERE id = ? AND user_id = ? AND server_id = ?');
+    inTransaction(db, () => { for (const id of ids) set.run(locked, id, user.id, h); });
+    return { ids, locked: !!locked };
+  });
+
+  /** Takes skins out of someone's inventory for a trade up or an upgrade: theirs, here, and not locked. */
+  const spend = (userId: number, h: number, ids: number[]) => {
+    const rows = ids.map((id) => db
+      .prepare('SELECT id, skin_id AS skinId, float, stattrak, value, created_at AS createdAt, locked FROM casino_items WHERE id = ? AND user_id = ? AND server_id = ?')
+      .get(id, userId, h) as ItemRow | undefined);
+    if (rows.some((r) => !r)) throw fail(400, "Some of those skins aren't in your inventory any more");
+    if (rows.some((r) => r!.locked)) throw fail(400, 'Unlock those skins first');
+    for (const id of ids) db.prepare('DELETE FROM casino_items WHERE id = ?').run(id);
+    return rows as ItemRow[];
+  };
+  const pickIds = (value: unknown, max: number) => {
+    const ids = Array.isArray(value) ? [...new Set(value.map(Number).filter(Number.isInteger))] : [];
+    if (ids.length > max) throw fail(400, `At most ${max} skins`);
+    return ids;
+  };
+  const wearValue = (float: number) => (WEARS.find((w) => float < w.max) ?? WEARS[WEARS.length - 1]).value;
+  const rollFloat = (min: number, max: number) => min + (randomInt(FLOAT_STEPS) / FLOAT_STEPS) * (max - min);
+
+  /**
+   * Trade up, like CS's contract: TRADE_UP_COUNT skins of one rarity for one of the next, from the case
+   * of one of them (picked at random, so more from one case means better odds of that case). The new
+   * skin's float is the average of theirs, and it's StatTrak if they all were.
+   */
+  route('POST', '/api/servers/:id/casino/tradeup', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    play(user);
+    const ids = pickIds(body.ids, TRADE_UP_COUNT);
+    if (ids.length !== TRADE_UP_COUNT) throw fail(400, `A trade up takes ${TRADE_UP_COUNT} skins`);
+    const item = inTransaction(db, () => {
+      const given = spend(user.id, h, ids);
+      const rarities = new Set(given.map((g) => skins.get(g.skinId)?.rarity));
+      if (rarities.size !== 1) throw fail(400, 'The skins in a trade up have to be the same rarity');
+      const next = TRADE_UP_NEXT[[...rarities][0]!];
+      if (!next) throw fail(400, "Knives and gloves can't be traded up");
+      const stattraks = new Set(given.map((g) => !!g.stattrak));
+      if (stattraks.size !== 1) throw fail(400, "StatTrak™ and normal skins can't go in the same trade up");
+      const from = given[randomInt(given.length)];
+      const box = CASES.find((c) => c.skins.some((x) => x.id === from.skinId))!;
+      const pool = box.skins.filter((x) => x.rarity === next);
+      const skin = pool[randomInt(pool.length)];
+      const float = given.reduce((n, g) => n + g.float, 0) / given.length;
+      const stattrak = given[0].stattrak === 1 && skin.kind !== 'gloves';
+      const value = Math.max(1, Math.round(skin.value * wearValue(float) * (stattrak ? STATTRAK_VALUE : 1)));
+      return keep(user.id, h, { skinId: skin.id, float, stattrak, value }, true);
+    });
+    return { item, gave: ids, found: found(user.id, h) };
+  });
+
+  /**
+   * Upgrader: put skins on a better one. The chance is what they're worth over what it's worth (times
+   * UPGRADE_EDGE, at most UPGRADE_MAX_CHANCE). Win and it's yours, with a float in its wear; lose and they're gone.
+   */
+  route('POST', '/api/servers/:id/casino/upgrade', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    play(user);
+    const ids = pickIds(body.ids, UPGRADE_MAX_ITEMS);
+    if (!ids.length) throw fail(400, 'Pick skins to put on it');
+    const skin = skins.get(String(body.skinId));
+    const wear = WEARS.find((w) => w.short === body.wear);
+    if (!skin || !wear) throw fail(400, 'Pick a skin to go for');
+    const stattrak = body.stattrak === true;
+    if (stattrak && skin.kind === 'gloves') throw fail(400, "Gloves don't come in StatTrak™");
+    const target = Math.max(1, Math.round(skin.value * wear.value * (stattrak ? STATTRAK_VALUE : 1)));
+    const result = inTransaction(db, () => {
+      const given = spend(user.id, h, ids);
+      const put = given.reduce((n, g) => n + g.value, 0);
+      if (put >= target) throw fail(400, 'Go for something worth more than what you put on');
+      const chance = Math.min(UPGRADE_MAX_CHANCE, (put / target) * UPGRADE_EDGE);
+      const roll = randomInt(1_000_000) / 1_000_000;
+      const won = roll < chance;
+      const item = won ? keep(user.id, h, { skinId: skin.id, float: rollFloat(wear.min, wear.max), stattrak, value: target }, true) : null;
+      return { won, chance, roll, item };
+    });
+    return { ...result, gave: ids, found: found(user.id, h) };
+  });
+
+  // ---- premium pets: bought with chips, one by your seat at a time, at this hearth's fires
+
+  const petsView = (userId: number, h: number) => ({
+    pets: PETS,
+    myPets: (db.prepare('SELECT pet_id AS id FROM casino_pets WHERE user_id = ? AND server_id = ?').all(userId, h) as { id: string }[]).map((r) => r.id),
+    pet: (db.prepare('SELECT pet FROM casino_wallets WHERE user_id = ? AND server_id = ?').get(userId, h) as { pet: string | null } | undefined)?.pet ?? null,
+  });
+  /** Everyone in the hearth sees the pet by someone's seat change. */
+  const petChanged = (userId: number, h: number, pet: string | null) =>
+    ctx.sendTo(ctx.serverMemberIds(h), { type: 'casino_pet', serverId: h, userId, pet });
+
+  route('POST', '/api/servers/:id/casino/pets/:code', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    play(user);
+    const pet = PETS.find((p) => p.id === params[1]);
+    if (!pet) throw fail(404, 'No such pet');
+    inTransaction(db, () => {
+      if (db.prepare('SELECT 1 FROM casino_pets WHERE user_id = ? AND server_id = ? AND pet_id = ?').get(user.id, h, pet.id)) throw fail(400, 'You already have that one');
+      take(user.id, h, pet.price);
+      db.prepare('INSERT INTO casino_pets (user_id, server_id, pet_id, bought_at) VALUES (?, ?, ?, ?)').run(user.id, h, pet.id, Date.now());
+      db.prepare('UPDATE casino_wallets SET pet = ? WHERE user_id = ? AND server_id = ?').run(pet.id, user.id, h);
+    });
+    walletChanged(user.id, h);
+    petChanged(user.id, h, pet.id);
+    return { wallet: walletView(user.id, h), ...petsView(user.id, h) };
+  });
+
+  /** Which of your pets sits by your seat here, or none. */
+  route('PUT', '/api/servers/:id/casino/pet', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    const id = typeof body.pet === 'string' ? body.pet : null;
+    if (id !== null && !db.prepare('SELECT 1 FROM casino_pets WHERE user_id = ? AND server_id = ? AND pet_id = ?').get(user.id, h, id)) throw fail(400, "That pet isn't yours");
+    wallet(user.id, h);
+    db.prepare('UPDATE casino_wallets SET pet = ? WHERE user_id = ? AND server_id = ?').run(id, user.id, h);
+    petChanged(user.id, h, id);
+    return petsView(user.id, h);
   });
 
   // ---- blackjack: six decks, dealer stands on soft 17, blackjack pays 3 to 2, double on any two
@@ -523,12 +681,14 @@ export function casino(ctx: CasinoContext) {
   // ---- case battles: two to four people at a fire open the same cases, round by round. Free for
   // all, the highest total takes every skin; in 2v2 (seats 0-1 against 2-3) the higher team's
   // total wins and its players split everything. Empty seats can take a bot, which pays nothing
-  // and keeps nothing: if a bot wins, the skins are gone.
+  // and keeps nothing: if only bots win, everyone keeps what they opened themselves.
 
   type BattleSeat = { userId: number | null; bot: string | null; rolls: Roll[] };
   type Battle = {
     id: number; channelId: number; serverId: number; mode: 'ffa' | '2v2'; cases: string[]; cost: number; creator: number;
     seats: (BattleSeat | null)[]; startedAt: number; winners: number[]; won: Record<number, number>; createdAt: number;
+    /** Only bots won, so everyone kept their own pulls. */
+    kept?: boolean;
   };
   const battles = new Map<number, Battle>();
   let battleIds = 0;
@@ -542,7 +702,7 @@ export function casino(ctx: CasinoContext) {
       seats: b.seats.map((s) => s && { userId: s.userId, bot: s.bot, rolls: b.startedAt ? s.rolls : [] }),
       started: !!b.startedAt, elapsed, roundMs: battleRoundMs,
       done: !!b.startedAt && elapsed >= b.cases.length * battleRoundMs,
-      winners: b.winners, won: b.won,
+      winners: b.winners, won: b.won, kept: !!b.kept,
     };
   };
   const battlesAt = (channelId: number) =>
@@ -589,17 +749,30 @@ export function casino(ctx: CasinoContext) {
       b.winners = sides.filter((_, k) => sideTotal[k] === best).flat();
       // The winners' people split every skin, the most valuable first to whoever has the least so far.
       const takers = b.winners.filter((i) => seats[i].userId !== null);
-      const pot = seats.flatMap((s) => s.rolls).sort((x, y) => y.value - x.value);
-      for (const i of takers) b.won[i] = 0;
-      for (const r of takers.length ? pot : []) {
-        const i = takers.reduce((low, j) => (b.won[j] < b.won[low] ? j : low), takers[0]);
-        b.won[i] += r.value;
-        keep(seats[i].userId!, b.serverId, r, false);
+      if (takers.length) {
+        const pot = seats.flatMap((s) => s.rolls).sort((x, y) => y.value - x.value);
+        for (const i of takers) b.won[i] = 0;
+        for (const r of pot) {
+          const i = takers.reduce((low, j) => (b.won[j] < b.won[low] ? j : low), takers[0]);
+          b.won[i] += r.value;
+          keep(seats[i].userId!, b.serverId, r, false);
+        }
+      } else {
+        // A bot won: the people keep their own pulls instead of losing them.
+        seats.forEach((s, i) => {
+          if (s.userId === null) return;
+          b.won[i] = s.rolls.reduce((n, r) => n + r.value, 0);
+          for (const r of s.rolls) keep(s.userId, b.serverId, r, false);
+        });
+        b.kept = true;
       }
       for (const s of seats) {
         if (s.userId === null) continue;
         db.prepare('UPDATE casino_wallets SET in_battle = in_battle - ? WHERE user_id = ? AND server_id = ?').run(b.cost, s.userId, b.serverId);
-        for (const r of s.rolls) found1(s.userId, b.serverId, r);
+        for (const r of s.rolls) {
+          found1(s.userId, b.serverId, r);
+          pulled(s.userId, b.serverId, r);
+        }
       }
       b.startedAt = Date.now();
     });
@@ -696,6 +869,7 @@ export function casino(ctx: CasinoContext) {
       }
       if (t.empty) tables.delete(channelId);
     }
+    db.prepare('DELETE FROM casino_pulls WHERE at < ?').run(now - PULLS_KEEP_MS);
     // Battles: people who left the fire get up; finished ones are cleared away after a while.
     for (const b of battles.values()) {
       if (b.startedAt) {

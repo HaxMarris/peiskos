@@ -42,11 +42,15 @@ function sparksLayer(on) {
 const FIRE_ITEM_NAMES = {
   cocoa: 'A mug of cocoa', marshmallow: 'Marshmallows', mushroom: 'A forest mushroom', guitar: 'A guitar', hedgehog: 'A hedgehog',
   fox: 'A fox', owl: 'An owl', deer: 'A deer', bear: 'A bear', wolf: 'A wolf',
+  // Premium pets, bought with chips in a hearth's casino (PETS in server/src/casino-items.ts).
+  blackcat: 'A black cat', penguin: 'A penguin', redpanda: 'A red panda', unicorn: 'A unicorn', dragon: 'A dragon', phoenix: 'A phoenix', goldwolf: 'A golden wolf',
 };
+const PREMIUM_PETS = ['blackcat', 'penguin', 'redpanda', 'unicorn', 'dragon', 'phoenix', 'goldwolf'];
 const PIXEL_COLORS = {
   k: '#2b1d16', w: '#fbf3e6', c: '#efd9bd', o: '#e27b30', O: '#b4521b', b: '#8a5a36', B: '#5c3a22', l: '#c99a6b',
   g: '#9a9ca3', G: '#62656d', L: '#d5d7dc', r: '#cf4a33', R: '#982f22', p: '#f2b8b4', y: '#f6cf5a', Y: '#d99a2b',
   m: '#e8ddcf', M: '#b8a690', s: '#a07a5a', e: '#f8f4ec',
+  d: '#4caf6a', D: '#2e7d4a', f: '#ff6a2a', h: '#f58fc4', u: '#6fc3f0',
 };
 const PIXEL_ART = {
   cocoa: [
@@ -117,7 +121,33 @@ const PIXEL_ART = {
     '........', '..G.....', '..GG....', '..GLG...', '..gggggg', '.ggggggg', '.ggggkgg', '.LLggggg',
     '..LLLLLk', '...LLLLL', '....gggg', '...gLLLL', '...gLLLL', '...ggLLL', '...GGggg', '........',
   ],
+  blackcat: [
+    '........', '.k......', '.kk.....', '.kpk....', '.kkkkkkk', 'kkkkkkkk', 'kkyykkkk', 'kkykkkkk',
+    'kkkkkkkp', '.kkkkkkk', '..kkkkkk', '..kkkkkk', '.kkkkkkk', '.kkkkkkk', '.kk..kkk', '........',
+  ],
+  penguin: [
+    '........', '.....kkk', '....kkkk', '...kkkkk', '...kkwww', '...kwkww', '...kwwwY', '..kkwwww',
+    '.kkwwwww', '.kkwwwww', 'kkkwwwww', '.kkwwwww', '..kwwwww', '..kkwwww', '...YYY..', '........',
+  ],
+  redpanda: [
+    '........', '.oo.....', 'owwo....', '.ooooooo', 'oooooooo', 'owwwoooo', 'owkwoooo', 'oowwowww',
+    '.ooowwwk', '..oooooo', '...OOOOO', '..OOOOOO', '..OOOOOO', '..OOoOOO', '..kk..kk', '........',
+  ],
+  unicorn: [
+    '.......y', '.......y', '......yY', '..ww...y', '..wwwwww', '.hwwwwww', 'hhwuwwww', 'hhwkwwww',
+    'hhwwwwww', '.hwwwwww', '.h.wwwww', '...wwpww', '....wwww', '...wwwww', '...MM.MM', '........',
+  ],
+  dragon: [
+    '........', '....D...', '....Dddd', 'D..ddddd', 'DD.dyddd', 'DdDddddd', 'DddDdddd', 'DdddDddd',
+    'DdddDyyy', '.DddDyyy', '..DdDyyy', '...DDyyy', '....dyyy', '....dddd', '....DD..', '........',
+  ],
+  phoenix: [
+    '........', '......y.', '.....yfy', '......ff', '.....fff', '....ffkf', '....fffY', 'Y....fff',
+    'fY..ffff', 'ffY.ffff', 'rffYffyy', '.rffffyy', '..rrffff', '....ffff', '...fYfYf', '...Y.Y.Y',
+  ],
 };
+// The golden wolf is the wolf, in gold.
+PIXEL_ART.goldwolf = PIXEL_ART.wolf.map((row) => row.replace(/g/g, 'y').replace(/G/g, 'Y').replace(/L/g, 'e'));
 /** Turns one of PIXEL_ART into crisp SVG, a rect per run of one color. */
 function pixelSvg(id) {
   const rows = PIXEL_ART[id];
@@ -139,8 +169,11 @@ const FIRE_LOOK_ART = { classic: '🪵', birch: '🤍', sparks: '✨', blue: '�
 // The sky above a hearth's fires, matching SKY_LOOKS on the server.
 const SKY_ART = { evening: '🌆', stars: '✨', moon: '🌕', aurora: '🌌', meteors: '🌠' };
 
-/** What someone has by their seat, from whichever hearth or conversation knows them. */
+/** What someone has by their seat: a premium pet they have out in this fire's hearth, or what they picked. */
 function fireItemOf(userId) {
+  const here = state.voice && roomById(state.voice.channelId)?.s;
+  const pet = here?.members?.find((x) => x.id === userId)?.pet;
+  if (pet && PIXEL_ART[pet]) return pet;
   if (userId === state.me.id) return state.me.fireItem ?? null;
   for (const s of state.servers.values()) {
     const m = s.members?.find((x) => x.id === userId);
@@ -156,7 +189,7 @@ function decorateSeat(wrap, userId) {
   if (!id || !PIXEL_ART[id]) return el?.remove();
   if (el?.dataset.item === id) return;
   el?.remove();
-  wrap.insertAdjacentHTML('beforeend', `<span class="seat-item" data-item="${id}" title="${escapeHtml(FIRE_ITEM_NAMES[id])}">${pixelSvg(id)}</span>`);
+  wrap.insertAdjacentHTML('beforeend', `<span class="seat-item${PREMIUM_PETS.includes(id) ? ' premium' : ''}" data-item="${id}" title="${escapeHtml(FIRE_ITEM_NAMES[id])}">${pixelSvg(id)}</span>`);
 }
 function decorateFire(s) {
   const hearth = s && !isDm(s);
