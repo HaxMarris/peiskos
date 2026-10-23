@@ -26,7 +26,11 @@ const BLACKJACK_MAX = 10_000;
 export const POKER = { smallBlind: 10, bigBlind: 20, minBuyIn: 400, maxBuyIn: 4000 };
 const AWAY_STAND_MS = 2 * 60_000; // offline this long at a table, and you get up (with your chips)
 const SITTING_OUT_STAND_MS = 10 * 60_000;
+export const BATTLE_MAX_ROUNDS = 10;
+const BATTLE_ROUND_MS = 5_500; // how long each round's reels take in the app
+const BATTLE_KEEP_MS = 3 * 60_000; // a finished battle stays on the list this long
 
+type Box = (typeof CASES)[number];
 type Channel = { id: number; serverId: number; kind: string };
 type User = { id: number };
 type Handler = (ctx: { user: User; params: string[]; body: Json }) => unknown;
@@ -44,11 +48,11 @@ export interface CasinoContext {
   isOnline: (userId: number) => boolean;
   sendTo: (userIds: Iterable<number>, event: Json) => void;
   /** Shorter waits, for tests. */
-  timing?: { turnMs: number; awayTurnMs: number; pauseMs: number; dealMs: number };
+  timing?: { turnMs: number; awayTurnMs: number; pauseMs: number; dealMs: number; battleRoundMs?: number };
   deck?: () => Card[];
 }
 
-type Wallet = { chips: number; atTable: number; blackjack: string | null; freeAt: number };
+type Wallet = { chips: number; atTable: number; inBattle: number; blackjack: string | null; freeAt: number };
 type BjHand = { cards: Card[]; bet: number; done: boolean; doubled: boolean; splitAces: boolean; result: string; paid: number };
 type Blackjack = { deck: Card[]; dealer: Card[]; hands: BjHand[]; active: number; over: boolean; natural: boolean };
 
@@ -58,17 +62,18 @@ export function casino(ctx: CasinoContext) {
 
   // Chips left at a table when the server stopped go back to their wallets.
   db.prepare('UPDATE casino_wallets SET chips = chips + at_table, at_table = 0 WHERE at_table > 0').run();
+  db.prepare('UPDATE casino_wallets SET chips = chips + in_battle, in_battle = 0 WHERE in_battle > 0').run();
 
   // ---- the wallet
 
   const wallet = (userId: number): Wallet => {
     db.prepare('INSERT OR IGNORE INTO casino_wallets (user_id, chips, created_at) VALUES (?, ?, ?)').run(userId, START_CHIPS, Date.now());
-    return db.prepare('SELECT chips, at_table AS atTable, blackjack, free_at AS freeAt FROM casino_wallets WHERE user_id = ?').get(userId) as Wallet;
+    return db.prepare('SELECT chips, at_table AS atTable, in_battle AS inBattle, blackjack, free_at AS freeAt FROM casino_wallets WHERE user_id = ?').get(userId) as Wallet;
   };
   /** When the next free chips come, and how many. */
   const freeChips = (w: Wallet) => {
     const daily = w.freeAt + DAILY_MS;
-    if (w.chips + w.atTable < BROKE_BELOW && !openBlackjack(w)) {
+    if (w.chips + w.atTable + w.inBattle < BROKE_BELOW && !openBlackjack(w)) {
       const broke = w.freeAt + BROKE_MS;
       if (broke < daily) return { at: broke, amount: Date.now() >= daily ? DAILY_CHIPS : BROKE_CHIPS };
     }
@@ -77,7 +82,7 @@ export function casino(ctx: CasinoContext) {
   const walletView = (userId: number) => {
     const w = wallet(userId);
     const free = freeChips(w);
-    return { chips: w.chips, atTable: w.atTable, freeAt: free.at <= Date.now() ? 0 : free.at, freeAmount: free.amount };
+    return { chips: w.chips, atTable: w.atTable, inBattle: w.inBattle, freeAt: free.at <= Date.now() ? 0 : free.at, freeAmount: free.amount };
   };
   const walletChanged = (userId: number) => ctx.sendTo([userId], { type: 'casino_wallet', wallet: walletView(userId) });
   /** Takes chips for a bet, or says there aren't enough. */
@@ -128,7 +133,7 @@ export function casino(ctx: CasinoContext) {
     if (!ids.length) return [];
     return db
       .prepare(
-        `SELECT w.user_id AS userId, w.chips + w.at_table AS chips,
+        `SELECT w.user_id AS userId, w.chips + w.at_table + w.in_battle AS chips,
            COALESCE((SELECT SUM(value) FROM casino_items i WHERE i.user_id = w.user_id), 0) AS items
          FROM casino_wallets w WHERE w.user_id IN (${ids.map(() => '?').join(',')})
          ORDER BY chips + items DESC LIMIT 10`,
@@ -196,7 +201,11 @@ export function casino(ctx: CasinoContext) {
   });
 
   /** One skin out of a case, into the inventory and the collection book. */
-  function unbox(userId: number, box: (typeof CASES)[number]) {
+  const unbox = (userId: number, box: Box) => keep(userId, rollCase(box), true);
+
+  type Roll = { skinId: string; float: number; stattrak: boolean; value: number };
+  /** What a case gives, before it goes to anyone. */
+  function rollCase(box: Box): Roll {
     // Rarity first, at CS's odds, then any skin of that rarity, then how worn it is.
     let roll = randomInt(10_000);
     const rarity = (Object.keys(RARITY_ODDS) as Rarity[]).find((r) => (roll -= RARITY_ODDS[r]) < 0)!;
@@ -207,15 +216,23 @@ export function casino(ctx: CasinoContext) {
     const float = Math.round((wear.min + (randomInt(1_000_000) / 1_000_000) * (wear.max - wear.min)) * 1e6) / 1e6;
     const stattrak = skin.kind !== 'gloves' && randomInt(100) < STATTRAK_CHANCE;
     const value = Math.max(1, Math.round(skin.value * wear.value * (stattrak ? STATTRAK_VALUE : 1)));
+    return { skinId: skin.id, float, stattrak, value };
+  }
+  /** A skin into someone's inventory; into their collection book too if they opened it. */
+  function keep(userId: number, { skinId, float, stattrak, value }: Roll, opened: boolean) {
     const createdAt = Date.now();
     const r = db
       .prepare('INSERT INTO casino_items (user_id, skin_id, float, stattrak, value, created_at) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(userId, skin.id, float, stattrak ? 1 : 0, value, createdAt);
+      .run(userId, skinId, float, stattrak ? 1 : 0, value, createdAt);
+    if (opened) found1(userId, { skinId, float, stattrak });
+    return itemView({ id: Number(r.lastInsertRowid), skinId, float, stattrak: stattrak ? 1 : 0, value, createdAt });
+  }
+  /** Into the collection book. */
+  function found1(userId: number, { skinId, float, stattrak }: { skinId: string; float: number; stattrak: boolean }) {
     db.prepare(
       `INSERT INTO casino_found (user_id, skin_id, count, best_float, stattrak, first_at) VALUES (?, ?, 1, ?, ?, ?)
        ON CONFLICT (user_id, skin_id) DO UPDATE SET count = count + 1, best_float = MIN(best_float, excluded.best_float), stattrak = MAX(stattrak, excluded.stattrak)`,
-    ).run(userId, skin.id, float, stattrak ? 1 : 0, createdAt);
-    return itemView({ id: Number(r.lastInsertRowid), skinId: skin.id, float, stattrak: stattrak ? 1 : 0, value, createdAt });
+    ).run(userId, skinId, float, stattrak ? 1 : 0, Date.now());
   }
 
   /** Sells items back for what they're worth. */
@@ -367,9 +384,10 @@ export function casino(ctx: CasinoContext) {
   const outSince = new Map<number, number>();
 
   /** The fire someone is sitting at, which is the only one whose table they can play at. */
-  const fireOf = (channelId: number, userId: number) => {
+  const fireOf = (channelId: number, userId: number, what: 'poker' | 'battle' = 'poker') => {
     const channel = ctx.channelById(channelId);
-    if (!channel || channel.kind !== 'voice' || ctx.inVoice.get(userId) !== channelId) throw fail(400, 'Join the fire to play poker there');
+    if (!channel || channel.kind !== 'voice' || ctx.inVoice.get(userId) !== channelId)
+      throw fail(400, what === 'poker' ? 'Join the fire to play poker there' : 'Join the fire to battle there');
     return channel;
   };
   const tableEvent = (channelId: number, userId: number) => {
@@ -464,6 +482,157 @@ export function casino(ctx: CasinoContext) {
     return { ok: true };
   });
 
+
+  // ---- case battles: two to four people at a fire open the same cases, round by round. Free for
+  // all, the highest total takes every skin; in 2v2 (seats 0-1 against 2-3) the higher team's
+  // total wins and its players split everything. Empty seats can take a bot, which pays nothing
+  // and keeps nothing: if a bot wins, the skins are gone.
+
+  type BattleSeat = { userId: number | null; bot: string | null; rolls: Roll[] };
+  type Battle = {
+    id: number; channelId: number; mode: 'ffa' | '2v2'; cases: string[]; cost: number; creator: number;
+    seats: (BattleSeat | null)[]; startedAt: number; winners: number[]; won: Record<number, number>; createdAt: number;
+  };
+  const battles = new Map<number, Battle>();
+  let battleIds = 0;
+  const BOTS = ['Ember Bot', 'Cinder Bot', 'Spark Bot', 'Ash Bot'];
+  const battleRoundMs = ctx.timing?.battleRoundMs ?? BATTLE_ROUND_MS;
+
+  const battleView = (b: Battle) => {
+    const elapsed = b.startedAt ? Date.now() - b.startedAt : 0;
+    return {
+      id: b.id, mode: b.mode, cases: b.cases, cost: b.cost, creator: b.creator, createdAt: b.createdAt,
+      seats: b.seats.map((s) => s && { userId: s.userId, bot: s.bot, rolls: b.startedAt ? s.rolls : [] }),
+      started: !!b.startedAt, elapsed, roundMs: battleRoundMs,
+      done: !!b.startedAt && elapsed >= b.cases.length * battleRoundMs,
+      winners: b.winners, won: b.won,
+    };
+  };
+  const battlesAt = (channelId: number) =>
+    [...battles.values()].filter((b) => b.channelId === channelId).sort((a, b) => b.id - a.id).map(battleView);
+  /** Everyone at the fire, and everyone looking at its casino, sees its battles as they are now. */
+  const battlesChanged = (channelId: number) => {
+    const ids = new Set<number>(ctx.usersInVoice(channelId));
+    for (const w of watching.values()) if (w.channelId === channelId) ids.add(w.userId);
+    ctx.sendTo(ids, { type: 'case_battles', channelId, battles: battlesAt(channelId) });
+  };
+  const battleOf = (userId: number) => [...battles.values()].find((b) => !b.startedAt && b.seats.some((s) => s?.userId === userId));
+  const hold = (userId: number, chips: number) => {
+    take(userId, chips);
+    db.prepare('UPDATE casino_wallets SET in_battle = in_battle + ? WHERE user_id = ?').run(chips, userId);
+  };
+  const unhold = (userId: number, chips: number, refund: boolean) => {
+    db.prepare(`UPDATE casino_wallets SET in_battle = in_battle - ?${refund ? ', chips = chips + ?' : ''} WHERE user_id = ?`)
+      .run(...(refund ? [chips, chips, userId] : [chips, userId]));
+    walletChanged(userId);
+  };
+  /** Someone gets up from a battle that hasn't started, with their chips back; the battle goes if it was theirs. */
+  const leaveBattle = (b: Battle, userId: number) => {
+    if (b.creator === userId) {
+      for (const s of b.seats) if (s?.userId) unhold(s.userId, b.cost, true);
+      battles.delete(b.id);
+    } else {
+      const i = b.seats.findIndex((s) => s?.userId === userId);
+      if (i < 0) return;
+      b.seats[i] = null;
+      unhold(userId, b.cost, true);
+    }
+    battlesChanged(b.channelId);
+  };
+
+  /** Every seat is filled: open everything now (the apps show it round by round) and pay out. */
+  function startBattle(b: Battle) {
+    const boxes = b.cases.map((id) => CASES.find((c) => c.id === id)!);
+    const seats = b.seats as BattleSeat[];
+    inTransaction(db, () => {
+      for (const s of seats) s.rolls = boxes.map(rollCase);
+      const total = (i: number) => seats[i].rolls.reduce((n, r) => n + r.value, 0);
+      const sides = b.mode === '2v2' ? [[0, 1], [2, 3]] : seats.map((_, i) => [i]);
+      const sideTotal = sides.map((side) => side.reduce((n, i) => n + total(i), 0));
+      const best = Math.max(...sideTotal);
+      b.winners = sides.filter((_, k) => sideTotal[k] === best).flat();
+      // The winners' people split every skin, the most valuable first to whoever has the least so far.
+      const takers = b.winners.filter((i) => seats[i].userId !== null);
+      const pot = seats.flatMap((s) => s.rolls).sort((x, y) => y.value - x.value);
+      for (const i of takers) b.won[i] = 0;
+      for (const r of takers.length ? pot : []) {
+        const i = takers.reduce((low, j) => (b.won[j] < b.won[low] ? j : low), takers[0]);
+        b.won[i] += r.value;
+        keep(seats[i].userId!, r, false);
+      }
+      for (const s of seats) {
+        if (s.userId === null) continue;
+        db.prepare('UPDATE casino_wallets SET in_battle = in_battle - ? WHERE user_id = ?').run(b.cost, s.userId);
+        for (const r of s.rolls) found1(s.userId, r);
+      }
+      b.startedAt = Date.now();
+    });
+    for (const s of seats) if (s.userId !== null) walletChanged(s.userId);
+  }
+
+  route('POST', '/api/channels/:id/battles', ({ user, params, body }) => {
+    play(user);
+    const channelId = fireOf(Number(params[0]), user.id, 'battle').id;
+    const userId = user.id;
+    if (battleOf(userId)) throw fail(400, "You're already waiting in a battle");
+    const mode = body.mode === '2v2' ? '2v2' : 'ffa';
+    const players = mode === '2v2' ? 4 : Number(body.players);
+    if (![2, 3, 4].includes(players)) throw fail(400, 'A battle is for 2 to 4 players');
+    const cases = Array.isArray(body.cases) ? body.cases.map(String) : [];
+    if (!cases.length || cases.length > BATTLE_MAX_ROUNDS) throw fail(400, `Pick 1 to ${BATTLE_MAX_ROUNDS} cases`);
+    if (cases.some((id) => !CASES.some((c) => c.id === id))) throw fail(400, "That case isn't here");
+    const cost = cases.reduce((n, id) => n + CASES.find((c) => c.id === id)!.price, 0);
+    hold(userId, cost);
+    const b: Battle = {
+      id: ++battleIds, channelId, mode, cases, cost, creator: userId, startedAt: 0, winners: [], won: {}, createdAt: Date.now(),
+      seats: Array.from({ length: players }, (_, i) => (i === 0 ? { userId, bot: null, rolls: [] } : null)),
+    };
+    battles.set(b.id, b);
+    walletChanged(userId);
+    battlesChanged(channelId);
+    return { battle: battleView(b) };
+  });
+
+  route('POST', '/api/channels/:id/battles/:battle', ({ user, params, body }) => {
+    const channel = fireOf(Number(params[0]), user.id, 'battle');
+    const b = battles.get(Number(params[1]));
+    if (!b || b.channelId !== channel.id) throw fail(404, 'That battle is over');
+    if (b.startedAt) throw fail(400, 'That battle has started');
+    const action = String(body.action);
+    const seat = Number(body.seat);
+    const freeSeat = () => {
+      if (!Number.isInteger(seat) || seat < 0 || seat >= b.seats.length || b.seats[seat]) throw fail(400, 'That seat is taken');
+    };
+    if (action === 'join') {
+      play(user);
+      if (battleOf(user.id)) throw fail(400, "You're already waiting in a battle");
+      freeSeat();
+      hold(user.id, b.cost);
+      b.seats[seat] = { userId: user.id, bot: null, rolls: [] };
+      walletChanged(user.id);
+    } else if (action === 'bot') {
+      if (b.creator !== user.id) throw fail(403, 'Only whoever started the battle can add bots');
+      freeSeat();
+      const used = new Set(b.seats.map((s) => s?.bot));
+      b.seats[seat] = { userId: null, bot: BOTS.find((n) => !used.has(n)) ?? 'Bot', rolls: [] };
+    } else if (action === 'kick') {
+      if (b.creator !== user.id) throw fail(403, 'Only whoever started the battle can do that');
+      const s = b.seats[seat];
+      if (!s || s.userId === user.id) throw fail(400, 'Nobody to remove there');
+      if (s.userId !== null) {
+        leaveBattle(b, s.userId);
+        return { ok: true };
+      }
+      b.seats[seat] = null;
+    } else if (action === 'leave') {
+      leaveBattle(b, user.id);
+      return { ok: true };
+    } else throw fail(400, 'Unknown move');
+    if (b.seats.every(Boolean)) startBattle(b);
+    battlesChanged(channel.id);
+    return { ok: true };
+  });
+
   // Every few seconds: people who left the fire, went offline or sat out for long get up, and tables
   // at fires that are gone close with everyone's chips going back.
   const sweep = () => {
@@ -491,6 +660,17 @@ export function casino(ctx: CasinoContext) {
       }
       if (t.empty) tables.delete(channelId);
     }
+    // Battles: people who left the fire get up; finished ones are cleared away after a while.
+    for (const b of battles.values()) {
+      if (b.startedAt) {
+        if (now - b.startedAt > b.cases.length * battleRoundMs + BATTLE_KEEP_MS) {
+          battles.delete(b.id);
+          battlesChanged(b.channelId);
+        }
+        continue;
+      }
+      for (const s of b.seats) if (s?.userId && ctx.inVoice.get(s.userId) !== b.channelId) leaveBattle(b, s.userId);
+    }
   };
   const sweeper = setInterval(sweep, 15_000);
   sweeper.unref();
@@ -503,6 +683,7 @@ export function casino(ctx: CasinoContext) {
       fireOf(channelId, userId);
       watching.set(ws, { userId, channelId });
       ctx.sendTo([userId], tableEvent(channelId, userId));
+      ctx.sendTo([userId], { type: 'case_battles', channelId, battles: battlesAt(channelId) });
     },
     closed(ws: WebSocket) {
       watching.delete(ws);
@@ -511,11 +692,16 @@ export function casino(ctx: CasinoContext) {
     left(channelId: number, userId: number) {
       for (const [ws, w] of watching) if (w.userId === userId && w.channelId === channelId) watching.delete(ws);
       tables.get(channelId)?.stand(userId);
+      const b = battleOf(userId);
+      if (b?.channelId === channelId) leaveBattle(b, userId);
     },
     sweep,
     stop() {
       clearInterval(sweeper);
       for (const t of tables.values()) t.stopTimers();
+      // Battles that hadn't started give their chips back.
+      for (const b of battles.values()) if (!b.startedAt) for (const s of b.seats) if (s?.userId) unhold(s.userId, b.cost, true);
+      battles.clear();
     },
   };
 }

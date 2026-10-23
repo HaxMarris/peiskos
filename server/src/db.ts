@@ -730,6 +730,7 @@ function addCasino(db: Db) {
       user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
       chips      INTEGER NOT NULL,
       at_table   INTEGER NOT NULL DEFAULT 0,
+      in_battle  INTEGER NOT NULL DEFAULT 0,
       blackjack  TEXT,
       free_at    INTEGER NOT NULL DEFAULT 0,
       created_at INTEGER NOT NULL
@@ -755,6 +756,9 @@ function addCasino(db: Db) {
       PRIMARY KEY (user_id, skin_id)
     );
   `);
+  // What someone has put into a case battle that hasn't started; given back if the server restarts.
+  if (!(db.prepare('PRAGMA table_info(casino_wallets)').all() as { name: string }[]).some((c) => c.name === 'in_battle'))
+    db.exec('ALTER TABLE casino_wallets ADD COLUMN in_battle INTEGER NOT NULL DEFAULT 0');
   // The book started 2026-10-23; skins opened before then count if they're still in someone's inventory.
   inTransaction(db, () => {
     if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_found_backfill'").get()) return;

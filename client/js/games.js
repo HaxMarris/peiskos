@@ -35,6 +35,7 @@ const CASINO_GAMES = {
   blackjack: { title: 'Blackjack', icon: '🂡', blurb: 'You against the dealer. Blackjack pays 3 to 2.' },
   slots: { title: 'Slots', icon: '🎰', blurb: 'Five reels, ten lines. Three flames pays 500 times.' },
   cases: { title: 'Cases', icon: '🎁', blurb: 'Open cases for made-up weapon skins, then keep them or sell them back.' },
+  battles: { title: 'Case battles', icon: '⚔️', blurb: 'Up to four of you open the same cases. Highest total takes every skin.' },
 };
 
 function openGamePicker() {
