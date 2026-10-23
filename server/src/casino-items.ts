@@ -2,7 +2,8 @@
 // All made up for Peiskos; nothing here is worth real money.
 
 export type Rarity = 'milspec' | 'restricted' | 'classified' | 'covert' | 'rare';
-export type Pattern = 'fade' | 'stripes' | 'camo' | 'hex' | 'flames' | 'marble' | 'waves' | 'digital' | 'carbon' | 'solid';
+export type Pattern =
+  | 'fade' | 'stripes' | 'camo' | 'tiger' | 'hex' | 'flames' | 'marble' | 'damascus' | 'waves' | 'digital' | 'splatter' | 'circuit' | 'geo' | 'carbon' | 'solid';
 export type WeaponKind = 'rifle' | 'sniper' | 'pistol' | 'smg' | 'shotgun' | 'knife' | 'gloves';
 
 export type Skin = {
@@ -76,7 +77,7 @@ export const CASES: Case[] = [
   makeCase('ember', 'Ember Case', 250, ['#c4561c', '#ffc46b'], {
     milspec: [
       ['UMP-45', 'Smoulder', 'fade', '#3a1410', '#a8331c', '#f08a4b'],
-      ['Glock-18', 'Kindling', 'stripes', '#c4561c', '#2a1a12', '#e0962f'],
+      ['Glock-18', 'Kindling', 'tiger', '#c4561c', '#2a1a12', '#e0962f'],
       ['P250', 'Oat Field', 'camo', '#ede4d6', '#c9a77c', '#8a6a48'],
       ['MAC-10', 'Charcoal', 'carbon', '#241c17', '#3b2f27', '#5a4638'],
       ['Nova', 'Birch Bark', 'stripes', '#f4efe6', '#2a2420', '#d8cfc2'],
@@ -86,7 +87,7 @@ export const CASES: Case[] = [
       ['M4A1-S', 'Cloudberry', 'fade', '#e0962f', '#ffd27a', '#c4561c'],
       ['Desert Eagle', 'Copper Kettle', 'marble', '#b8642f', '#e29a5a', '#6a3416'],
       ['MP9', 'Lantern', 'hex', '#2a1a12', '#ffc46b', '#c4561c'],
-      ['Galil AR', 'Fox Fur', 'camo', '#d9682a', '#f6efe6', '#3a2618'],
+      ['Galil AR', 'Fox Fur', 'tiger', '#d9682a', '#f6efe6', '#3a2618'],
     ],
     classified: [
       ['USP-S', 'Glød', 'flames', '#1f1813', '#f08a4b', '#ffe29a'],
@@ -101,7 +102,7 @@ export const CASES: Case[] = [
       ['Karambit', 'Ember Fade', 'fade', '#ffe29a', '#f08a4b', '#b8352b'],
       ['Butterfly Knife', 'Glowing Core', 'flames', '#fff3c4', '#ffb04f', '#c4561c'],
       ['Sport Gloves', 'Campfire', 'stripes', '#c4561c', '#2a1a12', '#ffc46b'],
-      ['Talon Knife', 'Charcoal Marble', 'marble', '#2e241d', '#f08a4b', '#110d0a'],
+      ['Talon Knife', 'Charcoal Damascus', 'damascus', '#2e241d', '#f08a4b', '#110d0a'],
     ],
   }),
   makeCase('aurora', 'Aurora Case', 500, ['#2f6f73', '#9be7c4'], {
@@ -111,7 +112,7 @@ export const CASES: Case[] = [
       ['MP9', 'Snowdrift', 'waves', '#f4f8fb', '#c5d7e4', '#8ea8bc'],
       ['Nova', 'Spruce', 'camo', '#1f3b2c', '#3f6a4c', '#122119'],
       ['P250', 'Fjord', 'waves', '#1d3b57', '#3f7aa8', '#9cc6e4'],
-      ['MAC-10', 'Ice Shelf', 'hex', '#cfe9f5', '#6fa8c8', '#ffffff'],
+      ['MAC-10', 'Ice Shelf', 'geo', '#cfe9f5', '#6fa8c8', '#ffffff'],
     ],
     restricted: [
       ['Five-SeveN', 'Glacier', 'marble', '#e8f6fb', '#7fc0dc', '#3d7f9e'],
@@ -122,7 +123,7 @@ export const CASES: Case[] = [
     classified: [
       ['AUG', 'Northern Lights', 'waves', '#0b1b2b', '#3fe0a0', '#8c5ad8'],
       ['Desert Eagle', 'Midnight Sun', 'fade', '#ffd36b', '#f08a4b', '#3a2a6b'],
-      ['USP-S', 'Fjordglass', 'hex', '#0f2a3d', '#4fc3d9', '#d8f6ff'],
+      ['USP-S', 'Fjordglass', 'circuit', '#0f2a3d', '#4fc3d9', '#d8f6ff'],
     ],
     covert: [
       ['AWP', 'Aurora Borealis', 'waves', '#06121f', '#2ef0a6', '#b06bff'],
@@ -130,7 +131,7 @@ export const CASES: Case[] = [
     ],
     rare: [
       ['Bayonet', 'Aurora Fade', 'fade', '#2ef0a6', '#4fa0ff', '#b06bff'],
-      ['Karambit', 'Starlight', 'digital', '#0a0f24', '#f3f6ff', '#6b7cff'],
+      ['Karambit', 'Starlight', 'splatter', '#0a0f24', '#f3f6ff', '#6b7cff'],
       ['Flip Knife', 'Glacier Marble', 'marble', '#ffffff', '#8fd3f0', '#2a6f95'],
       ['Driver Gloves', 'Polar', 'stripes', '#f4f8fb', '#3b6d8f', '#c5d7e4'],
     ],
@@ -139,20 +140,20 @@ export const CASES: Case[] = [
     milspec: [
       ['Galil AR', 'Streetlight', 'stripes', '#1a1a22', '#ffcf4a', '#3a3a48'],
       ['P250', 'Night Owl', 'camo', '#2b2440', '#5a4b7a', '#151022'],
-      ['MAC-10', 'Neon Rain', 'stripes', '#120f1f', '#3ef2ff', '#ff4fd8'],
+      ['MAC-10', 'Neon Rain', 'splatter', '#120f1f', '#3ef2ff', '#ff4fd8'],
       ['Glock-18', 'Static', 'digital', '#202028', '#8a8aa0', '#d8d8e8'],
       ['SG 553', 'Asphalt', 'carbon', '#1c1c20', '#2c2c33', '#45454f'],
       ['Nova', 'Firefly', 'hex', '#0f1a12', '#c8ff5a', '#2d4a1f'],
     ],
     restricted: [
       ['M4A1-S', 'Moonlit', 'fade', '#d9dcff', '#6b70c8', '#1c1d3f'],
-      ['P90', 'Arcade', 'digital', '#1a0f2e', '#ff4fd8', '#3ef2ff'],
+      ['P90', 'Arcade', 'geo', '#1a0f2e', '#ff4fd8', '#3ef2ff'],
       ['MP9', 'Glowworm', 'waves', '#08130c', '#9dff5a', '#2b6b2b'],
       ['Desert Eagle', 'Night Market', 'hex', '#2a0f1f', '#ff7a45', '#ffd36b'],
     ],
     classified: [
       ['AK-47', 'Neon Fox', 'flames', '#170a26', '#ff5fa2', '#ffb04f'],
-      ['AWP', 'Lightning Bug', 'digital', '#06100a', '#d6ff4a', '#3ef2ff'],
+      ['AWP', 'Lightning Bug', 'circuit', '#06100a', '#d6ff4a', '#3ef2ff'],
       ['Five-SeveN', 'Afterglow', 'fade', '#ff5fa2', '#8c5ad8', '#1a1440'],
     ],
     covert: [
@@ -171,10 +172,12 @@ export const CASES: Case[] = [
 /** The slot machine: three reels, three rows, five lines (the rows and both diagonals). */
 export const SLOT_SYMBOLS = ['cherry', 'lemon', 'bell', 'star', 'diamond', 'seven', 'flame'] as const;
 export type SlotSymbol = (typeof SLOT_SYMBOLS)[number];
-/** Three on a line pays this many times the line's bet. The flame stands in for anything, and three flames is the jackpot. */
-export const SLOT_PAYS: Record<SlotSymbol, number> = { cherry: 6, lemon: 10, bell: 15, star: 25, diamond: 50, seven: 150, flame: 500 };
-/** Two cherries from the left pay a little too. */
-export const SLOT_TWO_CHERRIES = 1;
+/** Three on a line pays this many times the whole bet, and every line pays. The flame stands in for anything, and three
+ * flames is the jackpot. With the strips below about half of all spins win something and the machine pays back
+ * about 99.6% over time (server/test/casino.test.ts checks both). */
+export const SLOT_PAYS: Record<SlotSymbol, number> = { cherry: 1, lemon: 2, bell: 3, star: 5, diamond: 10, seven: 20, flame: 100 };
+/** Two cherries from the left pay half the bet back. */
+export const SLOT_TWO_CHERRIES = 0.5;
 export const SLOT_LINES = [
   [1, 1, 1],
   [0, 0, 0],
@@ -185,9 +188,9 @@ export const SLOT_LINES = [
 export const SLOT_BETS = [5, 25, 50, 100, 250, 500, 1000];
 /** Each reel's strip, top to bottom, as counts of each symbol (spread out evenly when the strip is built). */
 const STRIP_COUNTS: Record<SlotSymbol, number>[] = [
-  { cherry: 6, lemon: 8, bell: 7, star: 5, diamond: 3, seven: 2, flame: 1 },
-  { cherry: 6, lemon: 8, bell: 7, star: 5, diamond: 3, seven: 2, flame: 1 },
-  { cherry: 6, lemon: 8, bell: 7, star: 5, diamond: 3, seven: 2, flame: 1 },
+  { cherry: 8, lemon: 8, bell: 4, star: 4, diamond: 2, seven: 2, flame: 1 },
+  { cherry: 8, lemon: 8, bell: 4, star: 4, diamond: 2, seven: 2, flame: 1 },
+  { cherry: 8, lemon: 8, bell: 4, star: 4, diamond: 2, seven: 2, flame: 1 },
 ];
 export const SLOT_STRIPS: SlotSymbol[][] = STRIP_COUNTS.map((counts, r) => {
   // Deal the symbols round-robin so the same ones don't bunch up; each reel starts at a different symbol.
@@ -204,7 +207,7 @@ export const SLOT_STRIPS: SlotSymbol[][] = STRIP_COUNTS.map((counts, r) => {
   return strip;
 });
 
-/** What a line of three pays, per chip bet on it. */
+/** What a line of three pays, times the bet. */
 export function linePays(line: SlotSymbol[]): number {
   const [a, b] = line;
   const wild = (s: SlotSymbol) => s === 'flame';

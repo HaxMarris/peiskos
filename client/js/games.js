@@ -56,7 +56,7 @@ function openGamePicker() {
       </button>`).join('')}
     </div>
     <h3 class="game-picks-head">Casino</h3>
-    <p class="small muted">Play chips only. Everyone gets 5,000 to start, and more for free every day.</p>
+    <p class="small muted">Play chips only. Everyone gets 10,000 to start, and more for free every day.</p>
     <div class="game-picks casino-picks">${Object.entries(CASINO_GAMES).map(([tab, c]) => `
       <button type="button" class="game-pick" data-casino="${tab}">
         <span class="game-pick-icon" aria-hidden="true">${c.icon}</span>

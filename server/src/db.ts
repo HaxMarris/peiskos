@@ -745,6 +745,13 @@ function addCasino(db: Db) {
     );
     CREATE INDEX IF NOT EXISTS casino_items_by_user ON casino_items(user_id, id);
   `);
+  // 2026-10-22: the slots paid too little, so everyone starts over with 10,000 chips (once). Cases and skins stay;
+  // a blackjack hand in play is dropped, and nobody is at a poker table while the server starts.
+  inTransaction(db, () => {
+    if (db.prepare("SELECT 1 FROM app_secrets WHERE name = 'casino_reset_2026_10'").get()) return;
+    db.prepare('UPDATE casino_wallets SET chips = 10000, at_table = 0, blackjack = NULL').run();
+    db.prepare("INSERT INTO app_secrets (name, value) VALUES ('casino_reset_2026_10', ?)").run(String(Date.now()));
+  });
 }
 
 /** What a login token is kept as: its SHA-256, so a copy of the database (a backup) can't be used to log in. */
