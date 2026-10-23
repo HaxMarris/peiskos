@@ -1702,6 +1702,28 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
   html.ios-app body { box-sizing: border-box; padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 }
 
+/* A phone on its side: the computer layout, but only about 400px tall, so the fire's header, chat
+   bar and buttons shrink to leave the circle some room. */
+@media (min-width: 761px) and (max-height: 500px) {
+  .fire-main .stage-head { min-height: 0; padding: 4px 12px 4px 16px; }
+  .fire-main .stage-head h1 { font-size: 20px; }
+  .fire-chat-bar { min-height: 38px; margin-bottom: 6px; }
+  .fire-chat-bar-text { flex-direction: row; align-items: baseline; gap: 8px; }
+  .fire-controls { gap: 8px; padding: 4px 12px 8px; }
+  .fire-btn { width: 40px; height: 40px; }
+  .fire-btn svg { width: 19px; height: 19px; }
+  .fc > span { display: none; }
+  .fire-ring-wrap { padding: 4px; }
+  .video-view .stage-head { padding: 4px 12px; }
+  .video-view .stage-head h1 { font-size: 20px; }
+  /* Watching something: the stream as big as fits, everyone else small squares under it. */
+  .stage-grid .vtile.focus { width: auto; max-width: 100%; height: max(140px, calc(100dvh - 230px - env(safe-area-inset-bottom))); }
+  .stage-grid.focused { grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+  .stage-grid.focused .vtile:not(.focus) { aspect-ratio: 1; }
+  .stage-grid.focused .vtile:not(.focus) .avatar.lg { width: 36px; height: 36px; font-size: 15px; margin-bottom: 16px; }
+  .stage-grid.focused .vtile:not(.focus) .vtile-name { left: 4px; bottom: 4px; max-width: calc(100% - 8px); padding: 2px 6px; font-size: 11px; }
+}
+
 /* Names in a role's colour: the role's own colour where it's readable, otherwise the same hue
    lightened (dark theme) or darkened (light theme) until it reads on the cards. */
 .named { color: var(--name); color: oklch(from var(--name) var(--name-l) c h); }
