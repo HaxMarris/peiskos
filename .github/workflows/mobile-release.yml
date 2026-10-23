@@ -2,9 +2,10 @@
 #
 # - On every pull request that touches the apps or the web client, both are built to check
 #   they still build (the Android test build can be downloaded from the run's page).
-# - Publish a release on GitHub (tag e.g. v0.7.0) and the Android app is attached to it, signed
-#   with Peiskos's own key, and the iPhone app goes to TestFlight. Each only happens once its
-#   secrets are set; see mobile/README.md.
+# - "Start release" (release.yml) runs it for a draft release, and so does publishing a release
+#   on GitHub by hand (tag e.g. v0.7.0): the Android app is attached to the release, signed with
+#   Peiskos's own key, and the iPhone app goes to TestFlight and is sent for Apple's review. Each
+#   only happens once its secrets are set; see mobile/README.md.
 name: Mobile release
 
 on:
@@ -16,14 +17,35 @@ on:
       - client/**
       - .github/workflows/mobile-release.yml
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      tag:
+        description: The draft release's tag, like v0.8.12
+        type: string
+        required: true
+      iphone:
+        description: Build the iPhone app and send it to TestFlight
+        type: boolean
+        default: true
+    outputs:
+      ios_build_id:
+        description: App Store Connect's id for the uploaded build, when it went to TestFlight
+        value: ${{ jobs.ios.outputs.build_id }}
+      ios_review:
+        description: true when the build is waiting on Apple's TestFlight review
+        value: ${{ jobs.ios.outputs.review }}
 
 # Read-only by default; only the Android job attaches its app to a release.
 permissions:
   contents: read
 
 concurrency:
-  group: mobile-${{ github.ref }}
-  cancel-in-progress: true
+  group: mobile-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The release this build is for, if any: the draft "Start release" made, or one published by hand.
+  RELEASE_TAG: ${{ inputs.tag || (github.event_name == 'release' && github.ref_name) || '' }}
 
 jobs:
   android:
@@ -52,7 +74,7 @@ jobs:
       - name: Version
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = release ]; then v="${GITHUB_REF_NAME#v}"; else v=0.0.0; fi
+          if [ -n "$RELEASE_TAG" ]; then v="${RELEASE_TAG#v}"; else v=0.0.0; fi
           IFS=. read -r major minor patch <<< "${v%%-*}"
           code=$(( major * 1000000 + minor * 1000 + ${patch:-0} ))
           echo "APP_VERSION=$v" >> "$GITHUB_ENV"
@@ -84,16 +106,22 @@ jobs:
           name: peiskos-android
           path: mobile/dist/*.apk
           if-no-files-found: error
-      - uses: softprops/action-gh-release@v2
-        if: github.event_name == 'release' && hashFiles('mobile/dist/*-test.apk') == ''
-        with:
-          files: mobile/dist/*.apk
+      - name: Attach to the release
+        if: env.RELEASE_TAG != '' && hashFiles('mobile/dist/*-test.apk') == ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$RELEASE_TAG" mobile/dist/*.apk --clobber --repo "$GITHUB_REPOSITORY"
 
   ios:
     name: iPhone app
+    if: inputs.iphone != false
     # Apple only takes apps built with Xcode 26 (the iOS 26 SDK) or newer.
     runs-on: macos-26
-    timeout-minutes: 45
+    # Includes waiting for Apple to process the upload, which can take a while.
+    timeout-minutes: 100
+    outputs:
+      build_id: ${{ steps.submit.outputs.build_id }}
+      review: ${{ steps.submit.outputs.review }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -111,7 +139,7 @@ jobs:
       # manage) and sent straight to TestFlight. Without one, it just checks that the app builds.
       - name: Check the App Store Connect key
         id: asc
-        if: github.event_name == 'release'
+        if: env.RELEASE_TAG != ''
         shell: bash
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
@@ -121,32 +149,14 @@ jobs:
         run: |
           if [ -z "$ASC_KEY" ]; then echo "No App Store Connect key set, so the iPhone app isn't sent to TestFlight."; exit 0; fi
           # Says which secret looks wrong (never what's in it), then asks Apple whether the key works.
-          node - <<'EOF'
-          const crypto = require('node:crypto');
-          const { ASC_KEY: key, ASC_KEY_ID: id, ASC_ISSUER_ID: issuer, TEAM_ID: team } = process.env;
-          const fail = (msg) => { console.log(`::error::${msg}`); process.exit(1); };
-          const pem = key.trim().replace(/\r/g, '');
-          if (!/^-----BEGIN PRIVATE KEY-----\n[\s\S]+\n-----END PRIVATE KEY-----$/.test(pem))
-            fail('APP_STORE_CONNECT_KEY should be the whole .p8 file, including the -----BEGIN PRIVATE KEY----- and -----END PRIVATE KEY----- lines.');
-          if (!/^[A-Z0-9]{10}$/.test((id ?? '').trim())) fail('APP_STORE_CONNECT_KEY_ID should be the 10-character Key ID (letters and digits), like 2X9R4HXF34.');
-          if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test((issuer ?? '').trim())) fail('APP_STORE_CONNECT_ISSUER_ID should be the Issuer ID shown above the keys list, like 57246542-96fe-1a63-e053-0824d011072a.');
-          if (!/^[A-Z0-9]{10}$/.test((team ?? '').trim())) fail('APPLE_TEAM_ID should be the 10-character Team ID from Membership details.');
-          let privateKey;
-          try { privateKey = crypto.createPrivateKey(pem); } catch { fail("APP_STORE_CONNECT_KEY isn't a readable .p8 key. Copy the whole file again from Notepad."); }
-          const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-          const now = Math.floor(Date.now() / 1000);
-          const head = `${b64({ alg: 'ES256', kid: id.trim(), typ: 'JWT' })}.${b64({ iss: issuer.trim(), iat: now, exp: now + 600, aud: 'appstoreconnect-v1' })}`;
-          const jwt = `${head}.${crypto.sign('sha256', Buffer.from(head), { key: privateKey, dsaEncoding: 'ieee-p1363' }).toString('base64url')}`;
-          fetch('https://api.appstoreconnect.apple.com/v1/apps?filter[bundleId]=app.peiskos', { headers: { authorization: `Bearer ${jwt}` } }).then(async (r) => {
-            if (r.status === 401) fail("Apple turned the key down (401). Check that APP_STORE_CONNECT_KEY_ID and APP_STORE_CONNECT_ISSUER_ID belong to this .p8 file, and that it's a Team key (not an Individual key) that hasn't been revoked.");
-            if (r.status === 403) fail('Apple says the key may not do this (403). Make it a Team key with Admin access, and accept any new agreements in App Store Connect.');
-            if (!r.ok) fail(`App Store Connect answered ${r.status}. Try the release again in a while.`);
-            const { data } = await r.json();
-            if (!data.length) fail('The key works, but App Store Connect has no app with the bundle ID app.peiskos yet. Create it (Apps, +, New App) first.');
-            console.log(`The key works, and App Store Connect has ${data[0].attributes.name}.`);
-          });
-          EOF
+          node .github/scripts/app-store.mjs check
           echo "upload=yes" >> "$GITHUB_OUTPUT"
+          # The version people see only changes with the middle number (v0.8.12 -> 0.8), so each
+          # patch release is a new build of the same version, which Apple usually lets through
+          # TestFlight review in minutes. The build number just has to grow.
+          v="${RELEASE_TAG#v}"; v="${v%%-*}"
+          echo "version=$(echo "$v" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+          echo "build=$(date -u +%y%m%d).$(date -u +%H%M%S)" >> "$GITHUB_OUTPUT"
       - name: Build
         shell: bash
         working-directory: mobile/ios/App
@@ -161,13 +171,12 @@ jobs:
             printf '%s\n' "$ASC_KEY" | tr -d '\r' > "$key"
             auth=(-allowProvisioningUpdates -authenticationKeyPath "$key" -authenticationKeyID "$(echo "$ASC_KEY_ID" | tr -d '[:space:]')" -authenticationKeyIssuerID "$(echo "$ASC_ISSUER_ID" | tr -d '[:space:]')")
             team="$(echo "$TEAM_ID" | tr -d '[:space:]')"
-            version="${GITHUB_REF_NAME#v}"
             # Built unsigned, then signed for the App Store while exporting: signing while building
             # would want a development profile, which needs a registered iPhone.
             xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
               -archivePath "$RUNNER_TEMP/Peiskos.xcarchive" \
               DEVELOPMENT_TEAM="$team" CODE_SIGNING_ALLOWED=NO \
-              MARKETING_VERSION="${version%%-*}" CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+              MARKETING_VERSION="${{ steps.asc.outputs.version }}" CURRENT_PROJECT_VERSION="${{ steps.asc.outputs.build }}" \
               archive
             cat > "$RUNNER_TEMP/export.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
@@ -185,3 +194,12 @@ jobs:
             xcodebuild -project App.xcodeproj -scheme App -configuration Release -destination 'generic/platform=iOS' \
               CODE_SIGNING_ALLOWED=NO build
           fi
+      - name: Send to TestFlight review
+        id: submit
+        if: steps.asc.outputs.upload == 'yes'
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          WHATS_NEW: Peiskos ${{ env.RELEASE_TAG }}
+        run: node .github/scripts/app-store.mjs submit "${{ steps.asc.outputs.version }}" "${{ steps.asc.outputs.build }}"

@@ -1,0 +1,70 @@
+# Publishes the releases "Start release" left waiting for Apple, once Apple approves their iPhone
+# build in TestFlight. It checks every 15 minutes. Run it by hand with a version and "now" ticked
+# to publish that release straight away, without waiting.
+name: Finish release
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Only this release, like v0.8.12 (leave empty for all that are waiting)
+        required: false
+      now:
+        description: Publish it now, without waiting for Apple
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-finish
+  cancel-in-progress: false
+
+jobs:
+  finish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ONLY: ${{ inputs.version }}
+          NOW: ${{ inputs.now }}
+        run: |
+          only="$(echo "$ONLY" | tr -d '[:space:]')"
+          [ -z "$only" ] || [[ "$only" == v* ]] || only="v$only"
+          if [ "$NOW" = true ] && [ -z "$only" ]; then echo "::error::Say which version to publish now."; exit 1; fi
+          # Draft releases, with the iPhone build each one is waiting on (empty if it isn't waiting).
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+            --jq '.[] | select(.draft) | [.tag_name, ((.body // "") | capture("waiting-for-apple: (?<id>[A-Za-z0-9-]+)").id // "")] | @tsv' > drafts.tsv
+          failed=0
+          while IFS=$'\t' read -r tag build; do
+            [ -z "$only" ] || [ "$tag" = "$only" ] || continue
+            if [ "$NOW" = true ]; then
+              state=approved
+            elif [ -n "$build" ]; then
+              state="$(node .github/scripts/app-store.mjs status "$build")"
+            else
+              continue # still building, or a draft made by hand
+            fi
+            echo "$tag: $state"
+            case "$state" in
+              approved)
+                gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+                echo "Published $tag." >> "$GITHUB_STEP_SUMMARY" ;;
+              rejected*)
+                # Stop checking it, so this doesn't fail every 15 minutes.
+                body="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+                gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "${body//waiting-for-apple:/apple-rejected:}"
+                echo "::error::Apple didn't approve the iPhone build for $tag ($state). App Store Connect's TestFlight page says why. To release anyway, run Finish release with $tag and tick \"now\"."
+                failed=1 ;;
+            esac
+          done < drafts.tsv
+          if [ -n "$only" ] && ! grep -q "^$only	" drafts.tsv; then echo "::error::There's no draft release called $only."; exit 1; fi
+          exit $failed
