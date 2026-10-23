@@ -730,7 +730,10 @@ function renderFire(status) {
       seat.el.append(watch);
     } else if (!sharing?.screen && watch) watch.remove();
     const watchers = sharing?.screen ? viewersOf(id).length : 0;
-    if (watch) watch.lastChild.textContent = (me ? 'Your screen' : 'Watch screen') + (watchers ? ` · ${watchers} watching` : '');
+    // A phone's seats are narrow, so the button says less there.
+    const short = matchMedia('(max-width: 760px)').matches;
+    if (watch) watch.lastChild.textContent = (me ? (short ? 'Yours' : 'Your screen') : (short ? 'Watch' : 'Watch screen'))
+      + (watchers ? (short ? ` · ${watchers}` : ` · ${watchers} watching`) : '');
   });
 
   // Open seats fill the rest of a small circle.
