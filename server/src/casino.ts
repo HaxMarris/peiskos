@@ -156,6 +156,20 @@ export function casino(ctx: CasinoContext) {
       .all(h, ...ids);
   });
 
+  /** The lowest floats anyone in the hearth has unboxed, best per skin, like a CS float list. */
+  route('GET', '/api/servers/:id/casino/floats', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    const ids = ctx.serverMemberIds(h);
+    if (!ids.length) return [];
+    return db
+      .prepare(
+        `SELECT user_id AS userId, skin_id AS skinId, best_float AS float FROM casino_found
+         WHERE server_id = ? AND user_id IN (${ids.map(() => '?').join(',')})
+         ORDER BY best_float ASC LIMIT 10`,
+      )
+      .all(h, ...ids);
+  });
+
   // ---- slots
 
   route('POST', '/api/servers/:id/casino/slots', ({ user, params, body }) => {

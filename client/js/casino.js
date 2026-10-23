@@ -199,31 +199,58 @@ async function claimFreeChips() {
   } catch (err) { toast(err.message); }
 }
 
-async function openLeaders() {
+async function openLeaders(board = 'chips') {
   const s = roomById(casino.channelId)?.s;
   if (!s) return;
-  modal(`<h2>Richest in ${escapeHtml(s.name)}</h2><p class="small muted">Chips, plus what's in their inventory.</p><ol class="leaders" id="leaders"><li class="muted">Counting…</li></ol>
+  const floats = board === 'floats';
+  modal(`<h2>${floats ? 'Lowest floats' : 'Richest'} in ${escapeHtml(s.name)}</h2>
+    <div class="leader-tabs" role="tablist">
+      <button type="button" role="tab" data-board="chips" aria-selected="${!floats}">Richest</button>
+      <button type="button" role="tab" data-board="floats" aria-selected="${floats}">Lowest floats</button>
+    </div>
+    <p class="small muted">${floats ? 'The cleanest skins anyone here has unboxed. Lower is better.' : "Chips, plus what's in their inventory."}</p>
+    <ol class="leaders${floats ? ' float-leaders' : ''}" id="leaders"><li class="muted">Counting…</li></ol>
     <div class="modal-row"><button type="button" class="btn" data-close>Close</button></div>`);
+  document.querySelectorAll('.leader-tabs [data-board]').forEach((b) => b.addEventListener('click', () => b.dataset.board !== board && openLeaders(b.dataset.board)));
+  const who = (userId) => {
+    const av = document.createElement('span');
+    av.className = 'avatar xs';
+    setAvatar(av, nameOf(userId, 'Someone'), avatarOf(userId));
+    return av;
+  };
   try {
-    const rows = await api(`/api/servers/${s.id}/casino/leaders`);
+    const rows = await api(`/api/servers/${s.id}/casino/${floats ? 'floats' : 'leaders'}`);
     const list = $('#leaders');
     if (!list) return;
     list.replaceChildren(...rows.map((r, i) => {
       const li = document.createElement('li');
-      const av = document.createElement('span');
-      av.className = 'avatar xs';
-      setAvatar(av, nameOf(r.userId, 'Someone'), avatarOf(r.userId));
       li.innerHTML = `<span class="leader-rank">${i + 1}</span>`;
+      if (floats) {
+        const skin = skinById(r.skinId);
+        const wear = wearOf(r.float, casino.data.wears);
+        const item = document.createElement('span');
+        item.className = 'leader-skin';
+        item.innerHTML = skin
+          ? `<span class="leader-art r-${skin.rarity}" style="--rarity:${RARITY[skin.rarity].color}">${skinArt(skin, r.float)}</span>
+            <span class="leader-name"><b>${skin.rarity === 'rare' ? '★ ' : ''}${escapeHtml(skin.name)}</b><span class="small muted">${escapeHtml(skin.weapon)} · ${wear.name}</span></span>`
+          : '<span class="leader-name muted">A retired skin</span>';
+        const f = document.createElement('span');
+        f.className = 'leader-float';
+        f.innerHTML = `<b>${r.float.toFixed(14)}</b><span class="small muted">${escapeHtml(nameOf(r.userId, 'Someone'))}</span>`;
+        f.prepend(who(r.userId));
+        li.append(item, f);
+        return li;
+      }
       const name = document.createElement('span');
       name.className = 'leader-name';
       name.textContent = nameOf(r.userId, 'Someone');
       const n = document.createElement('span');
       n.className = 'leader-chips';
       n.innerHTML = `<b>${chipsText(r.chips + r.items)}</b>${r.items ? `<span class="small muted">${chipsText(r.items)} in items</span>` : ''}`;
-      li.append(av, name, n);
+      li.append(who(r.userId), name, n);
       return li;
     }));
-    if (!rows.length) list.innerHTML = '<li class="muted">Nobody has played yet.</li>';
+    if (!rows.length) list.innerHTML = `<li class="muted">${floats ? 'Nobody has opened a case yet.' : 'Nobody has played yet.'}</li>`;
   } catch (err) { $('#leaders') && ($('#leaders').innerHTML = `<li class="error">${escapeHtml(err.message)}</li>`); }
 }
 

@@ -324,6 +324,20 @@
 .leaders li:first-child .leader-rank { color: #c98a12; }
 .leader-name { flex: 1; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .leader-chips { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.leader-tabs { display: flex; gap: 4px; margin: 4px 0 2px; }
+.leader-tabs button { border: 0; background: transparent; color: var(--muted); font: inherit; font-weight: 800; padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.leader-tabs button:hover { background: var(--hover); color: var(--text-strong); }
+.leader-tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--text-strong); box-shadow: 0 0 0 2px var(--accent); }
+.leader-name b, .leader-name > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.float-leaders li { gap: 8px; }
+.leader-skin { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; }
+.leader-art { flex: none; width: 64px; height: 40px; display: grid; place-items: center; border-radius: 8px; border-bottom: 3px solid var(--rarity);
+  background: radial-gradient(circle at 50% 40%, color-mix(in srgb, var(--rarity) 30%, transparent), transparent 70%); }
+.leader-art svg { width: 100%; height: 100%; }
+.leader-float { flex: none; display: grid; grid-template-columns: auto auto; grid-template-rows: auto auto; column-gap: 6px; align-items: center; justify-items: end; line-height: 1.15; }
+.leader-float .avatar { grid-row: 1 / 3; }
+.leader-float b { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; font-variant-numeric: tabular-nums; }
+.leader-float .small { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .buyin-amount { margin: 0; display: flex; align-items: center; justify-content: center; gap: 10px; font-family: var(--font-head); font-size: 28px; color: var(--text-strong); }
 #buyin { width: 100%; accent-color: var(--accent); }
 
@@ -337,6 +351,8 @@
   .chip-text b { font-size: 22px; }
   .casino-tabs { padding: 6px 12px; }
   .casino-tabs button { padding: 8px 11px; }
+  .leader-art { width: 48px; height: 32px; }
+  .leader-float b { font-size: 11px; }
   .casino-body { padding: 4px 12px 8px; }
   .casino-note { padding: 4px 12px 8px; }
   .poker-stage { padding: 30px 30px 52px; }

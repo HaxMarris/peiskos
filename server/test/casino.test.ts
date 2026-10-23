@@ -209,6 +209,13 @@ test('chips: slots, cases, blackjack and free chips', async () => {
   chips += five.items.reduce((n: number, i: any) => n + i.value, 0);
   assert.equal(back.wallet.chips, chips);
 
+  // The float leaderboard: lowest first, from the book, so sold skins still count.
+  const floats = (await call(`${C}/floats`, { token: t })).data;
+  const book = (await call(C, { token: t })).data.found;
+  assert.equal(floats.length, book.length);
+  assert.deepEqual(floats.map((f: any) => f.float), book.map((f: any) => f.bestFloat).sort((a: number, b: number) => a - b));
+  assert.ok(floats.every((f: any) => f.userId === max.user.id));
+
   // Another hearth is a fresh start: its own chips, inventory and book, and nothing crosses over.
   const other = (await call('/api/servers', { body: { name: 'Elsewhere' }, token: t })).data;
   const O = `/api/servers/${other.id}/casino`;
