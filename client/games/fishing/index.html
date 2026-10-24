@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Fireside Angler</title>
+<link rel="stylesheet" href="game.css">
+</head>
+<body>
+<p class="loading" id="loading">Getting your tackle box…</p>
+<div class="app" id="app" hidden>
+  <header class="top">
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="main">
+    <section class="stage">
+      <div class="scene" id="scene" tabindex="0" aria-label="Fishing spot. Tap or press Space to cast and hook.">
+        <canvas id="cv"></canvas>
+        <div class="mapnodes" id="mapNodes" hidden></div>
+        <div class="maptitle" id="mapTitle" hidden>Pick a water to walk there</div>
+        <button class="pondtag" id="pondtag" type="button"></button>
+        <div class="hint" id="hint"></div>
+        <div class="meter" id="meter" hidden><div class="zone" id="zone"></div><div class="mark" id="mark"></div></div>
+        <div id="catchbox"></div>
+      </div>
+      <div class="controls">
+        <button class="cast" id="castBtn" type="button">Cast</button>
+        <div class="chips">
+          <button class="chip" type="button" data-go="shop:rods"><span>Rod</span><b id="rodChip"></b></button>
+          <button class="chip" type="button" data-go="shop:bait"><span>Bait</span><b id="baitChip"></b></button>
+        </div>
+      </div>
+      <div class="nets" id="nets"></div>
+      <section class="recent" id="recent"></section>
+    </section>
+
+    <section class="panel">
+      <nav class="tabs" role="tablist" id="tabs">
+        <button role="tab" data-tab="shop">Tackle shop</button>
+        <button role="tab" data-tab="idle">Idle rods</button>
+        <button role="tab" data-tab="hats">Hats</button>
+        <button role="tab" data-tab="coll">Collection</button>
+      </nav>
+      <div class="pane" id="pane"></div>
+    </section>
+  </div>
+  <p class="foot">Saved to your account in this hearth. Idle rods keep fishing while you're away, even with Peiskos closed.</p>
+</div>
+<div id="modalRoot"></div>
+<script src="game.js"></script>
+</body>
+</html>

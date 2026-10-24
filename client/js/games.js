@@ -56,6 +56,14 @@ function openGamePicker() {
         <span class="btn">Start</span>
       </button>`).join('')}
     </div>
+    <h3 class="game-picks-head">On your own</h3>
+    <div class="game-picks">
+      <button type="button" class="game-pick" data-fishing>
+        <span class="game-pick-icon" aria-hidden="true">🎣</span>
+        <span class="game-pick-text"><b>Fireside Angler</b><span class="small muted">Fish five waters for 115 species, find hats in treasure chests, and leave idle rods out while you're away.</span></span>
+        <span class="btn">Fish</span>
+      </button>
+    </div>
     <h3 class="game-picks-head">Casino</h3>
     <p class="small muted">Play chips only. Everyone gets 10,000 to start, and more for free every day.</p>
     <div class="game-picks casino-picks">${Object.entries(CASINO_GAMES).map(([tab, c]) => `
@@ -71,6 +79,7 @@ function openGamePicker() {
     sendGame({ action: 'start', game: b.dataset.game });
   }));
   card.querySelector('[data-join]')?.addEventListener('click', () => { closeModal(); joinFireGame(); });
+  card.querySelector('[data-fishing]').onclick = () => { closeModal(); openFishing(); };
   card.querySelectorAll('[data-casino]').forEach((b) => (b.onclick = () => {
     closeModal();
     openCasino(b.dataset.casino);
