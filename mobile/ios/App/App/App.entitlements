@@ -5,5 +5,10 @@
 	<!-- Alerts from the server, through Apple. Release builds switch this to production when signed. -->
 	<key>aps-environment</key>
 	<string>development</string>
+	<!-- The folder shared with the share extension (ShareExtension/). -->
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.app.peiskos</string>
+	</array>
 </dict>
 </plist>
