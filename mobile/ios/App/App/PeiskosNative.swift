@@ -7,6 +7,7 @@ import UserNotifications
 class PeiskosBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(VoiceCallPlugin())
+        bridge?.registerPluginInstance(SharePlugin())
     }
 }
 
@@ -134,5 +135,47 @@ public class VoiceCallPlugin: CAPPlugin, CAPBridgedPlugin, NotificationHandlerPr
     public func didReceive(response: UNNotificationResponse) {
         guard response.notification.request.identifier == Self.notificationId else { return }
         if response.actionIdentifier == "mute" || response.actionIdentifier == "leave" { tapped(response.actionIdentifier) }
+    }
+}
+
+/// What was shared to Peiskos from another app's share sheet. The share extension
+/// (ShareExtension/) leaves it in the folder the two share; the page takes it with take(), and
+/// hears "shared" when Peiskos comes back to the front with something waiting.
+@objc(SharePlugin)
+public class SharePlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "SharePlugin"
+    public let jsName = "Share"
+    public let pluginMethods: [CAPPluginMethod] = [
+        CAPPluginMethod(name: "take", returnType: CAPPluginReturnPromise)
+    ]
+
+    private var folder: URL? {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.app.peiskos")?.appendingPathComponent("Shared", isDirectory: true)
+    }
+
+    override public func load() {
+        NotificationCenter.default.addObserver(self, selector: #selector(cameToFront), name: UIApplication.didBecomeActiveNotification, object: nil)
+    }
+
+    @objc private func cameToFront() {
+        if let folder = folder, FileManager.default.fileExists(atPath: folder.appendingPathComponent("share.json").path) {
+            notifyListeners("shared", data: [:])
+        }
+    }
+
+    @objc func take(_ call: CAPPluginCall) {
+        guard let folder = folder,
+              let data = try? Data(contentsOf: folder.appendingPathComponent("share.json")),
+              let manifest = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return call.resolve([:])
+        }
+        var files: [[String: String]] = []
+        for file in manifest["files"] as? [[String: String]] ?? [] {
+            guard let path = file["path"], let bytes = try? Data(contentsOf: folder.appendingPathComponent(path)) else { continue }
+            files.append(["name": file["name"] ?? "shared", "type": file["type"] ?? "application/octet-stream", "data": bytes.base64EncodedString()])
+        }
+        // Taken: it isn't offered again.
+        try? FileManager.default.removeItem(at: folder)
+        call.resolve(["text": manifest["text"] as? String ?? "", "files": files])
     }
 }

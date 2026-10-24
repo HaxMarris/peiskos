@@ -4,6 +4,18 @@
 <dict>
   <key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<!-- peiskos://share: the share extension opening Peiskos with what was shared. -->
+			<key>CFBundleURLName</key>
+			<string>app.peiskos</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>peiskos</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>

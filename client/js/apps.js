@@ -808,9 +808,10 @@ function forgetOffline() {
 
 // ---------------------------------------------------------------- shared from another app (phones)
 //
-// Installed on Android (from the browser or as the app), Peiskos shows in the share menu. In a
-// browser the service worker catches what was shared and opens Peiskos; the Android app hands it
-// over itself. Either way Peiskos then asks which room it goes to.
+// Installed on Android (from the browser or as the app) and as the iPhone app, Peiskos shows in
+// the share menu. In a browser the service worker catches what was shared and opens Peiskos; the
+// apps hand it over themselves (on iPhones through a share extension). Either way Peiskos then
+// asks which room it goes to.
 
 async function openPendingShare() {
   if (isPhoneApp) return openAppShare();
