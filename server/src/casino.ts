@@ -198,6 +198,13 @@ export function casino(ctx: CasinoContext) {
     const won = wins.reduce((n, w) => n + w.pays, 0);
     give(user.id, h, won);
     walletChanged(user.id, h);
+    // Everyone else looking at the casino at your fire sees your machine spin.
+    const at = ctx.inVoice.get(user.id);
+    if (at !== undefined && ctx.channelById(at)?.serverId === h) {
+      const ids = new Set<number>();
+      for (const w of watching.values()) if (w.channelId === at && w.userId !== user.id) ids.add(w.userId);
+      if (ids.size) ctx.sendTo(ids, { type: 'slot_spin', channelId: at, userId: user.id, bet, stops, grid, wins, won });
+    }
     return { stops, grid, wins, won, wallet: walletView(user.id, h) };
   });
 

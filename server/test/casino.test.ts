@@ -572,6 +572,19 @@ test('case battles at the fire', async (t) => {
   assert.deepEqual(pulls.map((p: any) => p.value), [...pulls.map((p: any) => p.value)].sort((a, b) => b - a));
   assert.equal((await call(`/api/servers/${hearth.id}/casino/pulls?since=${Date.now() + 1000}`, { token: ella.token })).data.length, 0);
 
+  // Someone looking at the casino at the fire sees the others' slot spins, not their own.
+  socks[1].ws.send(JSON.stringify({ type: 'casino', channelId: room.id }));
+  await wait(100);
+  const spun = (await call(`/api/servers/${hearth.id}/casino/slots`, { body: { bet: 20 }, token: max.token })).data;
+  await wait(100);
+  const seen = socks[1].events.filter((e) => e.type === 'slot_spin');
+  assert.equal(seen.length, 1);
+  assert.deepEqual([seen[0].userId, seen[0].channelId, seen[0].bet, seen[0].won, seen[0].stops], [max.user.id, room.id, 20, spun.won, spun.stops]);
+  assert.equal(socks[2].events.some((e) => e.type === 'slot_spin'), false); // Ella isn't looking
+  await call(`/api/servers/${hearth.id}/casino/slots`, { body: { bet: 20 }, token: sam.token });
+  await wait(100);
+  assert.equal(socks[1].events.filter((e) => e.type === 'slot_spin').length, 1);
+
   // Leaving gives the chips back, and so does leaving the fire.
   const start = (await wallet(ella)).wallet.chips;
   const b3 = (await call(fire, { body: two, token: ella.token })).data.battle;
