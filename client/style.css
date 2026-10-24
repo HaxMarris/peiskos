@@ -99,6 +99,8 @@
 }
 
 * { box-sizing: border-box; }
+/* No double-tap zoom anywhere; pinch zoom still works in browsers. */
+html { touch-action: manipulation; }
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; }
 button { font: inherit; cursor: pointer; color: inherit; }
 input, textarea, select { font: inherit; color: var(--text); }

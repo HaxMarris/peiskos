@@ -423,9 +423,10 @@ const phonePlatform = isPhoneApp ? window.Capacitor.getPlatform() : null;
 const native = (plugin, method, options = {}) => window.Capacitor.nativePromise(plugin, method, options);
 
 if (isPhoneApp) document.documentElement.classList.add(`${phonePlatform}-app`);
-// On iPhones the page reaches under the notch and the home bar, and keeps clear of them itself.
-// (Android keeps the page between its bars instead.)
-if (phonePlatform === 'ios') $('meta[name=viewport]').content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+// The apps never zoom: not on a double tap, a pinch, or tapping into a text box (iPhones zoom into
+// any box with text under 16px). On iPhones the page also reaches under the notch and the home
+// bar, and keeps clear of them itself. (Android keeps the page between its bars instead.)
+if (isPhoneApp) $('meta[name=viewport]').content = `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no${phonePlatform === 'ios' ? ', viewport-fit=cover' : ''}`;
 
 // Back closes whatever is open, then goes from a room back to the list, then puts Peiskos away
 // (still running, so a call carries on).
