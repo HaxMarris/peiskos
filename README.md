@@ -346,10 +346,8 @@ published as soon as the builds finish. To publish without waiting, run *Finish 
 version and tick *now*. Don't publish the draft by hand on the Releases page: that builds every
 app a second time.
 
-The iPhone app's version only changes with the middle number (`v0.8.12` is version 0.8), so
-patch releases are new builds of a version Apple has already reviewed, which usually pass in
-minutes. Apple only reviews builds for external TestFlight groups; internal testers get every
-build straight away.
+The iPhone app's version is the release's own number (`v0.8.15` is version 0.8.15). Apple only
+reviews builds for external TestFlight groups; internal testers get every build straight away.
 
 ## 2. Get your friends the app
 

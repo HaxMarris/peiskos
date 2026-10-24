@@ -137,11 +137,11 @@ jobs:
       # With an App Store Connect key, the app is signed by Apple's cloud signing (no certificates to
       # manage) and sent straight to TestFlight. Without one, it just checks that the app builds.
       # The app is always built; it only goes to TestFlight for a release that includes the iPhone.
-      # (Not `inputs.iphone != false`: when nothing passes the input it's null, which GitHub counts
-      # as equal to false.)
+      # GitHub counts null as equal to false, so neither `inputs.iphone != false` nor
+      # `inputs.iphone == null` can tell them apart. As text, null is '' and only an unticked box is 'false'.
       - name: Check the App Store Connect key
         id: asc
-        if: env.RELEASE_TAG != '' && (inputs.iphone == null || inputs.iphone)
+        if: env.RELEASE_TAG != '' && format('{0}', inputs.iphone) != 'false'
         shell: bash
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
@@ -153,11 +153,10 @@ jobs:
           # Says which secret looks wrong (never what's in it), then asks Apple whether the key works.
           node .github/scripts/app-store.mjs check
           echo "upload=yes" >> "$GITHUB_OUTPUT"
-          # The version people see only changes with the middle number (v0.8.12 -> 0.8), so each
-          # patch release is a new build of the same version, which Apple usually lets through
-          # TestFlight review in minutes. The build number just has to grow.
-          v="${RELEASE_TAG#v}"; v="${v%%-*}"
-          echo "version=$(echo "$v" | cut -d. -f1,2)" >> "$GITHUB_OUTPUT"
+          # The version people see is the release's own number (v0.8.15 -> 0.8.15). The build number
+          # is when it was built, so running the same version again still makes a new build.
+          v="${RELEASE_TAG#v}"
+          echo "version=${v%%-*}" >> "$GITHUB_OUTPUT"
           echo "build=$(date -u +%y%m%d).$(date -u +%H%M%S)" >> "$GITHUB_OUTPUT"
       - name: Build
         shell: bash
