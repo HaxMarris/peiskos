@@ -3,7 +3,8 @@
 #
 # 1. It makes a draft release (hidden from everyone) and builds the desktop apps and the Android
 #    app into it.
-# 2. Unless you untick it, the iPhone app goes to TestFlight and is sent for Apple's review.
+# 2. The iPhone app is always built. Unless you untick it, it goes to TestFlight and is sent for
+#    Apple's review.
 # 3. Once Apple approves, "Finish release" (release-finish.yml) publishes the draft. Without the
 #    iPhone app, it's published as soon as the builds are done.
 # 4. Publishing is the go signal: desktop apps offer the update, and a server with AUTO_UPDATE=releases
@@ -17,7 +18,7 @@ on:
         description: The new version, like v0.8.12
         required: true
       iphone:
-        description: Send the iPhone app to TestFlight, and wait for Apple's approval before releasing
+        description: Send the iPhone app to TestFlight, and wait for Apple's approval before releasing (it's built either way)
         type: boolean
         default: true
 
@@ -78,7 +79,8 @@ jobs:
     uses: ./.github/workflows/mobile-release.yml
     with:
       tag: ${{ needs.draft.outputs.tag }}
-      iphone: ${{ inputs.iphone }}
+      # From the form as text ("true"/"false"), so only an unticked box leaves the iPhone out.
+      iphone: ${{ github.event.inputs.iphone != 'false' }}
     secrets: inherit
 
   # Everything built: publish now, or leave a note in the draft for "Finish release" to publish it
