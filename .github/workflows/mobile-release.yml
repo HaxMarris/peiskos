@@ -24,7 +24,7 @@ on:
         type: string
         required: true
       iphone:
-        description: Build the iPhone app and send it to TestFlight
+        description: Send the iPhone app to TestFlight (it's built either way)
         type: boolean
         default: true
     outputs:
@@ -114,9 +114,6 @@ jobs:
 
   ios:
     name: iPhone app
-    # Runs unless "Start release" was told to leave the iPhone out. (Not `inputs.iphone != false`:
-    # when nothing passes the input, it's null, which GitHub counts as equal to false.)
-    if: inputs.iphone == null || inputs.iphone
     # Apple only takes apps built with Xcode 26 (the iOS 26 SDK) or newer.
     runs-on: macos-26
     # Includes waiting for Apple to process the upload, which can take a while.
@@ -139,9 +136,12 @@ jobs:
         working-directory: mobile
       # With an App Store Connect key, the app is signed by Apple's cloud signing (no certificates to
       # manage) and sent straight to TestFlight. Without one, it just checks that the app builds.
+      # The app is always built; it only goes to TestFlight for a release that includes the iPhone.
+      # (Not `inputs.iphone != false`: when nothing passes the input it's null, which GitHub counts
+      # as equal to false.)
       - name: Check the App Store Connect key
         id: asc
-        if: env.RELEASE_TAG != ''
+        if: env.RELEASE_TAG != '' && (inputs.iphone == null || inputs.iphone)
         shell: bash
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
