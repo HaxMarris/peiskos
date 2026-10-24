@@ -99,8 +99,16 @@
 }
 
 * { box-sizing: border-box; }
-/* No double-tap zoom anywhere; pinch zoom still works in browsers. */
-html { touch-action: manipulation; }
+/* No double-tap zoom anywhere (pinch zoom still works in browsers), and no grey flash on taps. */
+html { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+/* In the phone apps, holding a button or a message doesn't select it or bring up the iPhone's
+   magnifier (hold a message for its sheet, which has Copy text). Boxes you type in still do. */
+.ios-app body, .android-app body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ios-app :is(input, textarea, [contenteditable]), .android-app :is(input, textarea, [contenteditable]) { -webkit-user-select: text; user-select: text; -webkit-touch-callout: default; }
+@media (hover: none) {
+  #messages .line { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+  button:active:not(:disabled) { opacity: .65; }
+}
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 15px; }
 button { font: inherit; cursor: pointer; color: inherit; }
 input, textarea, select { font: inherit; color: var(--text); }
@@ -465,6 +473,30 @@ label.check input { width: auto; }
   .modal-row .btn { flex: 1; padding: 12px; }
 }
 @keyframes sheet-up { from { transform: translateY(30px); opacity: .4; } }
+
+/* Hold a message (phones): reactions along the top, then everything else it can do. */
+.msg-sheet { gap: 14px; }
+.sheet-reacts { display: flex; justify-content: space-between; gap: 6px; }
+.sheet-react { flex: 1; aspect-ratio: 1; max-width: 52px; border: 0; border-radius: 50%; background: var(--surface-2); font-size: 24px; display: grid; place-items: center; color: var(--text); }
+.sheet-react svg { width: 22px; height: 22px; }
+.sheet-list { display: flex; flex-direction: column; background: var(--surface-2); border-radius: 14px; overflow: hidden; }
+.sheet-item { border: 0; background: none; text-align: left; padding: 14px 16px; font: inherit; font-size: 16px; color: var(--text); }
+.sheet-item + .sheet-item { border-top: 1px solid var(--line); }
+
+/* Loading older messages, at the top of the list. */
+.older-spinner { width: 22px; height: 22px; margin: 10px auto; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin-older .8s linear infinite; }
+@keyframes spin-older { to { transform: rotate(360deg); } }
+
+/* Phones: the room slides in from the right, and the list from the left when you go back. */
+@media (max-width: 760px) {
+  .app[data-view="chat"] .chat { animation: view-from-right .22s ease-out; }
+  .app[data-view="rooms"] .sidebar { animation: view-from-left .22s ease-out; }
+}
+@keyframes view-from-right { from { transform: translateX(48px); opacity: .4; } }
+@keyframes view-from-left { from { transform: translateX(-48px); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) {
+  .app[data-view="chat"] .chat, .app[data-view="rooms"] .sidebar, .older-spinner { animation: none; }
+}
 
 /* ---------- person sheet ---------- */
 .person { display: flex; align-items: center; gap: 16px; }

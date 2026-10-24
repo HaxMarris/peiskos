@@ -153,6 +153,7 @@ function updateBadge() {
   if (count === lastBadge) return;
   lastBadge = count;
   document.title = count ? `(${count}) Peiskos` : 'Peiskos';
+  setPhoneBadge(count);
   if (navigator.setAppBadge) (count ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => {});
   window.burrowDesktop?.setBadge?.(count, count ? badgeImage(count) : null);
 }

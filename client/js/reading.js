@@ -409,11 +409,16 @@ function messageCard(m, place, { onOpen, buttons = [], note = '' } = {}) {
 // ---- the ⋯ menu on a message
 
 function openMessageMenu(anchor, m) {
+  openMenu(anchor, messageMenuItems(m));
+}
+
+/** What a message's ⋯ menu offers (also the phone's hold-a-message sheet). */
+function messageMenuItems(m) {
   const where = roomById(m.channelId);
   const s = where?.s;
   const mine = m.authorId === state.me.id;
   const saved = state.saved.get(m.id);
-  openMenu(anchor, [
+  return [
     (isDm(s) || can(s, 'pin')) && { label: m.pinnedAt ? 'Unpin' : 'Pin to this room', run: () => api(`/api/messages/${m.id}/pin`, { method: 'POST', body: { pinned: !m.pinnedAt } }).catch(alertError) },
     where && !where.thread && !isDm(s) && { label: m.thread ? 'Open thread' : 'Start a thread', run: () => startThread(m) },
     { label: 'Forward', run: () => openForward(m) },
@@ -427,7 +432,7 @@ function openMessageMenu(anchor, m) {
     s && !isDm(s) && !mine && { label: 'Report to moderators', run: () => openReport(m) },
     s && !isDm(s) && can(s, 'messages') && { label: 'Delete from here down', danger: true, run: () => bulkDeleteFrom(m) },
     (mine || can(s, 'messages')) && { label: 'Delete', danger: true, run: () => confirmDelete(m) },
-  ]);
+  ];
 }
 
 // ---- pinned messages

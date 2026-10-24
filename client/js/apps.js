@@ -428,6 +428,45 @@ if (isPhoneApp) document.documentElement.classList.add(`${phonePlatform}-app`);
 // bar, and keeps clear of them itself. (Android keeps the page between its bars instead.)
 if (isPhoneApp) $('meta[name=viewport]').content = `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no${phonePlatform === 'ios' ? ', viewport-fit=cover' : ''}`;
 
+/** A small tap you can feel, for buttons that change something: mute, send, a reaction. */
+function haptic(style = 'LIGHT') {
+  if (isPhoneApp) native('Haptics', 'impact', { style }).catch(() => {});
+  else navigator.vibrate?.(10);
+}
+
+// The phone's status bar (clock, battery) follows Peiskos's light or dark theme, and on Android
+// takes the page's background color. The launch screen stays up until the page has drawn, so
+// opening the app never flashes a blank screen.
+if (isPhoneApp) {
+  const hex = (color) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = color; return c.fillStyle; };
+  const syncStatusBar = () => {
+    const theme = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    native('StatusBar', 'setStyle', { style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => {});
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (phonePlatform === 'android' && bg) native('StatusBar', 'setBackgroundColor', { color: hex(bg) }).catch(() => {});
+  };
+  syncStatusBar();
+  new MutationObserver(syncStatusBar).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncStatusBar);
+  const hideSplash = () => requestAnimationFrame(() => native('SplashScreen', 'hide', { fadeOutDuration: 250 }).catch(() => {}));
+  if (document.readyState === 'complete') hideSplash();
+  else window.addEventListener('load', hideSplash, { once: true });
+}
+
+// The number on the app icon: the same count as the browser tab's title (mentions and direct
+// messages). iPhones only show it with permission to notify, asked the first time there's something.
+let phoneBadge = 0;
+function setPhoneBadge(count) {
+  if (!isPhoneApp || count === phoneBadge) return;
+  phoneBadge = count;
+  (async () => {
+    if (!count) return native('Badge', 'clear');
+    let { display } = await native('Badge', 'checkPermissions');
+    if (display === 'prompt' || display === 'prompt-with-rationale') ({ display } = await native('Badge', 'requestPermissions'));
+    if (display === 'granted') await native('Badge', 'set', { count });
+  })().catch(() => {});
+}
+
 // Back closes whatever is open, then goes from a room back to the list, then puts Peiskos away
 // (still running, so a call carries on).
 if (phonePlatform === 'android') {
@@ -488,7 +527,7 @@ document.addEventListener('touchend', () => {
   if (s.edge && s.dx > 70) return showView('rooms');
   if (s.line && s.dx > 70) {
     const m = state.messages.find((x) => x.id === Number(s.line.dataset.id));
-    if (m) { navigator.vibrate?.(10); setReply(m); }
+    if (m) { haptic(); setReply(m); }
     return;
   }
   if (s.header && Math.abs(s.dx) > 70) stepRoom(s.dx < 0 ? 1 : -1, false);
@@ -497,6 +536,54 @@ document.addEventListener('touchcancel', () => {
   if (swipe?.line) swipe.line.style.transform = '';
   swipe = null;
 });
+
+// Hold a message for a sheet of everything you can do with it: react, reply, copy, pin and the rest
+// of its ⋯ menu.
+let hold = null;
+document.addEventListener('touchstart', (e) => {
+  clearTimeout(hold?.timer);
+  hold = null;
+  const line = e.target.closest?.('#messages .line');
+  if (!isPhone() || !line || e.touches.length !== 1 || e.target.closest('button, a, textarea, input, .att-image, .poll')) return;
+  const t = e.touches[0];
+  hold = { x: t.clientX, y: t.clientY, timer: setTimeout(() => openMessageSheet(line), 450) };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  const t = e.touches[0];
+  if (hold && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 10) { clearTimeout(hold.timer); hold = null; }
+}, { passive: true });
+for (const type of ['touchend', 'touchcancel']) document.addEventListener(type, () => { clearTimeout(hold?.timer); hold = null; });
+
+// Lifting the finger after a hold would also count as a tap (closing the sheet that just opened).
+let heldUntil = 0;
+document.addEventListener('click', (e) => {
+  if (Date.now() < heldUntil) { heldUntil = 0; e.stopPropagation(); e.preventDefault(); }
+}, { capture: true });
+
+function openMessageSheet(line) {
+  hold = null;
+  const m = state.messages.find((x) => x.id === Number(line.dataset.id));
+  if (!m) return;
+  haptic('MEDIUM');
+  heldUntil = Date.now() + 800;
+  const canEdit = m.authorId === state.me.id && !m.poll && !m.forwarded && !m.live;
+  modal(`<div class="sheet-reacts">${EMOJI_CHOICES.slice(0, 6).map((e) => `<button type="button" class="sheet-react" data-emoji="${e}">${e}</button>`).join('')}<button type="button" class="sheet-react" id="sheet-more" aria-label="More reactions">${SMILE_ICON}</button></div><div class="sheet-list" id="sheet-list"></div>`, 'msg-sheet');
+  $('#modal-card').querySelectorAll('[data-emoji]').forEach((b) => (b.onclick = () => { closeModal(); toggleReaction(m, b.dataset.emoji); }));
+  $('#sheet-more').onclick = () => { closeModal(); openEmojiPicker(line, m); };
+  const items = [
+    { label: 'Reply', run: () => setReply(m) },
+    canEdit && { label: 'Edit', run: () => startEdit(m, line.querySelector('.content')) },
+    ...messageMenuItems(m),
+  ].filter(Boolean);
+  $('#sheet-list').replaceChildren(...items.map((item) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sheet-item' + (item.danger ? ' danger-item' : '');
+    b.textContent = item.label;
+    b.onclick = () => { closeModal(); item.run(); };
+    return b;
+  }));
+}
 
 // ---------------------------------------------------------------- working offline
 //
