@@ -19,7 +19,7 @@ import { extras, voiceTimeTracker } from './extras.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
-import { fishing } from './fishing.ts';
+import { fishing, fishingDock } from './fishing.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
 import { mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
@@ -482,6 +482,7 @@ export function createApp(opts: AppOptions): Server {
       if (old) broadcastToChannel(old, voiceStateEvent(old.id));
       listen.left(prev);
       games.left(prev, userId);
+      dock.left(userId);
       casinoTables.left(prev, userId);
     }
     if (channelId === null) lastActive.delete(userId);
@@ -1533,6 +1534,7 @@ export function createApp(opts: AppOptions): Server {
   // ---- games at the fire
 
   const games = fireGames({ inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message) });
+  const dock = fishingDock({ inVoice, usersInVoice, sendTo });
 
   // ---- the casino (casino.ts): chips, blackjack, slots, cases, and a hold 'em table at each fire
 
@@ -4951,6 +4953,8 @@ export function createApp(opts: AppOptions): Server {
           listen.handle(user, msg);
         } else if (msg.type === 'game') {
           games.handle(user, ws, msg);
+        } else if (msg.type === 'fishing') {
+          dock.handle(user, ws, msg);
         } else if (msg.type === 'casino') {
           casinoTables.watch(ws, user.id, msg.channelId == null ? null : Number(msg.channelId));
         } else if (msg.type === 'typing') {
@@ -4974,6 +4978,7 @@ export function createApp(opts: AppOptions): Server {
       const wasIdle = userIdle(user.id);
       idleSockets.get(user.id)?.delete(ws);
       games.closed(user.id, ws);
+      dock.closed(user.id, ws);
       casinoTables.closed(ws);
       if (set!.size === 0) {
         sockets.delete(user.id);

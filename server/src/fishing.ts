@@ -119,3 +119,80 @@ export function fishing(ctx: FishingContext) {
     return { day, best: better };
   });
 }
+
+// ---- Friends on the dock ----
+// Everyone at a fire with the game open sits on the same dock when they fish the same water. Each
+// game tells the fire what its angler is doing (which water, their hat and rod, whether a fish is
+// biting, what they just landed), and Peiskos passes that on to the others at the fire. It's only
+// kept in memory, like the fireside chat, and goes when they close the game or leave the fire.
+
+/** What the others see of someone fishing. Anything else a game sends is dropped. */
+export type DockStatus = {
+  pond: string; hat: string; rod: string;
+  phase: 'idle' | 'wait' | 'bite';
+  bob: [number, number] | null;
+  caught: { f: string; s: number; q: number; at: number } | null;
+};
+
+const word = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9]{1,24}$/.test(v) ? v : null);
+const unit = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : null);
+
+/** A game's status, cleaned up: only known fields, short ids, and the bobber on the screen. */
+export function cleanStatus(raw: unknown): DockStatus | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const s = raw as Record<string, unknown>;
+  const pond = word(s.pond), hat = word(s.hat), rod = word(s.rod);
+  if (!pond || !hat || !rod) return null;
+  const phase = s.phase === 'wait' || s.phase === 'bite' ? s.phase : 'idle';
+  const b = Array.isArray(s.bob) ? [unit(s.bob[0]), unit(s.bob[1])] : null;
+  const bob: [number, number] | null = phase !== 'idle' && b && b[0] !== null && b[1] !== null ? [b[0], b[1]] : null;
+  const c = s.caught as Record<string, unknown> | null | undefined;
+  const f = c && word(c.f), size = c && Number(c.s), q = c && Number(c.q);
+  const caught = f && Number.isFinite(size) && size! > 0 && Number.isInteger(q) && q! >= 1 && q! <= 5 ? { f, s: Math.round(size! * 10) / 10, q: q!, at: Date.now() } : null;
+  return { pond, hat, rod, phase, bob, caught };
+}
+
+export interface DockContext {
+  inVoice: Map<number, number>;
+  usersInVoice: (channelId: number) => number[];
+  sendTo: (userIds: Iterable<number>, event: Json) => void;
+}
+
+export function fishingDock(ctx: DockContext) {
+  const anglers = new Map<number, { channelId: number; ws: unknown; status: DockStatus }>();
+  const updates = allowance(20, 2); // a cast, a bite and a catch are a few a minute
+
+  const tell = (channelId: number, userId: number, status: DockStatus | null) =>
+    ctx.sendTo(ctx.usersInVoice(channelId).filter((id) => id !== userId), { type: 'fishing_dock', channelId, userId, status } as unknown as Json);
+  const drop = (userId: number) => {
+    const a = anglers.get(userId);
+    if (!a) return;
+    anglers.delete(userId);
+    tell(a.channelId, userId, null);
+  };
+
+  return {
+    /** A game says what its angler is doing now, or (status null) that it closed. */
+    handle(user: { id: number }, ws: unknown, msg: Json) {
+      const channelId = ctx.inVoice.get(user.id);
+      if (channelId === undefined) return;
+      if (msg.status === null) {
+        if (anglers.get(user.id)?.ws === ws) drop(user.id);
+        return;
+      }
+      if (!updates.take(user.id)) return;
+      const status = cleanStatus(msg.status);
+      if (!status) return;
+      const was = anglers.get(user.id);
+      anglers.set(user.id, { channelId, ws, status });
+      tell(channelId, user.id, status);
+      // Just opened the game here: see who's already fishing at this fire.
+      if (!was || was.channelId !== channelId || was.ws !== ws) {
+        for (const [id, a] of anglers) if (id !== user.id && a.channelId === channelId) ctx.sendTo([user.id], { type: 'fishing_dock', channelId, userId: id, status: a.status } as unknown as Json);
+      }
+    },
+    /** Someone left a fire, or the connection their game was on closed. */
+    left: (userId: number) => drop(userId),
+    closed: (userId: number, ws: unknown) => { if (anglers.get(userId)?.ws === ws) drop(userId); },
+  };
+}
