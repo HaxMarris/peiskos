@@ -253,9 +253,15 @@ test('push alerts go to people who are away, encrypted, and respect mute, do not
   assert.equal(pushes[0].message.body, `@${bob.user.username} you there?`);
   assert.equal(pushes[0].message.silent, false);
   assert.equal(pushes[0].message.badge, 1);
-  // Ordinary messages don't, unless he asked for every message.
+  // Ordinary messages do too, unless he set the room to only @mentions.
   pushes.length = 0;
   await say(ann.token, b.room, 'just chatting');
+  await wait(150);
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].message.body, 'just chatting');
+  await call('/api/notify', { body: { serverId: b.id, channelId: b.room, level: 'mentions', mutedUntil: null }, token: bob.token });
+  pushes.length = 0;
+  await say(ann.token, b.room, 'still chatting');
   await wait(100);
   assert.equal(pushes.length, 0);
 

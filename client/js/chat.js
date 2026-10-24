@@ -251,15 +251,21 @@ messagesEl.addEventListener('scroll', async () => {
   if (messagesEl.scrollTop > 100 || state.reachedStart || state.loadingOlder || !state.messages.length) return;
   state.loadingOlder = true;
   const channelId = state.channelId;
+  const spinner = document.createElement('div');
+  spinner.className = 'older-spinner';
+  spinner.setAttribute('aria-label', 'Loading older messages');
+  messagesEl.prepend(spinner);
   try {
     const older = await api(`/api/channels/${channelId}/messages?limit=50&before=${state.messages[0].id}`);
     if (channelId !== state.channelId) return;
+    spinner.remove();
     const prevHeight = messagesEl.scrollHeight;
     state.messages = [...older, ...state.messages];
     state.reachedStart = older.length < 50;
     renderMessages();
     messagesEl.scrollTop = messagesEl.scrollHeight - prevHeight + messagesEl.scrollTop;
   } finally {
+    spinner.remove();
     state.loadingOlder = false;
   }
 });
@@ -279,6 +285,7 @@ async function sendComposer() {
   if (files.some((p) => p.error)) return alert('Remove the files that failed to upload first.');
   if (content.length > 4000) return alert('Messages can be at most 4000 characters. Paste long text and it goes up as a file instead.');
   input.value = '';
+  haptic();
   autosize();
   clearDraft(channelId);
   state.pending = [];

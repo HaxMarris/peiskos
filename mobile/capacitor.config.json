@@ -14,6 +14,14 @@
     "Keyboard": {
       "resize": "native",
       "autoBackdropColor": "dom"
+    },
+    "SplashScreen": {
+      "launchAutoHide": false,
+      "launchFadeOutDuration": 250,
+      "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": []
     }
   }
 }

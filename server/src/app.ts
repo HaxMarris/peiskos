@@ -13,6 +13,7 @@ import { staticFiles } from './static.ts';
 import { gifSearch, download, type GifOptions } from './gifs.ts';
 import { fetchEmbed, fetchImage, linksIn, type Embed, type EmbedOptions } from './embeds.ts';
 import { newVapidKeys, sendPush, vapidKeysWork, type VapidKeys } from './push.ts';
+import { createApns, type ApnsConfig } from './apns.ts';
 import { looksLikeEmail, sendMail, type MailConfig } from './mail.ts';
 import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
@@ -47,6 +48,8 @@ export interface AppOptions {
   pushContact?: string;
   /** Push services Burrow will send to. Tests add their own. */
   pushHosts?: string[];
+  /** Alerts for the iPhone app, through Apple (see apns.ts); off without it. */
+  apns?: ApnsConfig;
   /** How long a mention waits unread before it's emailed (default 15 minutes). */
   /** Backups, the admin page, updates and uptime (see hosting.ts). */
   hosting?: HostingOptions;
@@ -2515,6 +2518,22 @@ export function createApp(opts: AppOptions): Server {
     ).run(user.id, user.id);
     return { ok: true };
   });
+  // The iPhone app's device token, kept alongside browsers' subscriptions as "apns:<token>".
+  const apns = opts.apns ? createApns(opts.apns) : null;
+  if (opts.apns && !apns?.ready) console.warn("APNS_KEY isn't a key from Apple, so the iPhone app won't get alerts.");
+  route('POST', '/api/push/apns', ({ user, body }) => {
+    const token = typeof body.token === 'string' ? body.token.toLowerCase() : '';
+    if (!/^[0-9a-f]{64,200}$/.test(token)) throw new HttpError(400, "That doesn't look like an iPhone's alert token");
+    const endpoint = `apns:${token}`;
+    db.prepare(
+      `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, '', '', ?)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, created_at = excluded.created_at`,
+    ).run(user.id, endpoint, now());
+    db.prepare(
+      `DELETE FROM push_subs WHERE user_id = ? AND id NOT IN (SELECT id FROM push_subs WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ${MAX_PUSH_DEVICES})`,
+    ).run(user.id, user.id);
+    return { ok: true, sending: !!apns?.ready };
+  });
   route('DELETE', '/api/push', ({ user, body }) => {
     db.prepare('DELETE FROM push_subs WHERE user_id = ? AND endpoint = ?').run(user.id, String(body.endpoint ?? ''));
     return { ok: true };
@@ -2543,7 +2562,17 @@ export function createApp(opts: AppOptions): Server {
   const pushTo = (userId: number, message: Json) => {
     const subs = db.prepare('SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?').all(userId) as { endpoint: string; p256dh: string; auth: string }[];
     for (const sub of subs) {
-      void sendPush(sub, message, vapid, pushContact).then((result) => {
+      const sent = sub.endpoint.startsWith('apns:')
+        ? apns?.send(sub.endpoint.slice(5), {
+            title: String(message.title ?? ''),
+            body: String(message.body ?? ''),
+            thread: message.tag as string | undefined,
+            badge: message.badge as number | undefined,
+            silent: !!message.silent,
+            data: { channelId: message.channelId, messageId: message.messageId },
+          }) ?? Promise.resolve('failed' as const)
+        : sendPush(sub, message, vapid, pushContact);
+      void sent.then((result) => {
         if (result === 'gone') db.prepare('DELETE FROM push_subs WHERE endpoint = ?').run(sub.endpoint);
       });
     }
@@ -2579,8 +2608,8 @@ export function createApp(opts: AppOptions): Server {
       if (roomPref?.mutedUntil || burrowPref?.mutedUntil) continue;
       const level = roomPref?.level ?? burrowPref?.level ?? null;
       if (level === 'none') continue;
-      // Every message only when they asked for every message; otherwise just what's for them.
-      if (!forThem && level !== 'all') continue;
+      // Every message, like the app's own sounds, unless they set the room to only @mentions.
+      if (!forThem && level === 'mentions') continue;
       if (statusRow(id)?.status === 'dnd') continue;
       if (online.has(id) && !userIdle(id)) continue; // they'll see it in the app
       const where = dm

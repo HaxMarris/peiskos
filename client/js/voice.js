@@ -354,6 +354,7 @@ function toggleMute() {
   // Unmuting while deafened turns your sound back on too, like Discord.
   if (voice.deafened && voice.muted) setDeafened(voice, false);
   setMicMuted(voice, !voice.muted);
+  haptic();
   voiceChanged();
 }
 
@@ -369,6 +370,7 @@ function toggleDeafen() {
     setDeafened(voice, true);
     setMicMuted(voice, true);
   }
+  haptic();
   voiceChanged();
 }
 

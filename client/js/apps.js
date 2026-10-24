@@ -423,9 +423,49 @@ const phonePlatform = isPhoneApp ? window.Capacitor.getPlatform() : null;
 const native = (plugin, method, options = {}) => window.Capacitor.nativePromise(plugin, method, options);
 
 if (isPhoneApp) document.documentElement.classList.add(`${phonePlatform}-app`);
-// On iPhones the page reaches under the notch and the home bar, and keeps clear of them itself.
-// (Android keeps the page between its bars instead.)
-if (phonePlatform === 'ios') $('meta[name=viewport]').content = 'width=device-width, initial-scale=1, viewport-fit=cover';
+// The apps never zoom: not on a double tap, a pinch, or tapping into a text box (iPhones zoom into
+// any box with text under 16px). On iPhones the page also reaches under the notch and the home
+// bar, and keeps clear of them itself. (Android keeps the page between its bars instead.)
+if (isPhoneApp) $('meta[name=viewport]').content = `width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no${phonePlatform === 'ios' ? ', viewport-fit=cover' : ''}`;
+
+/** A small tap you can feel, for buttons that change something: mute, send, a reaction. */
+function haptic(style = 'LIGHT') {
+  if (isPhoneApp) native('Haptics', 'impact', { style }).catch(() => {});
+  else navigator.vibrate?.(10);
+}
+
+// The phone's status bar (clock, battery) follows Peiskos's light or dark theme, and on Android
+// takes the page's background color. The launch screen stays up until the page has drawn, so
+// opening the app never flashes a blank screen.
+if (isPhoneApp) {
+  const hex = (color) => { const c = document.createElement('canvas').getContext('2d'); c.fillStyle = color; return c.fillStyle; };
+  const syncStatusBar = () => {
+    const theme = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    native('StatusBar', 'setStyle', { style: theme === 'dark' ? 'DARK' : 'LIGHT' }).catch(() => {});
+    const bg = getComputedStyle(document.documentElement).getPropertyValue('--bg').trim();
+    if (phonePlatform === 'android' && bg) native('StatusBar', 'setBackgroundColor', { color: hex(bg) }).catch(() => {});
+  };
+  syncStatusBar();
+  new MutationObserver(syncStatusBar).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style'] });
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', syncStatusBar);
+  const hideSplash = () => requestAnimationFrame(() => native('SplashScreen', 'hide', { fadeOutDuration: 250 }).catch(() => {}));
+  if (document.readyState === 'complete') hideSplash();
+  else window.addEventListener('load', hideSplash, { once: true });
+}
+
+// The number on the app icon: the same count as the browser tab's title (mentions and direct
+// messages). iPhones only show it with permission to notify, asked the first time there's something.
+let phoneBadge = 0;
+function setPhoneBadge(count) {
+  if (!isPhoneApp || count === phoneBadge) return;
+  phoneBadge = count;
+  (async () => {
+    if (!count) return native('Badge', 'clear');
+    let { display } = await native('Badge', 'checkPermissions');
+    if (display === 'prompt' || display === 'prompt-with-rationale') ({ display } = await native('Badge', 'requestPermissions'));
+    if (display === 'granted') await native('Badge', 'set', { count });
+  })().catch(() => {});
+}
 
 // Back closes whatever is open, then goes from a room back to the list, then puts Peiskos away
 // (still running, so a call carries on).
@@ -438,20 +478,63 @@ if (phonePlatform === 'android') {
     if (isPhone() && $('#app').dataset.view === 'chat') return showView('rooms');
     native('App', 'minimizeApp').catch(() => {});
   });
+}
+if (isPhoneApp) {
+  // The buttons on the call notification (Android) and the lock screen (iPhone).
   window.Capacitor.addListener('VoiceCall', 'leave', () => leaveVoice());
+  window.Capacitor.addListener('VoiceCall', 'mute', () => toggleMute());
 }
 
-// Called whenever the voice bar changes: shows the call notification while you're in (or getting
-// back into) a voice room, and takes it away when you leave.
+// Called whenever the voice bar changes: while you're in (or getting back into) a voice room,
+// Android shows an ongoing call notification and iPhones show the call on the lock screen, both
+// with Mute and Leave. They go away when you leave.
 let phoneCallRoom = null;
 function syncPhoneCall() {
-  if (phonePlatform !== 'android') return;
+  if (!isPhoneApp) return;
   const place = roomById(state.voice?.channelId ?? state.rejoin?.channelId);
-  const key = place ? `${place.s.id}:${place.c.id}` : null;
+  const muted = !!state.voice?.muted;
+  const key = place ? `${place.s.id}:${place.c.id}:${muted}` : null;
   if (key === phoneCallRoom) return;
   phoneCallRoom = key;
-  native('VoiceCall', place ? 'start' : 'stop', place ? { title: `In ${fireName(place.c)}`, text: isDm(place.s) ? dmTitle(place.s) : place.s.name } : {})
+  native('VoiceCall', place ? 'start' : 'stop', place ? { title: `In ${fireName(place.c)}`, text: isDm(place.s) ? dmTitle(place.s) : place.s.name, muted } : {})
     .catch((err) => console.warn('Call notification', err));
+}
+
+// Alerts while the iPhone app is closed: Apple gives the app a device token, which goes to the
+// server; the server sends through Apple (see server/src/apns.ts). Tapping one opens its room.
+let appPushToken = null;
+let appPushOpen = null; // an alert tapped before Peiskos was signed in, opened once it is
+async function turnOnAppPush(ask) {
+  let { receive } = await native('PushNotifications', 'checkPermissions');
+  if (receive !== 'granted' && ask) ({ receive } = await native('PushNotifications', 'requestPermissions'));
+  if (receive !== 'granted') {
+    store.set('push', '0');
+    throw new Error('Alerts are off for Peiskos. Turn them on in the iPhone\'s Settings › Notifications › Peiskos.');
+  }
+  store.set('push', '1');
+  await native('PushNotifications', 'register');
+}
+async function turnOffAppPush() {
+  if (appPushToken) await api('/api/push', { method: 'DELETE', body: { endpoint: `apns:${appPushToken}` } }).catch(() => {});
+  await native('PushNotifications', 'unregister').catch(() => {});
+}
+if (phonePlatform === 'ios') {
+  window.Capacitor.addListener('PushNotifications', 'registration', ({ value }) => {
+    appPushToken = value;
+    if (store.get('push') === '1') api('/api/push/apns', { method: 'POST', body: { token: value } }).catch((err) => console.warn('Alerts', err));
+  });
+  window.Capacitor.addListener('PushNotifications', 'pushNotificationActionPerformed', ({ notification }) => {
+    const { channelId, messageId } = notification?.data ?? {};
+    if (!channelId) return;
+    appPushOpen = { channelId: Number(channelId), messageId: Number(messageId) || undefined };
+    if (state.me) openAppPushAlert();
+  });
+}
+
+function openAppPushAlert() {
+  const open = appPushOpen;
+  appPushOpen = null;
+  if (open) jumpTo(open.channelId, open.messageId);
 }
 
 // ---------------------------------------------------------------- swipes on phones
@@ -487,7 +570,7 @@ document.addEventListener('touchend', () => {
   if (s.edge && s.dx > 70) return showView('rooms');
   if (s.line && s.dx > 70) {
     const m = state.messages.find((x) => x.id === Number(s.line.dataset.id));
-    if (m) { navigator.vibrate?.(10); setReply(m); }
+    if (m) { haptic(); setReply(m); }
     return;
   }
   if (s.header && Math.abs(s.dx) > 70) stepRoom(s.dx < 0 ? 1 : -1, false);
@@ -496,6 +579,54 @@ document.addEventListener('touchcancel', () => {
   if (swipe?.line) swipe.line.style.transform = '';
   swipe = null;
 });
+
+// Hold a message for a sheet of everything you can do with it: react, reply, copy, pin and the rest
+// of its ⋯ menu.
+let hold = null;
+document.addEventListener('touchstart', (e) => {
+  clearTimeout(hold?.timer);
+  hold = null;
+  const line = e.target.closest?.('#messages .line');
+  if (!isPhone() || !line || e.touches.length !== 1 || e.target.closest('button, a, textarea, input, .att-image, .poll')) return;
+  const t = e.touches[0];
+  hold = { x: t.clientX, y: t.clientY, timer: setTimeout(() => openMessageSheet(line), 450) };
+}, { passive: true });
+document.addEventListener('touchmove', (e) => {
+  const t = e.touches[0];
+  if (hold && Math.hypot(t.clientX - hold.x, t.clientY - hold.y) > 10) { clearTimeout(hold.timer); hold = null; }
+}, { passive: true });
+for (const type of ['touchend', 'touchcancel']) document.addEventListener(type, () => { clearTimeout(hold?.timer); hold = null; });
+
+// Lifting the finger after a hold would also count as a tap (closing the sheet that just opened).
+let heldUntil = 0;
+document.addEventListener('click', (e) => {
+  if (Date.now() < heldUntil) { heldUntil = 0; e.stopPropagation(); e.preventDefault(); }
+}, { capture: true });
+
+function openMessageSheet(line) {
+  hold = null;
+  const m = state.messages.find((x) => x.id === Number(line.dataset.id));
+  if (!m) return;
+  haptic('MEDIUM');
+  heldUntil = Date.now() + 800;
+  const canEdit = m.authorId === state.me.id && !m.poll && !m.forwarded && !m.live;
+  modal(`<div class="sheet-reacts">${EMOJI_CHOICES.slice(0, 6).map((e) => `<button type="button" class="sheet-react" data-emoji="${e}">${e}</button>`).join('')}<button type="button" class="sheet-react" id="sheet-more" aria-label="More reactions">${SMILE_ICON}</button></div><div class="sheet-list" id="sheet-list"></div>`, 'msg-sheet');
+  $('#modal-card').querySelectorAll('[data-emoji]').forEach((b) => (b.onclick = () => { closeModal(); toggleReaction(m, b.dataset.emoji); }));
+  $('#sheet-more').onclick = () => { closeModal(); openEmojiPicker(line, m); };
+  const items = [
+    { label: 'Reply', run: () => setReply(m) },
+    canEdit && { label: 'Edit', run: () => startEdit(m, line.querySelector('.content')) },
+    ...messageMenuItems(m),
+  ].filter(Boolean);
+  $('#sheet-list').replaceChildren(...items.map((item) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'sheet-item' + (item.danger ? ' danger-item' : '');
+    b.textContent = item.label;
+    b.onclick = () => { closeModal(); item.run(); };
+    return b;
+  }));
+}
 
 // ---------------------------------------------------------------- working offline
 //
@@ -677,10 +808,12 @@ function forgetOffline() {
 
 // ---------------------------------------------------------------- shared from another app (phones)
 //
-// Installed on Android, Burrow shows in the share menu. The service worker catches what was
-// shared and opens the app, which asks which room it goes to.
+// Installed on Android (from the browser or as the app), Peiskos shows in the share menu. In a
+// browser the service worker catches what was shared and opens Peiskos; the Android app hands it
+// over itself. Either way Peiskos then asks which room it goes to.
 
 async function openPendingShare() {
+  if (isPhoneApp) return openAppShare();
   if (!new URLSearchParams(location.search).has('share') || !window.caches) return;
   history.replaceState(null, '', location.pathname);
   const cache = await caches.open('burrow-share');
@@ -692,7 +825,17 @@ async function openPendingShare() {
     if (r) files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('x-name') || `shared-${i}`), { type: r.headers.get('content-type') || '' }));
   }
   await caches.delete('burrow-share');
-  const text = [meta.title, meta.text, meta.url].filter(Boolean).filter((v, i, all) => all.indexOf(v) === i).join('\n');
+  shareInto([meta.title, meta.text, meta.url].filter(Boolean).filter((v, i, all) => all.indexOf(v) === i).join('\n'), files);
+}
+
+async function openAppShare() {
+  const share = await native('Share', 'take').catch(() => null);
+  const files = (share?.files ?? []).map((f) => new File([Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0))], f.name, { type: f.type }));
+  shareInto(share?.text ?? '', files);
+}
+if (isPhoneApp) window.Capacitor.addListener('Share', 'shared', () => { if (state.me) openAppShare().catch(() => {}); });
+
+function shareInto(text, files) {
   if (!text && !files.length) return;
   openPlacePicker({
     title: files.length ? `Share ${files.length === 1 ? 'a file' : `${files.length} files`} to…` : 'Share to…',
@@ -716,6 +859,7 @@ function afterEnter() {
   setOffline(false);
   renderOutbox();
   openPendingShare().catch(() => {});
+  openAppPushAlert();
   // The app icon's "Messages" shortcut (long-press it on Android).
   if (new URLSearchParams(location.search).get('open') === 'dms') {
     history.replaceState(null, '', location.pathname);

@@ -179,6 +179,10 @@ jobs:
               DEVELOPMENT_TEAM="$team" CODE_SIGNING_ALLOWED=NO \
               MARKETING_VERSION="${{ steps.asc.outputs.version }}" CURRENT_PROJECT_VERSION="${{ steps.asc.outputs.build }}" \
               archive
+            # The export keeps the app's entitlements (alerts from the server) only if the archive
+            # carries them, and an unsigned build doesn't, so mark it with them before signing.
+            sed 's|<string>development</string>|<string>production</string>|' App/App.entitlements > "$RUNNER_TEMP/release.entitlements"
+            codesign --force --deep --sign - --entitlements "$RUNNER_TEMP/release.entitlements" "$RUNNER_TEMP/Peiskos.xcarchive/Products/Applications/App.app"
             cat > "$RUNNER_TEMP/export.plist" <<EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

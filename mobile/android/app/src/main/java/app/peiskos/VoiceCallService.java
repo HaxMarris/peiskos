@@ -16,6 +16,8 @@ import androidx.core.app.ServiceCompat;
 public class VoiceCallService extends Service {
     private static final String CHANNEL = "voice";
     private static final String LEAVE = "app.peiskos.LEAVE_VOICE";
+    private static final String MUTE = "app.peiskos.MUTE_VOICE";
+    private Intent last; // what the notification shows now, kept for when only an action was tapped
     private static final int ID = 1;
 
     @Override
@@ -25,6 +27,13 @@ public class VoiceCallService extends Service {
             stopSelf();
             return START_NOT_STICKY;
         }
+        if (intent != null && MUTE.equals(intent.getAction())) {
+            // The page answers by calling start() again with the new state, which redraws the notification.
+            if (VoiceCallPlugin.current != null) VoiceCallPlugin.current.muteTapped();
+            return START_NOT_STICKY;
+        }
+        if (intent != null) last = intent;
+        boolean muted = last != null && last.getBooleanExtra("muted", false);
 
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (Build.VERSION.SDK_INT >= 26 && manager.getNotificationChannel(CHANNEL) == null) {
@@ -37,14 +46,17 @@ public class VoiceCallService extends Service {
         int immutable = PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT;
         Intent open = new Intent(this, MainActivity.class).setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         Intent leave = new Intent(this, VoiceCallService.class).setAction(LEAVE);
+        Intent mute = new Intent(this, VoiceCallService.class).setAction(MUTE);
         Notification notification = new NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_peiskos)
-            .setContentTitle(intent != null ? intent.getStringExtra("title") : "In a voice room")
-            .setContentText(intent != null ? intent.getStringExtra("text") : "Peiskos")
+            .setContentTitle(last != null ? last.getStringExtra("title") : "In a voice room")
+            .setContentText(last != null ? last.getStringExtra("text") : "Peiskos")
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC) // its buttons work from the lock screen
             .setOngoing(true)
             .setSilent(true)
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setContentIntent(PendingIntent.getActivity(this, 0, open, immutable))
+            .addAction(0, muted ? "Unmute" : "Mute", PendingIntent.getService(this, 2, mute, immutable))
             .addAction(0, "Leave", PendingIntent.getService(this, 1, leave, immutable))
             .build();
 

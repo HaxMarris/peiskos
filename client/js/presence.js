@@ -153,6 +153,7 @@ function updateBadge() {
   if (count === lastBadge) return;
   lastBadge = count;
   document.title = count ? `(${count}) Peiskos` : 'Peiskos';
+  setPhoneBadge(count);
   if (navigator.setAppBadge) (count ? navigator.setAppBadge(count) : navigator.clearAppBadge()).catch(() => {});
   window.burrowDesktop?.setBadge?.(count, count ? badgeImage(count) : null);
 }
@@ -208,13 +209,15 @@ async function openInbox() {
 
 // ---- alerts while Burrow is closed: a service worker and the browser's push service
 
-const pushSupported = () => !window.burrowDesktop && !isPhoneApp && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushSupported = () => isPhoneApp ? window.Capacitor.getPlatform() === 'ios' : !window.burrowDesktop && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 // iPhones and iPads only allow it once Burrow is on the Home Screen.
 const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 let swReady = null;
 
 async function startPush() {
+  // The iPhone app asks once, the first time in; after that it keeps the server's copy current.
+  if (pushSupported() && isPhoneApp) return store.get('push') !== '0' && turnOnAppPush(store.get('push') !== '1').catch(() => {});
   if (window.burrowDesktop || isPhoneApp || !window.isSecureContext || !('serviceWorker' in navigator)) return;
   swReady = navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null);
   navigator.serviceWorker.addEventListener('message', (e) => {
@@ -230,6 +233,7 @@ async function pushSubscription() {
 }
 
 async function turnOnPush(ask = true) {
+  if (isPhoneApp && pushSupported()) return turnOnAppPush(ask);
   if (!pushSupported()) throw new Error(isIos() && !isStandalone()
     ? 'On an iPhone or iPad, add Peiskos to your Home Screen first (Share › Add to Home Screen), then turn this on there.'
     : "This browser can't show alerts while Peiskos is closed.");
@@ -249,6 +253,7 @@ async function turnOnPush(ask = true) {
 
 async function turnOffPush() {
   store.set('push', '0');
+  if (isPhoneApp) return turnOffAppPush();
   const sub = await pushSubscription();
   if (!sub) return;
   await api('/api/push', { method: 'DELETE', body: { endpoint: sub.endpoint } }).catch(() => {});
@@ -271,10 +276,10 @@ const timeToMinutes = (t) => { const [h, m] = t.split(':').map(Number); return h
 
 function notificationSettings() {
   const q = state.me.quietHours;
-  const pushOn = store.get('push') === '1' && pushSupported() && Notification.permission === 'granted';
+  const pushOn = store.get('push') === '1' && pushSupported() && (isPhoneApp || Notification.permission === 'granted');
   return `<h3>Notifications</h3>
     ${window.burrowDesktop ? '' : `<label class="check"><input type="checkbox" id="push-on" ${pushOn ? 'checked' : ''} /> Alert me when Peiskos is closed</label>
-    <span class="small muted" id="push-note">${pushSupported() ? 'Direct messages, @mentions and replies, on this device, while Peiskos isn\'t open.' : isPhoneApp ? "The phone app can't alert you while it's closed yet." : isIos() && !isStandalone() ? 'On an iPhone or iPad, add Peiskos to your Home Screen (Share › Add to Home Screen) and turn this on there.' : "This browser can't show alerts while Peiskos is closed."}</span>`}
+    <span class="small muted" id="push-note">${pushSupported() ? 'New messages, on this device, while Peiskos isn\'t open. Mute a room, or set it to only @mentions, from its menu.' : isPhoneApp ? "The phone app can't alert you while it's closed yet." : isIos() && !isStandalone() ? 'On an iPhone or iPad, add Peiskos to your Home Screen (Share › Add to Home Screen) and turn this on there.' : "This browser can't show alerts while Peiskos is closed."}</span>`}
     <label class="check"><input type="checkbox" id="quiet-on" ${q ? 'checked' : ''} /> Quiet hours</label>
     <div class="quiet-times ${q ? '' : 'hidden'}" id="quiet-times">
       <label>From<input type="time" id="quiet-start" value="${minutesToTime(q?.start ?? 22 * 60)}" /></label>

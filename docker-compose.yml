@@ -34,6 +34,10 @@ services:
       MAIL_FROM: ${MAIL_FROM:-}
       PUBLIC_URL: ${PUBLIC_URL:-}
       PUSH_CONTACT: ${PUSH_CONTACT:-}
+      # Alerts for the iPhone app (see README).
+      APNS_KEY: ${APNS_KEY:-}
+      APNS_KEY_ID: ${APNS_KEY_ID:-}
+      APNS_TEAM_ID: ${APNS_TEAM_ID:-}
       # Who runs this server and how to reach them, on /privacy and /terms (see README).
       LEGAL_NAME: ${LEGAL_NAME:-}
       LEGAL_CONTACT: ${LEGAL_CONTACT:-}

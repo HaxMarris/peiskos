@@ -1022,6 +1022,7 @@ function renderReactions(m) {
 }
 
 function toggleReaction(m, emoji) {
+  haptic();
   api(`/api/messages/${m.id}/reactions`, { method: 'POST', body: { emoji } })
     .then(({ reactions }) => { m.reactions = reactions; refreshLine(m.id); })
     .catch(alertError);
