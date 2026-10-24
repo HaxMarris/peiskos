@@ -211,6 +211,20 @@ Searches and previews go through your Peiskos server, so the key never reaches a
 
 Alerts while Peiskos is closed (on phones, and in Chrome, Edge and Firefox) work with no setup: each person ticks *Alert me when Peiskos is closed* in their account. They need Peiskos on `https://` (see *Letting friends reach it*). On an iPhone or iPad, they first add Peiskos to the Home Screen (Share › Add to Home Screen) and turn it on from there; that also gives Peiskos an app icon with the unread count.
 
+The iPhone app gets its alerts through Apple instead, which needs a key from your Apple Developer account (once):
+
+1. At https://developer.apple.com/account/resources/identifiers, open the `app.peiskos` identifier, tick **Push Notifications**, and save.
+2. At https://developer.apple.com/account/resources/authkeys, add a key with **Apple Push Notifications service (APNs)** ticked (Environment: Sandbox & Production). Download the `.p8` file (Apple only lets you download it once) and note the key's ID.
+3. Turn the file into one line: on a Mac or Linux `base64 -w0 AuthKey_ABC123.p8` (Mac: `base64 -i AuthKey_ABC123.p8`), in Windows PowerShell `[Convert]::ToBase64String([IO.File]::ReadAllBytes("$PWD\AuthKey_ABC123.p8"))`. Put it in `.env` with the key's ID and your team ID (the 10 characters at the top right of the developer site):
+
+```sh
+APNS_KEY=the-long-line
+APNS_KEY_ID=ABC123DEFG
+APNS_TEAM_ID=XYZ987TEAM
+```
+
+Then `docker compose up -d`. The app asks for alerts the first time it opens; people can turn them off in their account or the iPhone's Settings.
+
 ### Email
 
 Email is optional. With it, someone who forgets their password can get a code by email from *Forgot your password?* on the login screen; without it, a forgotten password means a new account. Peiskos needs a mail server it can send through. The easiest is a Gmail account (a spare one is best, since emails come from that address): turn on 2-Step Verification, make an app password at https://myaccount.google.com/apppasswords, and use its 16 letters as the password below with `smtp.gmail.com`. Your email provider, Amazon SES or Mailgun work too. Put it in `.env`:
