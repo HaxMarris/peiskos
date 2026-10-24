@@ -19,6 +19,9 @@
       "launchAutoHide": false,
       "launchFadeOutDuration": 250,
       "showSpinner": false
+    },
+    "PushNotifications": {
+      "presentationOptions": []
     }
   }
 }

@@ -57,6 +57,7 @@ public class VoiceCallPlugin extends Plugin {
         Intent intent = new Intent(getContext(), VoiceCallService.class);
         intent.putExtra("title", call.getString("title", "In a voice room"));
         intent.putExtra("text", call.getString("text", "Peiskos"));
+        intent.putExtra("muted", Boolean.TRUE.equals(call.getBoolean("muted", false)));
         try {
             ContextCompat.startForegroundService(getContext(), intent);
             call.resolve();
@@ -74,5 +75,10 @@ public class VoiceCallPlugin extends Plugin {
     /** "Leave" was tapped on the notification. */
     void leaveTapped() {
         notifyListeners("leave", null);
+    }
+
+    /** "Mute" or "Unmute" was tapped on the notification. */
+    void muteTapped() {
+        notifyListeners("mute", null);
     }
 }

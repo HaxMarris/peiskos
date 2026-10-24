@@ -478,20 +478,63 @@ if (phonePlatform === 'android') {
     if (isPhone() && $('#app').dataset.view === 'chat') return showView('rooms');
     native('App', 'minimizeApp').catch(() => {});
   });
+}
+if (isPhoneApp) {
+  // The buttons on the call notification (Android) and the lock screen (iPhone).
   window.Capacitor.addListener('VoiceCall', 'leave', () => leaveVoice());
+  window.Capacitor.addListener('VoiceCall', 'mute', () => toggleMute());
 }
 
-// Called whenever the voice bar changes: shows the call notification while you're in (or getting
-// back into) a voice room, and takes it away when you leave.
+// Called whenever the voice bar changes: while you're in (or getting back into) a voice room,
+// Android shows an ongoing call notification and iPhones show the call on the lock screen, both
+// with Mute and Leave. They go away when you leave.
 let phoneCallRoom = null;
 function syncPhoneCall() {
-  if (phonePlatform !== 'android') return;
+  if (!isPhoneApp) return;
   const place = roomById(state.voice?.channelId ?? state.rejoin?.channelId);
-  const key = place ? `${place.s.id}:${place.c.id}` : null;
+  const muted = !!state.voice?.muted;
+  const key = place ? `${place.s.id}:${place.c.id}:${muted}` : null;
   if (key === phoneCallRoom) return;
   phoneCallRoom = key;
-  native('VoiceCall', place ? 'start' : 'stop', place ? { title: `In ${fireName(place.c)}`, text: isDm(place.s) ? dmTitle(place.s) : place.s.name } : {})
+  native('VoiceCall', place ? 'start' : 'stop', place ? { title: `In ${fireName(place.c)}`, text: isDm(place.s) ? dmTitle(place.s) : place.s.name, muted } : {})
     .catch((err) => console.warn('Call notification', err));
+}
+
+// Alerts while the iPhone app is closed: Apple gives the app a device token, which goes to the
+// server; the server sends through Apple (see server/src/apns.ts). Tapping one opens its room.
+let appPushToken = null;
+let appPushOpen = null; // an alert tapped before Peiskos was signed in, opened once it is
+async function turnOnAppPush(ask) {
+  let { receive } = await native('PushNotifications', 'checkPermissions');
+  if (receive !== 'granted' && ask) ({ receive } = await native('PushNotifications', 'requestPermissions'));
+  if (receive !== 'granted') {
+    store.set('push', '0');
+    throw new Error('Alerts are off for Peiskos. Turn them on in the iPhone\'s Settings › Notifications › Peiskos.');
+  }
+  store.set('push', '1');
+  await native('PushNotifications', 'register');
+}
+async function turnOffAppPush() {
+  if (appPushToken) await api('/api/push', { method: 'DELETE', body: { endpoint: `apns:${appPushToken}` } }).catch(() => {});
+  await native('PushNotifications', 'unregister').catch(() => {});
+}
+if (phonePlatform === 'ios') {
+  window.Capacitor.addListener('PushNotifications', 'registration', ({ value }) => {
+    appPushToken = value;
+    if (store.get('push') === '1') api('/api/push/apns', { method: 'POST', body: { token: value } }).catch((err) => console.warn('Alerts', err));
+  });
+  window.Capacitor.addListener('PushNotifications', 'pushNotificationActionPerformed', ({ notification }) => {
+    const { channelId, messageId } = notification?.data ?? {};
+    if (!channelId) return;
+    appPushOpen = { channelId: Number(channelId), messageId: Number(messageId) || undefined };
+    if (state.me) openAppPushAlert();
+  });
+}
+
+function openAppPushAlert() {
+  const open = appPushOpen;
+  appPushOpen = null;
+  if (open) jumpTo(open.channelId, open.messageId);
 }
 
 // ---------------------------------------------------------------- swipes on phones
@@ -765,10 +808,12 @@ function forgetOffline() {
 
 // ---------------------------------------------------------------- shared from another app (phones)
 //
-// Installed on Android, Burrow shows in the share menu. The service worker catches what was
-// shared and opens the app, which asks which room it goes to.
+// Installed on Android (from the browser or as the app), Peiskos shows in the share menu. In a
+// browser the service worker catches what was shared and opens Peiskos; the Android app hands it
+// over itself. Either way Peiskos then asks which room it goes to.
 
 async function openPendingShare() {
+  if (isPhoneApp) return openAppShare();
   if (!new URLSearchParams(location.search).has('share') || !window.caches) return;
   history.replaceState(null, '', location.pathname);
   const cache = await caches.open('burrow-share');
@@ -780,7 +825,17 @@ async function openPendingShare() {
     if (r) files.push(new File([await r.blob()], decodeURIComponent(r.headers.get('x-name') || `shared-${i}`), { type: r.headers.get('content-type') || '' }));
   }
   await caches.delete('burrow-share');
-  const text = [meta.title, meta.text, meta.url].filter(Boolean).filter((v, i, all) => all.indexOf(v) === i).join('\n');
+  shareInto([meta.title, meta.text, meta.url].filter(Boolean).filter((v, i, all) => all.indexOf(v) === i).join('\n'), files);
+}
+
+async function openAppShare() {
+  const share = await native('Share', 'take').catch(() => null);
+  const files = (share?.files ?? []).map((f) => new File([Uint8Array.from(atob(f.data), (c) => c.charCodeAt(0))], f.name, { type: f.type }));
+  shareInto(share?.text ?? '', files);
+}
+if (isPhoneApp) window.Capacitor.addListener('Share', 'shared', () => { if (state.me) openAppShare().catch(() => {}); });
+
+function shareInto(text, files) {
   if (!text && !files.length) return;
   openPlacePicker({
     title: files.length ? `Share ${files.length === 1 ? 'a file' : `${files.length} files`} to…` : 'Share to…',
@@ -804,6 +859,7 @@ function afterEnter() {
   setOffline(false);
   renderOutbox();
   openPendingShare().catch(() => {});
+  openAppPushAlert();
   // The app icon's "Messages" shortcut (long-press it on Android).
   if (new URLSearchParams(location.search).get('open') === 'dms') {
     history.replaceState(null, '', location.pathname);
