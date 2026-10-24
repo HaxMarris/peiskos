@@ -167,10 +167,10 @@ const MAP = [
 
 const RODS = [
   { id: 'willow', name: 'Willow Stick', tier: 1, cost: 0, luck: 0, size: 0, zone: 0, speed: 1, color: '#6b4a2a', desc: 'A branch, some string, and optimism.' },
-  { id: 'glass', name: 'Fiberglass Rod', tier: 2, cost: 300, luck: .3, size: .15, zone: .03, speed: .92, color: '#c8b48a', desc: 'Bends instead of breaks. Lands Mirror Carp, Barbel, Monkfish and more.' },
-  { id: 'carbon', name: 'Carbon Rod', tier: 3, cost: 4000, luck: .7, size: .3, zone: .05, speed: .85, color: '#2a2a2a', desc: 'Light and stiff. Strong enough for catfish, halibut and taimen.' },
-  { id: 'ember', name: 'Ember Rod', tier: 4, cost: 45000, luck: 1.2, size: .5, zone: .07, speed: .78, color: '#c4561c', desc: 'Warm to the touch. Ice Pike, Frost Eels and Oarfish will bite.' },
-  { id: 'auroraRod', name: 'Aurora Rod', tier: 5, cost: 200000, luck: 2, size: .8, zone: .09, speed: .7, color: '#7ff0c8', desc: 'Hums faintly at night. Needed for the giants of Aurora Deep.' },
+  { id: 'glass', name: 'Fiberglass Rod', tier: 2, cost: 750, luck: .3, size: .15, zone: .03, speed: .92, color: '#c8b48a', desc: 'Bends instead of breaks. Lands Mirror Carp, Barbel, Monkfish and more.' },
+  { id: 'carbon', name: 'Carbon Rod', tier: 3, cost: 12000, luck: .7, size: .3, zone: .05, speed: .85, color: '#2a2a2a', desc: 'Light and stiff. Strong enough for catfish, halibut and taimen.' },
+  { id: 'ember', name: 'Ember Rod', tier: 4, cost: 150000, luck: 1.2, size: .5, zone: .07, speed: .78, color: '#c4561c', desc: 'Warm to the touch. Ice Pike, Frost Eels and Oarfish will bite.' },
+  { id: 'auroraRod', name: 'Aurora Rod', tier: 5, cost: 750000, luck: 2, size: .8, zone: .09, speed: .7, color: '#7ff0c8', desc: 'Hums faintly at night. Needed for the giants of Aurora Deep.' },
 ];
 const ROD = Object.fromEntries(RODS.map(r => [r.id, r]));
 
@@ -381,7 +381,34 @@ function record(c, source) {
   else if (notes.includes('new') && f.r >= 4) post(`Caught my first ${f.name}${how}, a ${RARITY[f.r - 1].toLowerCase()} fish.`);
   if (notes.includes('new') && pondDone(f.pond)) post(`Caught every species in ${pondOf(f.pond).name}. Fish from there now sell for 5% more.`, true);
   if (c.q === 5) checkAreaHat(f.pond);
+  reportBest(c, source);
   return notes;
+}
+
+// ---------- today's biggest (the hearth's leaderboard) ----------
+// Your best catch of the day goes on the hearth's board, ranked by size for its species (then stars).
+// Only a catch that beats your own best today is sent. The day runs midnight to midnight Eastern.
+const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(Date.now());
+function reportBest(c, source) {
+  const day = today(), b = S.best && S.best.day === day ? S.best : null;
+  if (b && (c.t < b.t || (c.t === b.t && c.q <= b.q))) return;
+  S.best = { day, t: c.t, q: c.q };
+  toPeiskos({ kind: 'catch', c: { f: c.f, s: c.s, t: c.t, q: c.q, g: c.g, idle: source === 'idle' } });
+  if (S.tab === 'board') setTimeout(askBoard, 800);
+}
+let board = null, boardAsked = 0;
+function askBoard() { boardAsked = Date.now(); toPeiskos({ kind: 'board' }); }
+function boardHtml() {
+  let h = `<h2>Today's biggest <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's best catch today in this hearth, by hand or idle rod. Ranked by how big it is for its species, then stars.</p>`;
+  if (!board) return h + `<div class="empty-state">Loading the board…</div>`;
+  if (board.error) return h + `<div class="empty-state">Couldn't load the board. ${esc(board.error)}</div>`;
+  if (!board.rows.length) return h + `<div class="empty-state">Nobody has caught anything yet today. Be first.</div>`;
+  h += `<ol class="board">`;
+  board.rows.forEach((r, i) => {
+    const f = FISH[r.fish]; if (!f) return;
+    h += `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><canvas data-bfish="${r.fish}" data-t="${r.score}"></canvas><div class="who"><b>${esc(r.name)}</b><span>${f.name} · ${cm(r.size)}${r.giant ? ' · <span class="tag gold">Giant</span>' : ''}${r.idle ? ' · idle rod' : ''}</span></div><div class="score">${starsHtml(r.stars)}<b>${r.score}<small>/100</small></b></div></li>`;
+  });
+  return h + `</ol>`;
 }
 
 // ---------- treasure chests (hand casts only) ----------
@@ -1052,6 +1079,8 @@ function renderPane() {
       h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
     });
     h += `</div>`;
+  } else if (S.tab === 'board') {
+    h += boardHtml();
   } else if (S.tab === 'coll') {
     h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more.</p>`;
     PONDS.forEach(p => {
@@ -1067,6 +1096,7 @@ function renderPane() {
   }
   el.innerHTML = h;
   el.querySelectorAll('canvas[data-fish]').forEach(c => paintFishCanvas(c, FISH[c.dataset.fish], !!c.dataset.sil));
+  el.querySelectorAll('canvas[data-bfish]').forEach(c => paintFishCanvas(c, FISH[c.dataset.bfish], false, +c.dataset.t / 100));
   el.querySelectorAll('canvas[data-hat]').forEach(c => paintHatCanvas(c, c.dataset.hat, !!c.dataset.locked));
 }
 function ago(t) { const s = (Date.now() - t) / 1000; return s < 60 ? 'just now' : s < 3600 ? Math.floor(s / 60) + 'm ago' : s < 86400 ? Math.floor(s / 3600) + 'h ago' : Math.floor(s / 86400) + 'd ago'; }
@@ -1116,7 +1146,7 @@ document.addEventListener('click', e => {
     if (!S.ponds.includes(n.id)) return unlockModal(n.id);
     return walkTo(n.id);
   }
-  if (t.dataset.tab) { S.tab = t.dataset.tab; if (S.tab === 'hats') S.hatsNew = false; renderTop(); renderPane(); save(); return; }
+  if (t.dataset.tab) { S.tab = t.dataset.tab; if (S.tab === 'hats') S.hatsNew = false; if (S.tab === 'board') askBoard(); renderTop(); renderPane(); save(); return; }
   if (t.dataset.sub) { S.shopTab = t.dataset.sub; renderPane(); return; }
   if (t.dataset.go) { const [a, b] = t.dataset.go.split(':'); S.tab = a; S.shopTab = b; renderTop(); renderPane(); return; }
   const a = t.dataset.act, id = t.dataset.id, i = +t.dataset.i;
@@ -1151,6 +1181,7 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
 window.addEventListener('pagehide', flushSave);
 setInterval(flushSave, 30000);
+setInterval(() => { if (ready && S.tab === 'board' && !document.hidden && Date.now() - boardAsked > 55000) askBoard(); }, 5000);
 
 // ---------- boot ----------
 // Peiskos answers "ready" with the save (or nothing, for someone new), and sends it again if
@@ -1168,6 +1199,7 @@ function start(data, theme) {
   renderAll(); updateCastBtn();
   if ((r.added || r.missed) && away > 60000) awaySummary(away, r);
   if (r.added || r.missed) save();
+  if (S.tab === 'board') askBoard();
   if (!running) { running = true; requestAnimationFrame(frame); }
 }
 window.addEventListener('message', e => {
@@ -1178,6 +1210,7 @@ window.addEventListener('message', e => {
   else if (m.kind === 'reload') { start(m.save); $('catchbox').innerHTML = '<div class="catch"><h3>Picked up your other device</h3><div class="row" style="color:var(--muted)"><span>You saved there more recently, so this is where you left off.</span></div></div>'; G.resultAt = performance.now(); }
   else if (m.kind === 'theme') document.documentElement.dataset.theme = m.theme;
   else if (m.kind === 'flush') flushSave();
+  else if (m.kind === 'board') { board = m.board; if (S.tab === 'board') renderPane(); }
 });
 toPeiskos({ kind: 'ready' });
 })();
