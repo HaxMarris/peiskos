@@ -137,11 +137,11 @@ jobs:
       # With an App Store Connect key, the app is signed by Apple's cloud signing (no certificates to
       # manage) and sent straight to TestFlight. Without one, it just checks that the app builds.
       # The app is always built; it only goes to TestFlight for a release that includes the iPhone.
-      # (Not `inputs.iphone != false`: when nothing passes the input it's null, which GitHub counts
-      # as equal to false.)
+      # GitHub counts null as equal to false, so neither `inputs.iphone != false` nor
+      # `inputs.iphone == null` can tell them apart. As text, null is '' and only an unticked box is 'false'.
       - name: Check the App Store Connect key
         id: asc
-        if: env.RELEASE_TAG != '' && (inputs.iphone == null || inputs.iphone)
+        if: env.RELEASE_TAG != '' && format('{0}', inputs.iphone) != 'false'
         shell: bash
         env:
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
