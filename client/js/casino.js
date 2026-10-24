@@ -82,6 +82,8 @@ function stopCasino() {
   casino.tableRoom = null;
   battles.list = [];
   battles.watching = null;
+  slotNeighbors.clear();
+  renderSlotNeighbors();
   stopBattle();
 }
 
@@ -628,6 +630,7 @@ function buildSlots() {
         </div>
         <button type="button" class="slot-lever" id="slot-lever" aria-label="Pull the lever to spin"><span class="lever-arm"><span class="lever-ball"></span></span><span class="lever-base"></span></button>
       </div>
+      <section class="slot-neighbors hidden" id="slot-neighbors" aria-label="Others at the fire"></section>
       <details class="paytable"><summary>What pays</summary><div id="paytable"></div></details>
     </div>`;
   casinoPanes.slots.addEventListener('click', onSlotsClick);
@@ -768,6 +771,73 @@ function showSlotWins(r, strips) {
   res.className = 'slot-result win' + (r.won >= slotBet * 10 ? ' big' : '');
   if (r.won >= slotBet * 20) playSound('message');
 }
+
+// ---- the others at the fire playing slots: a little machine each, spinning when theirs does
+
+const slotNeighbors = new Map(); // userId -> { grid, wins, bet, won, at }
+const NEIGHBOR_KEEP_MS = 3 * 60_000;
+
+/** Someone else at your fire spun (the server only tells people looking at the casino there). */
+function onSlotSpin(ev) {
+  if (ev.channelId !== casino.channelId || !casino.data) return;
+  slotNeighbors.set(ev.userId, { ...ev, at: Date.now() });
+  renderSlotNeighbors(ev.userId);
+}
+
+function renderSlotNeighbors(spun = null) {
+  const box = $('#slot-neighbors');
+  if (!box) return;
+  for (const [id, n] of slotNeighbors) if (Date.now() - n.at > NEIGHBOR_KEEP_MS) slotNeighbors.delete(id);
+  box.classList.toggle('hidden', slotNeighbors.size === 0);
+  if (!slotNeighbors.size) return box.replaceChildren();
+  if (!box.querySelector('h4')) box.innerHTML = '<h4>At the fire</h4><div class="mini-slots"></div>';
+  const list = box.querySelector('.mini-slots');
+  for (const el of [...list.children]) if (!slotNeighbors.has(Number(el.dataset.user))) el.remove();
+  for (const [id, n] of slotNeighbors) {
+    let el = list.querySelector(`[data-user="${id}"]`);
+    if (!el) {
+      el = document.createElement('div');
+      el.className = 'mini-slot';
+      el.dataset.user = String(id);
+      el.innerHTML = `<div class="mini-who"><span class="avatar xs"></span><b></b></div>
+        <div class="mini-window">${'<div class="mini-reel"></div>'.repeat(3)}</div><div class="mini-result small"></div>`;
+      setAvatar(el.querySelector('.avatar'), nameOf(id, 'Someone'), avatarOf(id));
+      el.querySelector('b').textContent = nameOf(id, 'Someone');
+      list.append(el);
+      showMiniSlot(el, n, false);
+    } else if (id === spun) showMiniSlot(el, n, true);
+  }
+}
+
+/** One little machine: its reels blur for a moment, then stop on what the server rolled. */
+function showMiniSlot(el, n, spin) {
+  const lines = casino.data.slots.lines;
+  const reels = [...el.querySelectorAll('.mini-reel')];
+  const hits = new Set(n.wins.flatMap((w) => lines[w.line].map((row, reel) => `${reel}:${row}`)));
+  const land = (reel) => {
+    reels[reel].classList.remove('spinning');
+    reels[reel].innerHTML = n.grid[reel].map((sym, row) => `<span class="ms${hits.has(`${reel}:${row}`) ? ' hit' : ''}">${SLOT_ART[sym]}</span>`).join('');
+  };
+  const result = el.querySelector('.mini-result');
+  const done = () => {
+    result.innerHTML = n.won ? `<b class="mini-win">+${chipsText(n.won)}</b> on ${chipsText(n.bet)}` : `Bet ${chipsText(n.bet)}`;
+    el.classList.toggle('won', n.won > 0);
+    el.classList.toggle('big', n.won >= n.bet * 10);
+  };
+  clearTimeout(el._timer);
+  (el._timers ?? []).forEach(clearTimeout);
+  if (!spin) { reels.forEach((_, r) => land(r)); return done(); }
+  el.classList.remove('won', 'big');
+  result.textContent = 'Spinning…';
+  const symbols = Object.keys(SLOT_ART);
+  reels.forEach((reel) => {
+    reel.classList.add('spinning');
+    reel.innerHTML = Array.from({ length: 8 }, () => `<span class="ms">${SLOT_ART[symbols[Math.floor(Math.random() * symbols.length)]]}</span>`).join('');
+  });
+  el._timers = [700, 1000, 1300].map((ms, r) => setTimeout(() => land(r), ms));
+  el._timer = setTimeout(done, 1350);
+}
+setInterval(() => { if (slotNeighbors.size) renderSlotNeighbors(); }, 30_000);
 
 // ---- cases
 

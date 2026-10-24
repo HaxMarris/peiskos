@@ -848,6 +848,9 @@ function handleEvent(ev) {
     case 'casino_pet':
       onCasinoPet(ev);
       break;
+    case 'slot_spin':
+      onSlotSpin(ev);
+      break;
     case 'ring':
       onRing(ev);
       break;
