@@ -76,7 +76,9 @@ async function submit(version, buildNumber) {
   else await api('/v1/betaBuildLocalizations', { method: 'POST', body: { data: { type: 'betaBuildLocalizations', attributes: { locale: 'en-US', whatsNew: notes }, relationships: { build: { data: { type: 'builds', id: build.id } } } } } });
 
   // Friends get it through the external groups, which is what Apple reviews.
-  const { data: groups } = await api(`/v1/apps/${app.id}/betaGroups?filter[isInternalGroup]=false&limit=50`);
+  // The app's own betaGroups list takes no filters, so ask the top-level list for this app's groups.
+  const { data: all } = await api(`/v1/betaGroups?filter[app]=${app.id}&limit=200`);
+  const groups = all.filter((g) => !g.attributes.isInternalGroup);
   if (!groups.length) {
     console.log('There is no external TestFlight group yet, so nothing needs Apple\'s review. Internal testers already have the build.');
     return { id: build.id, review: false };
