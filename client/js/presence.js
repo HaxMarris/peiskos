@@ -279,7 +279,7 @@ function notificationSettings() {
   const pushOn = store.get('push') === '1' && pushSupported() && (isPhoneApp || Notification.permission === 'granted');
   return `<h3>Notifications</h3>
     ${window.burrowDesktop ? '' : `<label class="check"><input type="checkbox" id="push-on" ${pushOn ? 'checked' : ''} /> Alert me when Peiskos is closed</label>
-    <span class="small muted" id="push-note">${pushSupported() ? 'Direct messages, @mentions and replies, on this device, while Peiskos isn\'t open.' : isPhoneApp ? "The phone app can't alert you while it's closed yet." : isIos() && !isStandalone() ? 'On an iPhone or iPad, add Peiskos to your Home Screen (Share › Add to Home Screen) and turn this on there.' : "This browser can't show alerts while Peiskos is closed."}</span>`}
+    <span class="small muted" id="push-note">${pushSupported() ? 'New messages, on this device, while Peiskos isn\'t open. Mute a room, or set it to only @mentions, from its menu.' : isPhoneApp ? "The phone app can't alert you while it's closed yet." : isIos() && !isStandalone() ? 'On an iPhone or iPad, add Peiskos to your Home Screen (Share › Add to Home Screen) and turn this on there.' : "This browser can't show alerts while Peiskos is closed."}</span>`}
     <label class="check"><input type="checkbox" id="quiet-on" ${q ? 'checked' : ''} /> Quiet hours</label>
     <div class="quiet-times ${q ? '' : 'hidden'}" id="quiet-times">
       <label>From<input type="time" id="quiet-start" value="${minutesToTime(q?.start ?? 22 * 60)}" /></label>

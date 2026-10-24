@@ -2608,8 +2608,8 @@ export function createApp(opts: AppOptions): Server {
       if (roomPref?.mutedUntil || burrowPref?.mutedUntil) continue;
       const level = roomPref?.level ?? burrowPref?.level ?? null;
       if (level === 'none') continue;
-      // Every message only when they asked for every message; otherwise just what's for them.
-      if (!forThem && level !== 'all') continue;
+      // Every message, like the app's own sounds, unless they set the room to only @mentions.
+      if (!forThem && level === 'mentions') continue;
       if (statusRow(id)?.status === 'dnd') continue;
       if (online.has(id) && !userIdle(id)) continue; // they'll see it in the app
       const where = dm
