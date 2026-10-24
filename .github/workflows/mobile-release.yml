@@ -114,7 +114,9 @@ jobs:
 
   ios:
     name: iPhone app
-    if: inputs.iphone != false
+    # Runs unless "Start release" was told to leave the iPhone out. (Not `inputs.iphone != false`:
+    # when nothing passes the input, it's null, which GitHub counts as equal to false.)
+    if: inputs.iphone == null || inputs.iphone
     # Apple only takes apps built with Xcode 26 (the iOS 26 SDK) or newer.
     runs-on: macos-26
     # Includes waiting for Apple to process the upload, which can take a while.

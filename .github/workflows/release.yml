@@ -78,7 +78,8 @@ jobs:
     uses: ./.github/workflows/mobile-release.yml
     with:
       tag: ${{ needs.draft.outputs.tag }}
-      iphone: ${{ inputs.iphone }}
+      # From the form as text ("true"/"false"), so only an unticked box leaves the iPhone out.
+      iphone: ${{ github.event.inputs.iphone != 'false' }}
     secrets: inherit
 
   # Everything built: publish now, or leave a note in the draft for "Finish release" to publish it
