@@ -209,14 +209,15 @@ async function openInbox() {
 
 // ---- alerts while Burrow is closed: a service worker and the browser's push service
 
-const pushSupported = () => isPhoneApp ? window.Capacitor.getPlatform() === 'ios' : !window.burrowDesktop && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+const pushSupported = () => isPhoneApp ? appPushReady : !window.burrowDesktop && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
 // iPhones and iPads only allow it once Burrow is on the Home Screen.
 const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 let swReady = null;
 
 async function startPush() {
-  // The iPhone app asks once, the first time in; after that it keeps the server's copy current.
+  // The phone app asks once, the first time in; after that it keeps the server's copy current.
+  if (isPhoneApp) await appPushChecked;
   if (pushSupported() && isPhoneApp) return store.get('push') !== '0' && turnOnAppPush(store.get('push') !== '1').catch(() => {});
   if (window.burrowDesktop || isPhoneApp || !window.isSecureContext || !('serviceWorker' in navigator)) return;
   swReady = navigator.serviceWorker.register('sw.js').then(() => navigator.serviceWorker.ready).catch(() => null);

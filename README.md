@@ -225,6 +225,17 @@ APNS_TEAM_ID=XYZ987TEAM
 
 Then `docker compose up -d`. The app asks for alerts the first time it opens; people can turn them off in their account or the iPhone's Settings.
 
+The Android app gets its alerts through Google's Firebase (free):
+
+1. Set up a Firebase project and add `GOOGLE_SERVICES_JSON` to GitHub, as in `mobile/README.md` (*Android: alerts while the app is closed*). The next release's Android app is then built with Firebase.
+2. In the Firebase console, the gear › **Project settings › Service accounts › Generate new private key**. Turn that `.json` file into one line the same way as the Apple key (`base64 -w0 the-file.json`) and put it in `.env`:
+
+```sh
+FCM_SERVICE_ACCOUNT=the-long-line
+```
+
+Then `docker compose up -d`.
+
 ### Email
 
 Email is optional. With it, someone who forgets their password can get a code by email from *Forgot your password?* on the login screen; without it, a forgotten password means a new account. Peiskos needs a mail server it can send through. The easiest is a Gmail account (a spare one is best, since emails come from that address): turn on 2-Step Verification, make an app password at https://myaccount.google.com/apppasswords, and use its 16 letters as the password below with `smtp.gmail.com`. Your email provider, Amazon SES or Mailgun work too. Put it in `.env`:

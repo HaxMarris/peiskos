@@ -500,8 +500,14 @@ function syncPhoneCall() {
     .catch((err) => console.warn('Call notification', err));
 }
 
-// Alerts while the iPhone app is closed: Apple gives the app a device token, which goes to the
-// server; the server sends through Apple (see server/src/apns.ts). Tapping one opens its room.
+// Alerts while the phone app is closed: Apple (iPhone) or Google's Firebase (Android) gives the app
+// a token, which goes to the server; the server sends through them (see server/src/apns.ts and
+// fcm.ts). Tapping one opens its room. Android builds made without Firebase can't get them.
+const appPushKind = phonePlatform === 'ios' ? 'apns' : 'fcm';
+let appPushReady = phonePlatform === 'ios';
+const appPushChecked = phonePlatform === 'android'
+  ? native('Alerts', 'ready').then(({ ready }) => (appPushReady = !!ready)).catch(() => false)
+  : Promise.resolve(appPushReady);
 let appPushToken = null;
 let appPushOpen = null; // an alert tapped before Peiskos was signed in, opened once it is
 async function turnOnAppPush(ask) {
@@ -509,25 +515,35 @@ async function turnOnAppPush(ask) {
   if (receive !== 'granted' && ask) ({ receive } = await native('PushNotifications', 'requestPermissions'));
   if (receive !== 'granted') {
     store.set('push', '0');
-    throw new Error('Alerts are off for Peiskos. Turn them on in the iPhone\'s Settings › Notifications › Peiskos.');
+    throw new Error(phonePlatform === 'ios'
+      ? 'Alerts are off for Peiskos. Turn them on in the iPhone\'s Settings › Notifications › Peiskos.'
+      : 'Alerts are off for Peiskos. Turn them on in the phone\'s Settings › Apps › Peiskos › Notifications.');
   }
   store.set('push', '1');
   await native('PushNotifications', 'register');
 }
 async function turnOffAppPush() {
-  if (appPushToken) await api('/api/push', { method: 'DELETE', body: { endpoint: `apns:${appPushToken}` } }).catch(() => {});
+  if (appPushToken) await api('/api/push', { method: 'DELETE', body: { endpoint: `${appPushKind}:${appPushToken}` } }).catch(() => {});
   await native('PushNotifications', 'unregister').catch(() => {});
 }
-if (phonePlatform === 'ios') {
-  window.Capacitor.addListener('PushNotifications', 'registration', ({ value }) => {
-    appPushToken = value;
-    if (store.get('push') === '1') api('/api/push/apns', { method: 'POST', body: { token: value } }).catch((err) => console.warn('Alerts', err));
-  });
-  window.Capacitor.addListener('PushNotifications', 'pushNotificationActionPerformed', ({ notification }) => {
-    const { channelId, messageId } = notification?.data ?? {};
-    if (!channelId) return;
-    appPushOpen = { channelId: Number(channelId), messageId: Number(messageId) || undefined };
-    if (state.me) openAppPushAlert();
+if (isPhoneApp) {
+  appPushChecked.then((ready) => {
+    if (!ready) return;
+    // Android sorts alerts into channels people can set up in the phone's settings; quiet hours use the silent one.
+    if (phonePlatform === 'android') {
+      native('PushNotifications', 'createChannel', { id: 'messages', name: 'Messages', description: 'New messages and mentions', importance: 4, vibration: true }).catch(() => {});
+      native('PushNotifications', 'createChannel', { id: 'quiet', name: 'Quiet hours', description: 'Messages during your quiet hours', importance: 2 }).catch(() => {});
+    }
+    window.Capacitor.addListener('PushNotifications', 'registration', ({ value }) => {
+      appPushToken = value;
+      if (store.get('push') === '1') api(`/api/push/${appPushKind}`, { method: 'POST', body: { token: value } }).catch((err) => console.warn('Alerts', err));
+    });
+    window.Capacitor.addListener('PushNotifications', 'pushNotificationActionPerformed', ({ notification }) => {
+      const { channelId, messageId } = notification?.data ?? {};
+      if (!channelId) return;
+      appPushOpen = { channelId: Number(channelId), messageId: Number(messageId) || undefined };
+      if (state.me) openAppPushAlert();
+    });
   });
 }
 

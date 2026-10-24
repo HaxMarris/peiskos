@@ -48,6 +48,14 @@
             android:name=".VoiceCallService"
             android:exported="false"
             android:foregroundServiceType="microphone|mediaPlayback" />
+
+        <!-- Alerts that arrive while Peiskos is closed (through Firebase) use the flame icon. -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_peiskos" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_channel_id"
+            android:value="messages" />
     </application>
 
     <!-- Permissions -->
