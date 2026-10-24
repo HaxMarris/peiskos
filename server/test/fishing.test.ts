@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
-import { MAX_SAVE_BYTES } from '../src/fishing.ts';
+import { MAX_SAVE_BYTES, loadSpecies } from '../src/fishing.ts';
 
 const db = openDb(':memory:');
 const app = createApp({ db, publicDir: '/nonexistent' });
@@ -61,4 +61,43 @@ test('the fishing save is per person per hearth, and an older device cannot over
   assert.equal((await call(path, { token: a.token, body: { save: { v: 2 }, rev: -1 } })).status, 400);
   assert.equal((await call(path, { token: a.token, body: { save: { pad: 'x'.repeat(MAX_SAVE_BYTES) }, rev: 2 } })).status, 413);
   assert.deepEqual((await call(path, { token: a.token })).data.save, { v: 2, coins: 50 });
+});
+
+test('the game\'s fish are all read from its file', () => {
+  const species = loadSpecies();
+  assert.equal(species.size, 115);
+  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, rarity: 5 });
+});
+
+test("today's biggest keeps each person's best catch, ranked by size for its species", async () => {
+  const a = await reg('pike_queen');
+  const b = await reg('roach_king');
+  const c = await reg('outsider');
+  const hearth = (await call('/api/servers', { body: { name: 'Board' }, token: a.token })).data;
+  await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: b.token });
+  const path = `/api/servers/${hearth.id}/fishing`;
+  const send = (token: string, c: object) => call(`${path}/catch`, { token, body: c });
+
+  assert.deepEqual((await call(`${path}/board`, { token: a.token })).data.rows, []);
+
+  // Common roach (10-35 cm) at 90/100, then a worse one that doesn't replace it.
+  assert.equal((await send(b.token, { f: 'roach', s: 32.5, t: 90, q: 2 })).data.best, true);
+  assert.equal((await send(b.token, { f: 'roach', s: 22.5, t: 50, q: 5 })).data.best, false);
+  // An Ember Leviathan (300-900 cm) at 60/100 is huge, but small for a leviathan.
+  assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3 })).data.best, true);
+
+  let rows = (await call(`${path}/board`, { token: b.token })).data.rows;
+  assert.deepEqual(rows.map((r: any) => [r.name, r.fish, r.score]), [['roach_king', 'roach', 90], ['pike_queen', 'leviathan', 60]]);
+
+  // A tie on size goes to more stars.
+  await send(a.token, { f: 'leviathan', s: 840, t: 90, q: 4, g: false, idle: true });
+  rows = (await call(`${path}/board`, { token: a.token })).data.rows;
+  assert.deepEqual(rows.map((r: any) => [r.name, r.stars, r.idle]), [['pike_queen', 4, 1], ['roach_king', 2, 0]]);
+
+  // Catches that don't add up, and people outside the hearth, are turned away.
+  assert.equal((await send(a.token, { f: 'nessie', s: 10, t: 50, q: 3 })).status, 400);
+  assert.equal((await send(a.token, { f: 'roach', s: 900, t: 100, q: 5 })).status, 400);
+  assert.equal((await send(a.token, { f: 'roach', s: 35, t: 100, q: 6 })).status, 400);
+  assert.equal((await send(c.token, { f: 'roach', s: 35, t: 100, q: 5 })).status, 404);
+  assert.equal((await call(`${path}/board`, { token: c.token })).status, 404);
 });

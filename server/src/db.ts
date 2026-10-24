@@ -823,6 +823,20 @@ function addFishing(db: Db) {
       saved_at  INTEGER NOT NULL,
       PRIMARY KEY (user_id, server_id)
     );
+    -- Each person's biggest catch of the day in each hearth, for the day's leaderboard.
+    CREATE TABLE IF NOT EXISTS fishing_best (
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      day       TEXT NOT NULL,
+      fish      TEXT NOT NULL,
+      size      REAL NOT NULL,
+      score     INTEGER NOT NULL,
+      stars     INTEGER NOT NULL,
+      giant     INTEGER NOT NULL,
+      idle      INTEGER NOT NULL,
+      caught_at INTEGER NOT NULL,
+      PRIMARY KEY (server_id, day, user_id)
+    );
   `);
 }
 
