@@ -670,6 +670,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .stage[data-show="fire"] .video-view, .stage[data-show="video"] .fire-space { display: none; }
 .stage[data-show="game"] .video-view, .stage[data-show="game"] .fire-space, .stage:not([data-show="game"]) .game-view { display: none; }
 .stage[data-show="casino"] .video-view, .stage[data-show="casino"] .fire-space, .stage:not([data-show="casino"]) .casino-view { display: none; }
+.stage[data-show="fishing"] .video-view, .stage[data-show="fishing"] .fire-space, .stage:not([data-show="fishing"]) .fishing-view { display: none; }
 .video-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .fire-space { --camp: color-mix(in srgb, var(--bg) 95%, #000); flex: 1; min-height: 0; display: flex; position: relative; }
 .fire-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 60% 55% at 50% 58%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%), var(--camp); }
@@ -1182,9 +1183,10 @@ button.seat-face { cursor: pointer; }
 #fire-listen.on { background: var(--accent); color: var(--accent-ink); }
 /* Games at the fire: the game fills the stage, and the fire shows who's playing. */
 #fire-game.on { background: var(--accent); color: var(--accent-ink); }
-.game-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.game-view, .fishing-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .game-frame { flex: 1; min-height: 0; display: flex; }
 .game-iframe { flex: 1; width: 100%; border: 0; display: block; background: #180f28; }
+.fishing-iframe { background: var(--bg); }
 .game-panel { flex: none; display: flex; align-items: center; gap: 12px; width: min(640px, calc(100% - 24px)); align-self: center; margin: 0 12px 10px; padding: 10px 12px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); }
 .game-panel.hidden { display: none; }
 .game-panel-icon { font-size: 28px; line-height: 1; }

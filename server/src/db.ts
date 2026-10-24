@@ -202,6 +202,7 @@ export function openDb(file: string): Db {
   addExtras(db);
   addIdFloor(db);
   addCasino(db);
+  addFishing(db);
   hashSessionTokens(db);
   return db;
 }
@@ -809,6 +810,20 @@ function addCasino(db: Db) {
     db.prepare('UPDATE casino_wallets SET chips = 10000, at_table = 0, blackjack = NULL').run();
     db.prepare("INSERT INTO app_secrets (name, value) VALUES ('casino_reset_2026_10', ?)").run(String(Date.now()));
   });
+}
+
+/** Fireside Angler (fishing.ts): each person's save in each hearth, as the game's own JSON. rev counts saves, so two devices can't overwrite each other. */
+function addFishing(db: Db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS fishing_saves (
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      data      TEXT NOT NULL,
+      rev       INTEGER NOT NULL,
+      saved_at  INTEGER NOT NULL,
+      PRIMARY KEY (user_id, server_id)
+    );
+  `);
 }
 
 /**

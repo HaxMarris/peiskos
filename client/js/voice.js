@@ -312,6 +312,7 @@ function leaveVoice(quiet) {
   stopListen();
   stopGame();
   stopCasino();
+  stopFishing();
   pttHeld = false;
   stopAppAudio(voice);
   stopThumbs(voice);

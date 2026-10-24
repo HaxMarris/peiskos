@@ -19,6 +19,7 @@ import { extras, voiceTimeTracker } from './extras.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
+import { fishing } from './fishing.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
 import { mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
@@ -1541,6 +1542,10 @@ export function createApp(opts: AppOptions): Server {
     isOnline: (userId) => sockets.has(userId),
     ...opts.casino,
   });
+
+  // ---- Fireside Angler (fishing.ts): the fishing game's save, per person per hearth
+
+  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember });
 
   // ---- calls in direct messages: a conversation's own voice room, and ringing the others
 
