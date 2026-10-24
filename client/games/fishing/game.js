@@ -613,9 +613,9 @@ function drawAngler(c, x, y, s, hat, o) {
   c.fillStyle = '#2a1a12';
   if (!sit) { c.beginPath(); c.ellipse(x - 4 * s + walk * 5 * s + 1.5 * s, y, 3.5 * s, 2 * s, 0, 0, 7); c.ellipse(x + 4 * s - walk * 5 * s + 1.5 * s, y, 3.5 * s, 2 * s, 0, 0, 7); c.fill(); }
   // body (ember jacket)
-  c.fillStyle = '#c4561c';
+  c.fillStyle = o.coat || '#c4561c';
   c.beginPath(); c.moveTo(x - 8 * s, by); c.lineTo(x - 7 * s, by - 20 * s); c.quadraticCurveTo(x, by - 24 * s, x + 7 * s, by - 20 * s); c.lineTo(x + 8 * s, by); c.closePath(); c.fill();
-  c.fillStyle = '#a84715'; c.fillRect(x - 8 * s, by - 3 * s, 16 * s, 3 * s);
+  c.fillStyle = o.trim || '#a84715'; c.fillRect(x - 8 * s, by - 3 * s, 16 * s, 3 * s);
   // head
   const hx = x + 1 * s, hy = by - 30 * s, r = 8 * s;
   c.fillStyle = '#f1c9a0'; c.beginPath(); c.arc(hx, hy, r, 0, 7); c.fill();
@@ -624,7 +624,7 @@ function drawAngler(c, x, y, s, hat, o) {
   drawHat(c, hat, hx, hy, r, T);
   // arm
   const hand = { x: x + 13 * s, y: by - 14 * s };
-  c.strokeStyle = '#c4561c'; c.lineWidth = 4.5 * s;
+  c.strokeStyle = o.coat || '#c4561c'; c.lineWidth = 4.5 * s;
   c.beginPath(); c.moveTo(x + 3 * s, by - 18 * s); c.lineTo(hand.x, hand.y); c.stroke();
   c.fillStyle = '#f1c9a0'; c.beginPath(); c.arc(hand.x, hand.y, 2.4 * s, 0, 7); c.fill();
   if (o.rodUp) { c.strokeStyle = ROD[S.rod].color; c.lineWidth = 2 * s; c.beginPath(); c.moveTo(hand.x - 3 * s, hand.y + 4 * s); c.lineTo(hand.x + 10 * s, hand.y - 34 * s); c.stroke(); }
@@ -771,6 +771,7 @@ function hook() {
       const perfect = m >= a + w * .35 && m <= b - w * .35;
       const c = rollCatch(G.fish, G.opts, perfect);
       showCatch(c, record(c, 'hand'));
+      dock.caught = { f: c.f, s: c.s, q: c.q };
     }
     setHint('');
   } else { showMiss('It slipped the hook.'); setHint(''); }
@@ -955,12 +956,14 @@ function drawScene(now) {
   }
   // dock
   if (p.feature !== 'ice') {
-  ctx.fillStyle = '#7a4a2a'; ctx.fillRect(0, H * .86, W * .2, H * .03);
-  ctx.fillStyle = '#5b3520'; ctx.fillRect(W * .18, H * .86, 6, H * .14); ctx.fillRect(W * .06, H * .86, 6, H * .14); }
+  const len = .2 + .13 * friendsHere().length;
+  ctx.fillStyle = '#7a4a2a'; ctx.fillRect(0, H * .86, W * len, H * .03);
+  ctx.fillStyle = '#5b3520'; ctx.fillRect(W * .06, H * .86, 6, H * .14); for (let k = .18; k < len; k += .13) ctx.fillRect(W * k, H * .86, 6, H * .14); }
   // the angler on the dock (or the ice), holding the rod
   const tipX = W * .3, tipY = H * .5;
   const bend = G.phase === 'bite' ? 12 * Math.sin(T * 20) : 0;
   const sc = H / 210, feetY = p.feature === 'ice' ? H * .95 : H * .917;
+  drawFriends(T, sc, feetY);
   const hand = drawAngler(ctx, W * .09, feetY, sc, S.hat, { T, sit: true });
   ctx.strokeStyle = ROD[S.rod].color; ctx.lineWidth = Math.max(3, sc * 2.4); ctx.lineCap = 'round';
   ctx.beginPath(); ctx.moveTo(hand.x - 8 * sc, hand.y + 8 * sc); ctx.quadraticCurveTo(W * .2, H * .6 + bend, tipX, tipY + bend); ctx.stroke();
@@ -984,11 +987,88 @@ function drawScene(now) {
     ctx.fillStyle = '#fffaf3'; ctx.beginPath(); ctx.arc(bx, by, 5, 0, Math.PI); ctx.fill();
     ctx.fillStyle = '#e1452b'; ctx.beginPath(); ctx.arc(bx, by, 5, Math.PI, 0); ctx.fill();
   }
+  drawDockTags(sc, feetY);
   if (G.resultAt && now - G.resultAt > 3200 && G.phase !== 'bite') { $('catchbox').innerHTML = ''; G.resultAt = 0; }
+}
+
+// ---------- friends on the dock ----------
+// Others at the fire with the game open. Peiskos passes on what each one is doing; whoever's at
+// the same water sits on the dock with you (three fit beside you), the rest get a note in the corner.
+const dock = { others: new Map(), sent: '', sentAt: 0, caught: null };
+const COATS = [['#3d6f9a', '#2c5478'], ['#4f7a3a', '#3a5c2a'], ['#7a4a8a', '#5c3468'], ['#b08a2a', '#8a6a1a'], ['#3a8a80', '#2a6a62'], ['#a8445a', '#863244']];
+const coatOf = id => COATS[Math.abs(id) % COATS.length];
+function friendsHere() { return [...dock.others.values()].filter(o => o.status.pond === S.pond && !G.walk).slice(0, 3); }
+function dockStatus() {
+  const phase = G.mode === 'map' || G.walk ? 'idle' : G.phase === 'cast' || G.phase === 'wait' ? 'wait' : G.phase === 'bite' ? 'bite' : 'idle';
+  return { pond: S.pond, hat: S.hat, rod: S.rod, phase, bob: phase === 'idle' ? null : [Math.round(G.bob.x * 100) / 100, Math.round(G.bob.y * 100) / 100] };
+}
+/** Tells the fire when anything the others would see has changed (a catch right away). */
+function dockTick(now) {
+  if (!ready) return;
+  const st = dockStatus(), key = JSON.stringify(st);
+  if (!dock.caught && (key === dock.sent || now - dock.sentAt < 300)) return;
+  dock.sent = key; dock.sentAt = now;
+  toPeiskos({ kind: 'status', status: Object.assign(st, { caught: dock.caught }) });
+  dock.caught = null;
+}
+function drawFriends(T, sc, feetY) {
+  friendsHere().forEach((o, i) => {
+    const st = o.status, fx = .22 + i * .13, [coat, trim] = coatOf(o.userId);
+    const hd = drawAngler(ctx, W * fx, feetY, sc, HAT[st.hat] ? st.hat : 'bucket', { T: T + i, sit: true, coat, trim });
+    const tx = W * (fx + .21), ty = H * (.5 + i * .01), bend = st.phase === 'bite' ? 10 * Math.sin(T * 20) : 0;
+    ctx.strokeStyle = (ROD[st.rod] || ROD.willow).color; ctx.lineWidth = Math.max(3, sc * 2.4); ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.moveTo(hd.x - 8 * sc, hd.y + 8 * sc); ctx.quadraticCurveTo(W * (fx + .11), H * .6 + bend, tx, ty + bend); ctx.stroke();
+    if (!st.bob) return;
+    // Their bobber sits where it would in front of them.
+    const bx = W * Math.min(.95, st.bob[0] + fx - .09), by = H * st.bob[1] + (st.phase === 'bite' && Math.sin(T * 14) > .2 ? 5 : 0);
+    ctx.strokeStyle = 'rgba(255,250,240,.55)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(tx, ty + bend); ctx.quadraticCurveTo((tx + bx) / 2, Math.max(ty, by) + 10, bx, by); ctx.stroke();
+    if (st.phase === 'bite') {
+      ctx.strokeStyle = 'rgba(255,250,240,.6)'; ctx.lineWidth = 1.5;
+      for (let r = 0; r < 3; r++) { const rr = ((T * 30 + r * 12) % 36); ctx.globalAlpha = 1 - rr / 36; ctx.beginPath(); ctx.ellipse(bx, by + 4, rr, rr * .3, 0, 0, 7); ctx.stroke(); }
+      ctx.globalAlpha = 1;
+    }
+    ctx.fillStyle = '#fffaf3'; ctx.beginPath(); ctx.arc(bx, by, 4.5, 0, Math.PI); ctx.fill();
+    ctx.fillStyle = coat; ctx.beginPath(); ctx.arc(bx, by, 4.5, Math.PI, 0); ctx.fill();
+  });
+}
+function pill(text, x, y, h, bg, fg, align) {
+  const w = ctx.measureText(text).width + 16, left = align === 'right' ? x - w : align === 'left' ? x : x - w / 2;
+  ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(left, y - h / 2, w, h, h / 2); ctx.fill();
+  ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.fillText(text, left + 8, y);
+}
+/** Names under each seat, what a friend just landed, and who's fishing somewhere else. */
+function drawDockTags(sc, feetY) {
+  const here = friendsHere();
+  if (!dock.others.size) return;
+  const th = Math.max(18, sc * 10), small = `700 ${Math.round(Math.max(11, sc * 6.5))}px 'Nunito Sans', sans-serif`;
+  ctx.save(); ctx.textBaseline = 'middle'; ctx.font = small;
+  const tagY = Math.min(H - th / 2 - 4, feetY + H * .04);
+  if (here.length) pill('you', W * .09 + 4 * sc, tagY, th, 'rgba(196,86,28,.92)', '#fffaf3');
+  here.forEach((o, i) => {
+    const fx = W * (.22 + i * .13) + 4 * sc;
+    pill(o.name, fx, tagY, th, 'rgba(31,24,19,.72)', '#fffaf3');
+    const c = o.caught, f = c && FISH[c.f];
+    if (f && performance.now() - o.caughtSeen < 5000) { ctx.font = `800 ${Math.round(Math.max(11, sc * 6))}px 'Nunito Sans', sans-serif`; pill(`${f.name} · ${cm(c.s)} ${'★'.repeat(c.q)}`, fx, feetY - 62 * sc, th, '#ffc46b', '#1f1813'); ctx.font = small; }
+  });
+  // Everyone else, in the top corner.
+  const away = [...dock.others.values()].filter(o => !here.includes(o)), lines = away.slice(0, 2).map(o => o.status.pond === S.pond ? `🎣 ${o.name} is here too` : `🎣 ${o.name} is at ${pondOf(o.status.pond)?.name || 'another water'}`);
+  if (away.length > 2) lines.push(`+${away.length - 2} more fishing`);
+  ctx.font = `700 12px 'Nunito Sans', sans-serif`;
+  lines.forEach((t, i) => pill(t, W - 12, 27 + i * 30, 26, 'rgba(31,24,19,.6)', '#fffaf3', 'right'));
+  ctx.restore();
+}
+function onDock(m) {
+  if (!m.status) { dock.others.delete(m.userId); return; }
+  const was = dock.others.get(m.userId), c = m.status.caught;
+  // A catch shows for a few seconds after it comes in, once.
+  const fresh = c && (!was || !was.caught || was.caught.at !== c.at);
+  dock.others.set(m.userId, { userId: m.userId, name: String(m.name || 'Someone').slice(0, 24), status: m.status,
+    caught: fresh ? c : was ? was.caught : null, caughtSeen: fresh ? performance.now() : was ? was.caughtSeen : 0 });
 }
 let lastIdleTick = 0;
 function frame(now) {
   if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
+  dockTick(now);
   if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
   requestAnimationFrame(frame);
 }
@@ -1210,6 +1290,7 @@ window.addEventListener('message', e => {
   else if (m.kind === 'reload') { start(m.save); $('catchbox').innerHTML = '<div class="catch"><h3>Picked up your other device</h3><div class="row" style="color:var(--muted)"><span>You saved there more recently, so this is where you left off.</span></div></div>'; G.resultAt = performance.now(); }
   else if (m.kind === 'theme') document.documentElement.dataset.theme = m.theme;
   else if (m.kind === 'flush') flushSave();
+  else if (m.kind === 'dock') onDock(m);
   else if (m.kind === 'board') { board = m.board; if (S.tab === 'board') renderPane(); }
 });
 toPeiskos({ kind: 'ready' });

@@ -43,6 +43,8 @@ function stopFishing() {
   if (!play) return;
   fishing.play = null;
   fishingClosing.add(play);
+  // Off the dock for everyone else at the fire.
+  if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fishing', status: null }));
   play.frame.contentWindow?.postMessage({ kind: 'flush' }, '*');
   setTimeout(() => { play.frame.remove(); fishingClosing.delete(play); }, 400);
 }
@@ -88,6 +90,9 @@ window.addEventListener('message', async (e) => {
     }
   } else if (m.kind === 'save' && m.data && typeof m.data === 'object') {
     saveFishing(play, m.data);
+  } else if (m.kind === 'status' && m.status && typeof m.status === 'object' && play === fishing.play) {
+    // What your angler is doing, so the others fishing at this fire see you on the dock.
+    if (state.voice && state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fishing', status: m.status }));
   } else if (m.kind === 'catch' && m.c && typeof m.c === 'object') {
     // A new best of the day for you, for the hearth's leaderboard.
     api(`${fishingApi(play.hearthId)}/catch`, { method: 'POST', body: m.c }).catch((err) => console.warn('Fireside Angler catch not sent:', err.message));
@@ -105,6 +110,13 @@ window.addEventListener('message', async (e) => {
     if (state.voice && state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fireside_send', content: m.text.slice(0, 1000) }));
   }
 });
+
+/** Someone else at your fire is fishing (or stopped): their angler on your dock. */
+function onFishingDock(ev) {
+  const play = fishing.play;
+  if (!play || ev.channelId !== state.voice?.channelId) return;
+  play.frame.contentWindow?.postMessage({ kind: 'dock', userId: ev.userId, name: nameOf(ev.userId, 'Someone'), status: ev.status }, '*');
+}
 
 // The game follows Peiskos's light and dark.
 new MutationObserver(() => fishing.play?.frame.contentWindow?.postMessage({ kind: 'theme', theme: currentTheme() }, '*'))
