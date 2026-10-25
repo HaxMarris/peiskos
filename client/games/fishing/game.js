@@ -777,6 +777,7 @@ function markerPos(now) {
 // Phones that can also give a short buzz.
 let audio = null;
 function biteSound(heavy) {
+  if (S.muted) return;
   try {
     audio = audio || new AudioContext();
     if (audio.state === 'suspended') audio.resume();
@@ -798,6 +799,14 @@ function biteSound(heavy) {
   } catch { /* no sound here */ }
   try { navigator.vibrate?.(heavy ? [60, 60, 90] : 60); } catch { /* no buzz either */ }
 }
+const SPEAKER = '<path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor"/>';
+function renderMute() {
+  const b = $('muteBtn');
+  b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPEAKER}${S.muted ? '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : '<path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+  b.setAttribute('aria-label', S.muted ? 'Sound off. Turn the bite sound on' : 'Sound on. Mute the bite sound');
+  b.setAttribute('aria-pressed', String(!!S.muted)); b.title = S.muted ? 'Unmute' : 'Mute';
+}
+$('muteBtn').addEventListener('click', () => { S.muted = !S.muted; renderMute(); save(); });
 function hook() {
   const m = markerPos(performance.now());
   $('meter').hidden = true;
@@ -1233,7 +1242,7 @@ function renderRecent() {
     else paintFishCanvas(cv, FISH[r.c.f], false, r.c.t / 100);
   });
 }
-function renderAll() { renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
+function renderAll() { renderMute(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
 
 function modal(title, bodyHtml, actions) {
   $('modalRoot').innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="card"><h2>${title}</h2>${bodyHtml}<div class="actions">${actions}</div></div></div>`;
