@@ -173,6 +173,10 @@ header.top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
 .scene .pondtag { pointer-events: auto; border: 0; cursor: pointer; display: flex; gap: 8px; align-items: center; }
 .scene .pondtag:hover { background: rgba(20,12,8,.75); }
+.scene .streak { position: absolute; left: 12px; top: 52px; background: #ffc46b; color: #1f1813; padding: 4px 10px; border-radius: 999px; font: 800 .78rem var(--font-body); pointer-events: none; box-shadow: 0 2px 10px rgba(0,0,0,.2); }
+.scene .streak.pop { animation: streakpop .35s ease-out; }
+@keyframes streakpop { 0% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .scene .streak.pop { animation: none; } }
 .scene .mute { position: absolute; right: 12px; bottom: 12px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: rgba(20,12,8,.55); color: #fbf4ec; display: grid; place-items: center; cursor: pointer; backdrop-filter: blur(4px); }
 .scene .mute:hover { background: rgba(20,12,8,.75); }
 .scene .mute svg { width: 18px; height: 18px; }

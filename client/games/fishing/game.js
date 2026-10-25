@@ -225,7 +225,7 @@ function fresh() {
   return { v: 2, coins: 0, pond: 'mill', ponds: ['mill'], rod: 'willow', rods: ['willow'],
     up: { line: 0, reel: 0, luck: 0, hook: 0, market: 0, nets: 0 }, bait: {}, baitOn: 'worms',
     hat: 'bucket', hats: ['bucket'],
-    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0 }, saved: Date.now(), tab: 'shop', shopTab: 'rods' };
+    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0, bestStreak: 0 }, streak: 0, saved: Date.now(), tab: 'shop', shopTab: 'rods' };
 }
 let S = fresh();
 function migrate(d) {
@@ -735,7 +735,7 @@ const G = { mode: 'fish', phase: 'idle', t0: 0, wait: 0, fish: null, zone: [0, 0
 function primary() {
   if (G.mode === 'map') { if (!G.walk) setMode('fish'); return; }
   if (G.phase === 'idle' || G.phase === 'done') return cast();
-  if (G.phase === 'wait' || G.phase === 'cast') { G.phase = 'idle'; setHint('Too early. The bobber was still.'); updateCastBtn(); return; }
+  if (G.phase === 'wait' || G.phase === 'cast') { G.phase = 'idle'; setHint('Too early. The bobber was still.'); breakStreak(); updateCastBtn(); return; }
   if (G.phase === 'bite') return hook();
 }
 function cast() {
@@ -816,18 +816,38 @@ function hook() {
   $('meter').hidden = true;
   const [a, b] = G.zone, w = b - a;
   if (m >= a && m <= b) {
+    const perfect = m >= a + w * .35 && m <= b - w * .35;
+    if (perfect) addStreak(); else breakStreak();
     if (Math.random() < chestChance()) showChest(openChest());
     else {
-      const perfect = m >= a + w * .35 && m <= b - w * .35;
       const c = rollCatch(G.fish, G.opts, perfect);
       showCatch(c, record(c, 'hand'));
       dock.caught = { f: c.f, s: c.s, q: c.q };
     }
     setHint('');
-  } else { showMiss('It slipped the hook.'); setHint(''); }
+  } else { showMiss('It slipped the hook.'); setHint(''); breakStreak(); }
   G.phase = 'done'; updateCastBtn(); save(); renderAll();
 }
-function escapeFish() { $('meter').hidden = true; setHint(''); showMiss('It got away.'); G.phase = 'done'; updateCastBtn(); }
+function escapeFish() { $('meter').hidden = true; setHint(''); showMiss('It got away.'); breakStreak(); G.phase = 'done'; updateCastBtn(); }
+
+// ---------- perfect hook streak ----------
+// Perfect hooks in a row, shown as a counter (no coin bonus).
+// Anything less (a plain hook, a miss, a fish that gets away, striking too early) starts it over.
+function addStreak() {
+  S.streak = (S.streak || 0) + 1;
+  const best = S.streak > (S.stats.bestStreak || 0);
+  if (best) S.stats.bestStreak = S.streak;
+  if (S.streak % 5 === 0) post(`${S.streak} perfect hooks in a row${best ? ', a new personal best' : ''}.`, true);
+  renderStreak(true);
+}
+function breakStreak() { if (!S.streak) return; S.streak = 0; renderStreak(); }
+function renderStreak(pop) {
+  const el = $('streak');
+  el.hidden = (S.streak || 0) < 2 || G.mode === 'map';
+  if (el.hidden) return;
+  el.textContent = `🔥 ${S.streak} perfect in a row`;
+  if (pop) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+}
 function setHint(t, bite) { const h = $('hint'); h.textContent = t; h.className = 'hint' + (bite ? ' bite' : ''); }
 function updateCastBtn() {
   const b = $('castBtn');
@@ -862,6 +882,7 @@ function setMode(m) {
   if (m === 'map') { G.phase = 'idle'; $('meter').hidden = true; setHint(''); $('catchbox').innerHTML = ''; }
   $('mapNodes').hidden = m !== 'map'; $('mapTitle').hidden = m !== 'map';
   $('pondtag').hidden = m === 'map';
+  renderStreak();
   $('scene').setAttribute('aria-label', m === 'map' ? 'Map of waters' : 'Fishing spot. Tap or press Space to cast and hook.');
   renderMapNodes(); updateCastBtn();
 }
@@ -1133,7 +1154,7 @@ function frame(now) {
 // ---------- UI ----------
 function renderTop() {
   const total = Object.keys(FISH).length, got = Object.keys(S.coll).length;
-  $('stats').innerHTML = `<div class="stat coins"><b>${fmt(S.coins)}</b><span>coins</span></div><div class="stat"><b>${fmt(S.stats.caught)}</b><span>caught</span></div><div class="stat"><b>${got}/${total}</b><span>species</span></div>${hatsUnlocked() ? `<div class="stat"><b>${S.hats.length}/${HATS.length}</b><span>hats</span></div>` : ''}`;
+  $('stats').innerHTML = `<div class="stat coins"><b>${fmt(S.coins)}</b><span>coins</span></div><div class="stat"><b>${fmt(S.stats.caught)}</b><span>caught</span></div><div class="stat"><b>${got}/${total}</b><span>species</span></div>${S.stats.bestStreak >= 2 ? `<div class="stat"><b>${S.stats.bestStreak}</b><span>best streak</span></div>` : ''}${hatsUnlocked() ? `<div class="stat"><b>${S.hats.length}/${HATS.length}</b><span>hats</span></div>` : ''}`;
   if (!hatsUnlocked() && S.tab === 'hats') S.tab = 'shop';
   $('rodChip').textContent = rod().name;
   const b = BAIT[S.baitOn];
@@ -1252,7 +1273,7 @@ function renderRecent() {
     else paintFishCanvas(cv, FISH[r.c.f], false, r.c.t / 100);
   });
 }
-function renderAll() { renderMute(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
+function renderAll() { renderMute(); renderStreak(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
 
 function modal(title, bodyHtml, actions) {
   $('modalRoot').innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="card"><h2>${title}</h2>${bodyHtml}<div class="actions">${actions}</div></div></div>`;
