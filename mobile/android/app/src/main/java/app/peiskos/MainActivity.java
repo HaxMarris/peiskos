@@ -8,6 +8,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(VoiceCallPlugin.class);
         registerPlugin(SharePlugin.class);
+        registerPlugin(AlertsPlugin.class);
         super.onCreate(savedInstanceState);
     }
 }

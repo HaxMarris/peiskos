@@ -38,6 +38,7 @@ services:
       APNS_KEY: ${APNS_KEY:-}
       APNS_KEY_ID: ${APNS_KEY_ID:-}
       APNS_TEAM_ID: ${APNS_TEAM_ID:-}
+      FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
       # Who runs this server and how to reach them, on /privacy and /terms (see README).
       LEGAL_NAME: ${LEGAL_NAME:-}
       LEGAL_CONTACT: ${LEGAL_CONTACT:-}

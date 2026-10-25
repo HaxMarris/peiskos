@@ -79,6 +79,20 @@ jobs:
           code=$(( major * 1000000 + minor * 1000 + ${patch:-0} ))
           echo "APP_VERSION=$v" >> "$GITHUB_ENV"
           echo "APP_VERSION_CODE=$(( code > 0 ? code : 1 ))" >> "$GITHUB_ENV"
+      # Alerts while the app is closed come through Google's Firebase; its google-services.json is
+      # kept in a secret (see mobile/README.md). Without it the app builds with those alerts off.
+      - name: Firebase
+        shell: bash
+        working-directory: mobile/android
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then
+            printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
+            node -e "JSON.parse(require('fs').readFileSync('app/google-services.json', 'utf8'))" || { echo "::error::GOOGLE_SERVICES_JSON isn't the google-services.json file from Firebase"; exit 1; }
+          else
+            echo "::notice::No GOOGLE_SERVICES_JSON secret, so the Android app won't get alerts while it's closed."
+          fi
       - name: Build
         shell: bash
         working-directory: mobile/android

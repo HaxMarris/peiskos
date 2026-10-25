@@ -43,6 +43,7 @@ const app = createApp({
     process.env.APNS_KEY && process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID
       ? { key: process.env.APNS_KEY, keyId: process.env.APNS_KEY_ID.trim(), teamId: process.env.APNS_TEAM_ID.trim(), topic: process.env.APNS_TOPIC || 'app.peiskos' }
       : undefined,
+  fcm: process.env.FCM_SERVICE_ACCOUNT ? { serviceAccount: process.env.FCM_SERVICE_ACCOUNT } : undefined,
   legal: { name: process.env.LEGAL_NAME || undefined, contact: process.env.LEGAL_CONTACT || undefined },
   gifs: process.env.KLIPY_API_KEY ? { apiKey: process.env.KLIPY_API_KEY, rating: process.env.GIF_RATING || undefined } : undefined,
   voice:

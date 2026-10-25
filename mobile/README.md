@@ -19,8 +19,11 @@ What the app shell adds on top of the web page:
 - Nothing of Peiskos's goes into Android phone backups or moves to a new phone, since that would carry
   your login with it. On a new phone you log in again.
 
-Not yet: alerts while the app is closed (that needs Firebase for Android and Apple's push service
-for iPhones), screen sharing from a phone, and passkeys (log in with your password).
+- Alerts for new messages while the app is closed: through Apple's push service on iPhones and
+  Google's Firebase on Android. Each needs a key on the server (see *Phone alerts* in the main
+  README), and Android also needs the Firebase file below in the build.
+
+Not yet: screen sharing from a phone, and passkeys (log in with your password).
 
 ## Building them on GitHub
 
@@ -64,6 +67,22 @@ kept safe for good. Lose it and everyone has to uninstall and reinstall.
 The next release then has `Peiskos-x.y.z.apk` attached. To install it, friends open it on their
 phone and allow their browser to install apps when Android asks. Updates install the same way, over
 the old version, keeping them logged in.
+
+### Android: alerts while the app is closed (Firebase, free)
+
+Android apps get alerts through Google's Firebase. Peiskos only uses it to deliver the alert; the
+message text goes from your server straight to Google and on to the phone.
+
+1. At [console.firebase.google.com](https://console.firebase.google.com): **Create a project**
+   (call it Peiskos; Google Analytics can be off).
+2. **Add app › Android**, package name `app.peiskos`, then **Register app** and download
+   `google-services.json`. Skip the remaining steps (the app already has them).
+3. On GitHub, add a repository secret `GOOGLE_SERVICES_JSON` and paste the whole file (open it in Notepad).
+4. Back in Firebase: the gear › **Project settings › Service accounts › Generate new private key**.
+   That downloads a second `.json` file, which goes on the server as `FCM_SERVICE_ACCOUNT` (see
+   *Phone alerts* in the main README). Keep it secret: it can send alerts to anyone's Peiskos app.
+
+The next release's Android app then asks for alerts the first time it opens.
 
 ### iPhone: TestFlight (needs Apple's $99 a year developer account)
 
