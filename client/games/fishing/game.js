@@ -186,9 +186,9 @@ const UPGRADES = [
 const BAITS = [
   { id: 'worms', name: 'Garden worms', cost: 0, pack: 0, desc: 'Free and endless. Fish anything.', luck: 0, size: 0, likes: [] },
   { id: 'bread', name: 'Bread paste', cost: 25, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
-  { id: 'minnows', name: 'Live minnows', cost: 120, pack: 20, desc: 'Triples the odds of predators.', luck: .1, size: .1, likes: ['predator'] },
-  { id: 'shrimp', name: 'Shrimp', cost: 700, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
-  { id: 'glow', name: 'Glow grubs', cost: 4000, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
+  { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
+  { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
+  { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
   { id: 'emberfly', name: 'Ember fly', cost: 30000, pack: 20, desc: 'Ember fish rise to it. Luckiest and biggest bait.', luck: 1, size: .3, likes: ['ember', 'rare'] },
 ];
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
@@ -385,28 +385,30 @@ function record(c, source) {
   return notes;
 }
 
-// ---------- today's biggest (the hearth's leaderboard) ----------
-// Your best catch of the day goes on the hearth's board, ranked by size for its species (then stars).
-// Only a catch that beats your own best today is sent. The day runs midnight to midnight Eastern.
+// ---------- today's best (the hearth's leaderboard) ----------
+// Your most valuable catch of the day goes on the hearth's board. Its worth there leaves out your own
+// boosts (Fishmonger friend, full waters), so everyone's fish count the same. Only a catch that beats
+// your own best today is sent. The day runs midnight to midnight Eastern.
+const boardWorth = c => Math.round(FISH[c.f].base * (.5 + c.t / 100) * STAR_MUL[c.q - 1] * (c.g ? 3 : 1));
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(Date.now());
 function reportBest(c, source) {
-  const day = today(), b = S.best && S.best.day === day ? S.best : null;
-  if (b && (c.t < b.t || (c.t === b.t && c.q <= b.q))) return;
-  S.best = { day, t: c.t, q: c.q };
+  const day = today(), b = S.best && S.best.day === day ? S.best : null, w = boardWorth(c);
+  if (b && b.w !== undefined && w <= b.w) return;
+  S.best = { day, w };
   toPeiskos({ kind: 'catch', c: { f: c.f, s: c.s, t: c.t, q: c.q, g: c.g, idle: source === 'idle' } });
   if (S.tab === 'board') setTimeout(askBoard, 800);
 }
 let board = null, boardAsked = 0;
 function askBoard() { boardAsked = Date.now(); toPeiskos({ kind: 'board' }); }
 function boardHtml() {
-  let h = `<h2>Today's biggest <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's best catch today in this hearth, by hand or idle rod. Ranked by how big it is for its species, then stars.</p>`;
+  let h = `<h2>Today's best <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's most valuable catch today in this hearth, by hand or idle rod. Worth here is the fish's own value, before Fishmonger friend and full-water bonuses, so everyone counts the same.</p>`;
   if (!board) return h + `<div class="empty-state">Loading the board…</div>`;
   if (board.error) return h + `<div class="empty-state">Couldn't load the board. ${esc(board.error)}</div>`;
   if (!board.rows.length) return h + `<div class="empty-state">Nobody has caught anything yet today.</div>`;
   h += `<ol class="board">`;
   board.rows.forEach((r, i) => {
     const f = FISH[r.fish]; if (!f) return;
-    h += `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><canvas data-bfish="${r.fish}" data-t="${r.score}"></canvas><div class="who"><b>${esc(r.name)}</b><span>${f.name} · ${cm(r.size)}${r.giant ? ' · <span class="tag gold">Giant</span>' : ''}${r.idle ? ' · idle rod' : ''}</span></div><div class="score">${starsHtml(r.stars)}<b>${r.score}<small>/100</small></b></div></li>`;
+    h += `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><canvas data-bfish="${r.fish}" data-t="${r.score}"></canvas><div class="who"><b>${esc(r.name)}</b><span>${f.name} · ${cm(r.size)}${r.giant ? ' · <span class="tag gold">Giant</span>' : ''}${r.idle ? ' · idle rod' : ''}</span></div><div class="score">${starsHtml(r.stars)}<b>${fmt(r.worth)}<small> coins</small></b></div></li>`;
   });
   return h + `</ol>`;
 }
@@ -733,6 +735,7 @@ function primary() {
   if (G.phase === 'bite') return hook();
 }
 function cast() {
+  try { audio = audio || new AudioContext(); if (audio.state === 'suspended') audio.resume(); } catch { /* no sound here */ }
   G.bait = S.baitOn;
   if (S.baitOn !== 'worms') {
     S.bait[S.baitOn] = (S.bait[S.baitOn] || 0) - 1;
@@ -748,19 +751,62 @@ function cast() {
 function startBite() {
   G.opts = handOpts(G.bait);
   G.fish = rollFish(S.pond, G.opts);
-  const r = rod();
-  const w = Math.max(.08, .2 + r.zone + .0125 * S.up.hook - G.fish.rf * .1);
+  // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
+  // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
+  const r = rod(), pi = pondIdx(S.pond), rf = G.fish.rf;
+  const w = Math.max(.06, (.2 + r.zone + .0125 * S.up.hook) * (1 - .1 * pi) * (1 - .45 * rf));
   const c = w / 2 + Math.random() * (1 - w);
   G.zone = [c - w / 2, c + w / 2];
-  G.speed = .7 + G.fish.rf * .9;
+  G.speed = .7 + rf * .9 + pi * .15;
+  G.fight = rf * (1 + pi) * .024;
   G.phase = 'bite'; G.t0 = performance.now();
+  biteSound(G.fish.r >= 4);
   setHint(G.fish.r >= 4 ? 'Something heavy!' : 'Bite!', true);
   $('meter').hidden = false;
   $('zone').style.left = (G.zone[0] * 100) + '%';
   $('zone').style.width = (w * 100) + '%';
   updateCastBtn();
 }
-function markerPos(now) { const x = (((now - G.t0) / 1000) * G.speed) % 2; return x < 1 ? x : 2 - x; }
+function markerPos(now) {
+  const t = (now - G.t0) / 1000, x = ((t + (G.fight || 0) * Math.sin(t * 5)) * G.speed) % 2;
+  return x < 1 ? x : 2 - x;
+}
+
+// ---------- the bite sound ----------
+// A plop and a tug on the line, made on the spot (nothing to download). Heavy fish sound deeper.
+// Phones that can also give a short buzz.
+let audio = null;
+function biteSound(heavy) {
+  if (S.muted) return;
+  try {
+    audio = audio || new AudioContext();
+    if (audio.state === 'suspended') audio.resume();
+    const t = audio.currentTime, out = audio.createGain();
+    out.gain.value = .35; out.connect(audio.destination);
+    // the plop: a quick falling tone
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(heavy ? 420 : 760, t); o.frequency.exponentialRampToValueAtTime(heavy ? 90 : 180, t + .14);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + .2);
+    o.connect(g).connect(out); o.start(t); o.stop(t + .22);
+    // the splash: a short burst of filtered noise
+    const n = audio.createBufferSource(), buf = audio.createBuffer(1, audio.sampleRate * .25, audio.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const f = audio.createBiquadFilter(), ng = audio.createGain();
+    f.type = 'bandpass'; f.frequency.value = heavy ? 700 : 1400; f.Q.value = .8; ng.gain.value = .5;
+    n.buffer = buf; n.connect(f).connect(ng).connect(out); n.start(t + .02);
+    // a second tug for the big ones
+    if (heavy) { const o2 = audio.createOscillator(), g2 = audio.createGain(); o2.type = 'sine'; o2.frequency.setValueAtTime(300, t + .22); o2.frequency.exponentialRampToValueAtTime(70, t + .38); g2.gain.setValueAtTime(.0001, t + .22); g2.gain.exponentialRampToValueAtTime(.9, t + .23); g2.gain.exponentialRampToValueAtTime(.0001, t + .42); o2.connect(g2).connect(out); o2.start(t + .22); o2.stop(t + .45); }
+  } catch { /* no sound here */ }
+  try { navigator.vibrate?.(heavy ? [60, 60, 90] : 60); } catch { /* no buzz either */ }
+}
+const SPEAKER = '<path d="M4 9h3l5-4v14l-5-4H4z" fill="currentColor"/>';
+function renderMute() {
+  const b = $('muteBtn');
+  b.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true">${SPEAKER}${S.muted ? '<path d="M16 9l5 6M21 9l-5 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>' : '<path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'}</svg>`;
+  b.setAttribute('aria-label', S.muted ? 'Sound off. Turn the bite sound on' : 'Sound on. Mute the bite sound');
+  b.setAttribute('aria-pressed', String(!!S.muted)); b.title = S.muted ? 'Unmute' : 'Mute';
+}
+$('muteBtn').addEventListener('click', () => { S.muted = !S.muted; renderMute(); save(); });
 function hook() {
   const m = markerPos(performance.now());
   $('meter').hidden = true;
@@ -1196,7 +1242,7 @@ function renderRecent() {
     else paintFishCanvas(cv, FISH[r.c.f], false, r.c.t / 100);
   });
 }
-function renderAll() { renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
+function renderAll() { renderMute(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
 
 function modal(title, bodyHtml, actions) {
   $('modalRoot').innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="card"><h2>${title}</h2>${bodyHtml}<div class="actions">${actions}</div></div></div>`;

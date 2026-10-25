@@ -75,10 +75,10 @@ test('the fishing save is per person per hearth, and an older device cannot over
 test('the game\'s fish are all read from its file', () => {
   const species = loadSpecies();
   assert.equal(species.size, 115);
-  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, rarity: 5 });
+  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5 });
 });
 
-test("today's biggest keeps each person's best catch, ranked by size for its species", async () => {
+test("today's best keeps each person's most valuable catch", async () => {
   const a = await reg('pike_queen');
   const b = await reg('roach_king');
   const c = await reg('outsider');
@@ -89,19 +89,18 @@ test("today's biggest keeps each person's best catch, ranked by size for its spe
 
   assert.deepEqual((await call(`${path}/board`, { token: a.token })).data.rows, []);
 
-  // Common roach (10-35 cm) at 90/100, then a worse one that doesn't replace it.
+  // A roach (worth 4 at its smallest) at 90/100 and 2 stars, then a cheaper one that doesn't replace it.
   assert.equal((await send(b.token, { f: 'roach', s: 32.5, t: 90, q: 2 })).data.best, true);
-  assert.equal((await send(b.token, { f: 'roach', s: 22.5, t: 50, q: 5 })).data.best, false);
-  // An Ember Leviathan (300-900 cm) at 60/100 is huge, but small for a leviathan.
-  assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3 })).data.best, true);
+  assert.equal((await send(b.token, { f: 'roach', s: 22.5, t: 50, q: 1 })).data.best, false);
+  // A giant 5-star roach is worth more, even though nothing else changed.
+  assert.equal((await send(b.token, { f: 'roach', s: 35, t: 100, q: 5, g: true })).data.best, true);
+  // An Ember Leviathan is worth far more than any roach.
+  assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3, idle: true })).data.best, true);
+  assert.equal((await send(a.token, { f: 'leviathan', s: 360, t: 10, q: 1 })).data.best, false);
 
-  let rows = (await call(`${path}/board`, { token: b.token })).data.rows;
-  assert.deepEqual(rows.map((r: any) => [r.name, r.fish, r.score]), [['roach_king', 'roach', 90], ['pike_queen', 'leviathan', 60]]);
-
-  // A tie on size goes to more stars.
-  await send(a.token, { f: 'leviathan', s: 840, t: 90, q: 4, g: false, idle: true });
-  rows = (await call(`${path}/board`, { token: a.token })).data.rows;
-  assert.deepEqual(rows.map((r: any) => [r.name, r.stars, r.idle]), [['pike_queen', 4, 1], ['roach_king', 2, 0]]);
+  const rows = (await call(`${path}/board`, { token: b.token })).data.rows;
+  // 46000 x 1.1 x 1.5, and 4 x 1.5 x 5 x 3 for the giant.
+  assert.deepEqual(rows.map((r: any) => [r.name, r.fish, r.worth, r.idle]), [['pike_queen', 'leviathan', 75900, 1], ['roach_king', 'roach', 90, 0]]);
 
   // Catches that don't add up, and people outside the hearth, are turned away.
   assert.equal((await send(a.token, { f: 'nessie', s: 10, t: 50, q: 3 })).status, 400);

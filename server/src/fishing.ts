@@ -6,7 +6,7 @@
 // A save from an older version is turned away with the newer one, and that device picks up from there
 // instead of overwriting what the other one did.
 //
-// Each person's biggest catch of the day also goes on the hearth's leaderboard. The game runs on the
+// Each person's most valuable catch of the day also goes on the hearth's leaderboard. The game runs on the
 // player's device, so the server can only check that a catch adds up: a real species, and a size
 // that matches its score within that species' range.
 import { readFileSync } from 'node:fs';
@@ -20,14 +20,26 @@ export const MAX_SAVE_BYTES = 256 * 1024;
 export const BOARD_TIME_ZONE = 'America/New_York';
 export const boardDay = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: BOARD_TIME_ZONE }).format(t);
 
-type Species = { name: string; min: number; max: number; rarity: number };
+type Species = { name: string; min: number; max: number; base: number; rarity: number };
 /** The fish, read from the game itself so the two never drift apart: F('id', 'Name', min, max, base, rarity, ...). */
+/** What a catch is worth on the leaderboard: the fish's own value, without anyone's upgrades or bonuses. */
+export const boardWorth = (sp: Species, score: number, stars: number, giant: boolean, starMul: number[]) =>
+  Math.round(sp.base * (0.5 + score / 100) * (starMul[stars - 1] ?? 1) * (giant ? 3 : 1));
+/** The star multipliers, also read from the game: const STAR_MUL = [...]. */
+export function loadStarMul(file = new URL('../../client/games/fishing/game.js', import.meta.url)): number[] {
+  try {
+    const m = readFileSync(file, 'utf8').match(/const STAR_MUL = \[([\d., ]+)\]/);
+    const mul = m ? m[1].split(',').map(Number) : [];
+    if (mul.length === 5 && mul.every((x) => Number.isFinite(x))) return mul;
+  } catch { /* fall through */ }
+  return [0.6, 1, 1.5, 2.5, 5];
+}
 export function loadSpecies(file = new URL('../../client/games/fishing/game.js', import.meta.url)): Map<string, Species> {
   const species = new Map<string, Species>();
   let src = '';
   try { src = readFileSync(file, 'utf8'); } catch { return species; }
-  for (const m of src.matchAll(/\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), [\d.]+, ([1-5]),/g)) {
-    species.set(m[1], { name: m[2], min: Number(m[3]), max: Number(m[4]), rarity: Number(m[5]) });
+  for (const m of src.matchAll(/\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
+    species.set(m[1], { name: m[2], min: Number(m[3]), max: Number(m[4]), base: Number(m[5]), rarity: Number(m[6]) });
   }
   return species;
 }
@@ -49,6 +61,11 @@ export function fishing(ctx: FishingContext) {
   const saves = allowance(30, 2); // the game saves a second or so after you do something
   const catches = allowance(20, 1); // only a catch that beats your best of the day is sent
   const species = loadSpecies();
+  const starMul = loadStarMul();
+  const worthOf = (r: { fish: string; score: number; stars: number; giant: number }) => {
+    const sp = species.get(r.fish);
+    return sp ? boardWorth(sp, r.score, r.stars, !!r.giant, starMul) : 0;
+  };
 
   const hearth = (id: string, userId: number) => {
     const h = Number(id);
@@ -85,11 +102,10 @@ export function fishing(ctx: FishingContext) {
       `SELECT b.user_id AS userId, COALESCE(m.nickname, u.display_name, u.username) AS name, b.fish, b.size, b.score, b.stars, b.giant, b.idle, b.caught_at AS caughtAt
        FROM fishing_best b JOIN users u ON u.id = b.user_id JOIN members m ON m.server_id = b.server_id AND m.user_id = b.user_id
        WHERE b.server_id = ? AND b.day = ?`,
-    ).all(h, day) as { fish: string; score: number; stars: number; caughtAt: number }[];
-    // Biggest for its species first; then more stars, a rarer fish, and whoever caught it first.
-    const rarity = (f: string) => species.get(f)?.rarity ?? 0;
-    rows.sort((a, b) => b.score - a.score || b.stars - a.stars || rarity(b.fish) - rarity(a.fish) || a.caughtAt - b.caughtAt);
-    return { day, timeZone: BOARD_TIME_ZONE, rows: rows.slice(0, 25) };
+    ).all(h, day) as { fish: string; score: number; stars: number; giant: number; caughtAt: number }[];
+    // Most valuable first; a tie goes to whoever caught it first.
+    const ranked = rows.map((r) => ({ ...r, worth: worthOf(r) })).sort((a, b) => b.worth - a.worth || a.caughtAt - b.caughtAt);
+    return { day, timeZone: BOARD_TIME_ZONE, rows: ranked.slice(0, 25) };
   });
 
   route('POST', '/api/servers/:id/fishing/catch', ({ user, params, body }) => {
@@ -105,8 +121,9 @@ export function fishing(ctx: FishingContext) {
     if (!Number.isFinite(size) || Math.abs(size - expected) > (sp.max - sp.min) * 0.006 + 0.1) throw fail(400, "That catch doesn't add up");
     const giant = body.g === true && score >= 98;
     const day = boardDay();
-    const best = db.prepare('SELECT score, stars FROM fishing_best WHERE server_id = ? AND day = ? AND user_id = ?').get(h, day, user.id) as { score: number; stars: number } | undefined;
-    const better = !best || score > best.score || (score === best.score && stars > best.stars);
+    const best = db.prepare('SELECT fish, score, stars, giant FROM fishing_best WHERE server_id = ? AND day = ? AND user_id = ?').get(h, day, user.id) as
+      { fish: string; score: number; stars: number; giant: number } | undefined;
+    const better = !best || boardWorth(sp, score, stars, giant, starMul) > worthOf(best);
     if (better) {
       db.prepare(
         `INSERT INTO fishing_best (server_id, user_id, day, fish, size, score, stars, giant, idle, caught_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
