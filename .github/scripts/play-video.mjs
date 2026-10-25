@@ -197,7 +197,7 @@ try {
     const jpg = await preview.locator('img').screenshot({ type: 'jpeg', quality: 55 });
     console.log(`SHOT ${name} ${jpg.toString('base64')}`);
   }
-  await browser.close();
+  await Promise.race([browser.close(), sleep(10000)]);
   clearTimeout(watchdog);
   process.exit(process.exitCode ?? 0); // the phone connection can keep Node waiting
 }
