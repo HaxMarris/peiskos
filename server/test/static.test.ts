@@ -108,6 +108,20 @@ test('the privacy policy and terms are served with who runs the server', async (
     other.closeAllConnections();
     other.close();
   }
+  // Mail sent from a no-reply address: people are pointed at support@ on that domain instead.
+  const noReply = createApp({
+    db: openDb(':memory:'), publicDir: dir,
+    mail: { url: 'smtps://a:b@mail.example.com:465', from: 'Peiskos <noreply@example.com>' },
+  });
+  await new Promise<void>((r) => noReply.listen(0, r));
+  try {
+    const page = await (await fetch(`http://localhost:${(noReply.address() as AddressInfo).port}/child-safety`)).text();
+    assert.match(page, /mailto:support@example\.com/);
+    assert.doesNotMatch(page, /noreply@/);
+  } finally {
+    noReply.closeAllConnections();
+    noReply.close();
+  }
   // With nothing set, the pages still work and say who to ask.
   const bare = await get('/privacy');
   assert.equal(bare.status, 200);

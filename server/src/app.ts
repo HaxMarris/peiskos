@@ -23,7 +23,7 @@ import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
 import { fishing, fishingDock } from './fishing.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
-import { childSafetyPage, mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
+import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
 
 export interface AppOptions {
@@ -4854,7 +4854,7 @@ export function createApp(opts: AppOptions): Server {
       if (legal) {
         const o: LegalOptions = {
           name: opts.legal?.name,
-          contact: opts.legal?.contact ?? mailAddress(opts.mail?.from),
+          contact: opts.legal?.contact ?? fallbackContact(opts.mail?.from),
           publicUrl: opts.publicUrl,
           backupDays: opts.hosting?.backupKeep ?? 0,
           offsite: !!opts.hosting?.offsite,
