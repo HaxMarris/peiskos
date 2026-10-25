@@ -84,17 +84,33 @@ const shot = (name) => {
 };
 
 log('connecting to the app');
-const [device] = await _android.devices();
-const appPage = async () => (await device.webView({ pkg: 'app.peiskos' }, { timeout: 60000 })).page();
+const within = (ms, what, promise) => Promise.race([promise, sleep(ms).then(() => { throw new Error(`${what} took too long`); })]);
+const [device] = await within(30000, 'finding the phone', _android.devices());
+const appPage = async () => {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const webview = await within(45000, 'finding the app', device.webView({ pkg: 'app.peiskos' }));
+      return await within(30000, 'opening the app page', webview.page());
+    } catch (e) {
+      log(`attempt ${attempt}:`, e.message);
+      if (attempt === 3) throw e;
+      adb('shell', 'am', 'force-stop', 'app.peiskos');
+      adb('shell', 'am', 'start', '-n', 'app.peiskos/.MainActivity');
+      await sleep(8000);
+    }
+  }
+};
 let page = await appPage();
-await page.evaluate((t) => {
+log('signing in');
+await within(30000, 'signing in', page.evaluate((t) => {
   localStorage.setItem('serverUrl', 'http://localhost:3000');
   localStorage.setItem('token', t);
   localStorage.setItem('theme', 'light');
   setTimeout(() => location.reload(), 100);
-}, u.maya.token);
+}, u.maya.token));
 await sleep(7000);
 page = await appPage();
+log('signed in');
 page.on('console', (m) => ['error', 'warning'].includes(m.type()) && log('app console:', m.type(), m.text()));
 shot('1-app');
 
