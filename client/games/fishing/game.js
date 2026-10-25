@@ -186,9 +186,9 @@ const UPGRADES = [
 const BAITS = [
   { id: 'worms', name: 'Garden worms', cost: 0, pack: 0, desc: 'Free and endless. Fish anything.', luck: 0, size: 0, likes: [] },
   { id: 'bread', name: 'Bread paste', cost: 25, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
-  { id: 'minnows', name: 'Live minnows', cost: 120, pack: 20, desc: 'Triples the odds of predators.', luck: .1, size: .1, likes: ['predator'] },
-  { id: 'shrimp', name: 'Shrimp', cost: 700, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
-  { id: 'glow', name: 'Glow grubs', cost: 4000, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
+  { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
+  { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
+  { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
   { id: 'emberfly', name: 'Ember fly', cost: 30000, pack: 20, desc: 'Ember fish rise to it. Luckiest and biggest bait.', luck: 1, size: .3, likes: ['ember', 'rare'] },
 ];
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
