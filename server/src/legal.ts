@@ -62,7 +62,7 @@ function page(title: string, body: string, o: LegalOptions) {
 </head>
 <body>
 <main>
-  <nav><a href="/">Peiskos</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></nav>
+  <nav><a href="/">Peiskos</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/child-safety">Child safety</a></nav>
   <div class="card">
     <h1>${title}</h1>
     <p class="muted">For Peiskos at ${site}${o.name ? `, run by ${esc(o.name)}` : ''}. Last updated ${LEGAL_UPDATED}.</p>
@@ -156,7 +156,7 @@ export function termsPage(o: LegalOptions) {
     <p>There is no tolerance for objectionable content or abusive users. Don't post, share or do any of these:</p>
     <ul>
       <li>Harassment, bullying, threats, or hate aimed at people for who they are.</li>
-      <li>Sexual content involving anyone under 18, of any kind. It is reported to the authorities.</li>
+      <li>Sexual content involving anyone under 18, of any kind, or trying to exploit a minor. It is reported to the authorities. See the <a href="/child-safety">child safety standards</a>.</li>
       <li>Sexual or graphic content shared with people who didn't choose to see it, or anyone's private pictures without their consent.</li>
       <li>Encouraging self-harm or violence.</li>
       <li>Other people's private information, posted without their permission.</li>
@@ -186,5 +186,42 @@ export function termsPage(o: LegalOptions) {
 
     <h2>Changes</h2>
     <p>If these terms change, the date at the top changes too, and big changes are announced in the app. Using Peiskos after a change means you accept the new terms.</p>
+  `, o);
+}
+
+/** Child safety standards, at /child-safety. Google Play asks every social app for a public page like this. */
+export function childSafetyPage(o: LegalOptions) {
+  const runBy = o.name ? esc(o.name) : 'the person who runs this server';
+  return page('Child safety standards', `
+    <p>Peiskos has zero tolerance for child sexual abuse and exploitation (CSAE). This page sets out what isn't allowed, how to report it, and what happens when it's found.</p>
+
+    <h2>What isn't allowed</h2>
+    <ul>
+      <li>Child sexual abuse material (CSAM) of any kind, including drawn, edited or computer-generated images of minors, and links to it.</li>
+      <li>Grooming: building a relationship with a minor in order to sexually abuse or exploit them, online or offline.</li>
+      <li>Sexual messages, requests or images sent to or asked of anyone under 18.</li>
+      <li>Sextortion: threatening to share someone's intimate images to get more images, money or anything else.</li>
+      <li>Sexualizing minors in words, pictures or roleplay, and trafficking or selling minors.</li>
+    </ul>
+    <p>Peiskos is for people 13 and older. Accounts of anyone younger are deleted.</p>
+
+    <h2>How to report it</h2>
+    <ul>
+      <li><b>In the app:</b> open the menu on a message and choose Report. The hearth's moderators see it right away.</li>
+      <li><b>Directly to ${runBy}:</b> contact ${contactHtml(o.contact)}. Use this for anything in a direct message or a profile, anything the hearth's own moderators might be part of, or anything you'd rather not report in the app.</li>
+      <li><b>To the authorities:</b> if a child is in immediate danger, call your local emergency number. You can also report to the <a href="https://report.cybertip.org/">NCMEC CyberTipline</a> (United States) or your country's hotline listed by <a href="https://www.inhope.org/EN/articles/where-can-i-report">INHOPE</a>.</li>
+    </ul>
+
+    <h2>What happens</h2>
+    <ul>
+      <li>Reports of child safety concerns are reviewed first, usually within 24 hours.</li>
+      <li>The content is removed and the account is banned. Ban evasion leads to the new account being removed too.</li>
+      <li>Apparent CSAM is reported to the National Center for Missing &amp; Exploited Children (NCMEC), as US law requires, and to other authorities where the law calls for it. What's needed for that report is preserved, and is otherwise kept out of reach.</li>
+      <li>Peiskos cooperates with law enforcement requests made through proper legal process.</li>
+    </ul>
+
+    <h2>Child safety contact</h2>
+    <p>${runBy[0].toUpperCase() + runBy.slice(1)} is the point of contact for child safety and CSAM prevention on Peiskos: ${contactHtml(o.contact)}.</p>
+    <p>See also the <a href="/terms">terms of use</a> and the <a href="/privacy">privacy policy</a>.</p>
   `, o);
 }

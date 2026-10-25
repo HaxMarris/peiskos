@@ -100,6 +100,10 @@ test('the privacy policy and terms are served with who runs the server', async (
     const terms = await (await fetch(`${base}/terms/`)).text();
     assert.match(terms, /Terms of use/);
     assert.match(terms, /13 or older/);
+    const safety = await (await fetch(`${base}/child-safety`)).text();
+    assert.match(safety, /Child safety standards/);
+    assert.match(safety, /mailto:hello@example\.com/);
+    assert.match(safety, /Sam &#60;b&#62; is the point of contact/);
   } finally {
     other.closeAllConnections();
     other.close();

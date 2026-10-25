@@ -23,7 +23,7 @@ import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
 import { fishing, fishingDock } from './fishing.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
-import { mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
+import { childSafetyPage, mailAddress, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
 
 export interface AppOptions {
@@ -4850,7 +4850,7 @@ export function createApp(opts: AppOptions): Server {
       // Something shared from another app on a phone, before Burrow's service worker was there to
       // catch it: open the app (the shared things are lost, but it doesn't error).
       if (req.method === 'POST' && url.pathname === '/share') return res.writeHead(303, { location: '/' }).end();
-      const legal = url.pathname.match(/^\/(privacy|terms)\/?$/);
+      const legal = url.pathname.match(/^\/(privacy|terms|child-safety)\/?$/);
       if (legal) {
         const o: LegalOptions = {
           name: opts.legal?.name,
@@ -4859,7 +4859,7 @@ export function createApp(opts: AppOptions): Server {
           backupDays: opts.hosting?.backupKeep ?? 0,
           offsite: !!opts.hosting?.offsite,
         };
-        const html = legal[1] === 'privacy' ? privacyPage(o) : termsPage(o);
+        const html = legal[1] === 'privacy' ? privacyPage(o) : legal[1] === 'terms' ? termsPage(o) : childSafetyPage(o);
         return res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' }).end(req.method === 'HEAD' ? undefined : html);
       }
       return serveStatic(req, res, url.pathname);
