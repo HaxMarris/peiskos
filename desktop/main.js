@@ -8,7 +8,7 @@ const hotkeys = require('./hotkeys');
 const activity = require('./activity');
 const drawOverlay = require('./draw-overlay');
 const tray = require('./tray');
-const { fixOldShortcuts } = require('./shortcuts');
+const { fixOldShortcuts, refreshIcons } = require('./shortcuts');
 
 // Peiskos used to be called Burrow. Keep the old settings folder (logins, servers, settings),
 // which is named after the app, so renaming it doesn't log anyone out.
@@ -199,6 +199,7 @@ app.whenReady().then(() => {
   tray.createTray(showWindow);
   startUpdateChecks(() => BrowserWindow.getAllWindows()[0]);
   fixOldShortcuts();
+  refreshIcons();
   app.on('activate', () => showWindow());
 });
 
