@@ -805,6 +805,13 @@ function handleEvent(ev) {
       toast(ev.afk ? `You were away for a while, so you were moved to ${to?.name ?? 'the AFK fire'}.` : `${ev.by} moved you to ${to?.name ?? 'another fire'}.`);
       break;
     }
+    case 'voice_elsewhere':
+      // Sat down at a fire on another device, so this one gets up.
+      if (state.voice) {
+        leaveVoice();
+        toast('You joined the fire on another device.');
+      }
+      break;
     case 'voice_kicked':
       if (state.voice) leaveVoice();
       toast(`${ev.by} took you out of the fire.`);

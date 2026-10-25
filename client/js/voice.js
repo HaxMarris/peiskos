@@ -183,7 +183,13 @@ async function startMic(voice) {
   const lp = voice.room.localParticipant;
   await lp.setMicrophoneEnabled(true, micConstraints(), micPublishOptions());
   if (state.voice !== voice) return;
-  if (wantsMicProcessor()) await micTrack()?.setProcessor(micProcessor(voice)).catch((err) => console.warn("Couldn't start the noise filter:", err));
+  let processed = true;
+  if (wantsMicProcessor()) await micTrack()?.setProcessor(micProcessor(voice)).catch((err) => { processed = false; console.warn("Couldn't start the noise filter:", err); });
+  // Push to talk lives in that chain: without it the mic would be open the whole time, so it stays muted.
+  if (!processed && voicePrefs.mode === 'ptt' && !voice.muted) {
+    setMicMuted(voice, true);
+    toast("Push to talk couldn't start, so your mic is muted. Unmute to talk, or try again.");
+  }
   if (voice.muted) await lp.setMicrophoneEnabled(false);
 }
 

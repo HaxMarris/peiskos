@@ -32,7 +32,8 @@ function pingCount(n) {
   b.textContent = n > 99 ? '99+' : n;
   return b;
 }
-const mentionsMe = (m) => new RegExp('@' + escapeRegex(state.me.username) + '\\b', 'i').test(m.content) || m.replyTo?.authorId === state.me.id || pingsMe(m);
+// Your whole username: @max isn't you if you're max but someone wrote @max-bot or @max.b.
+const mentionsMe = (m) => new RegExp('@' + escapeRegex(state.me.username) + '(?![\\w-])(?!\\.[\\w-])', 'i').test(m.content) || m.replyTo?.authorId === state.me.id || pingsMe(m);
 /** @everyone, @here or one of your roles, from someone allowed to ping those. */
 function pingsMe(m) {
   const p = m.pings;
@@ -822,7 +823,7 @@ function formatContent(text) {
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
     .replace(/~~(.+?)~~/g, '<s>$1</s>')
     .replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" tabindex="0" title="Spoiler: click to show">$1</span>')
-    .replace(/(^|\s)@([\w.-]+)/g, '$1<span class="mention">@$2</span>');
+    .replace(/(^|\s)@([\w.-]*[\w-])/g, '$1<span class="mention">@$2</span>'); // a full stop after it ends the sentence
   const escaped = escapeHtml(text)
     .replace(/```(?:([\w+#.-]{1,20})\n|\n)?([\s\S]*?)```/g, (_, lang, code) => stash(`<pre><code>${highlight(code.replace(/\n$/, ''), lang)}</code></pre>`))
     .replace(/`([^`\n]+)`/g, (_, code) => stash(`<code>${code}</code>`));

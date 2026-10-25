@@ -261,6 +261,10 @@ async function micChain(ctx, track) {
   if (wantsGate()) {
     try { gate = new AudioWorkletNode(ctx, 'burrow-gate', { numberOfInputs: 2, outputChannelCount: [channels] }); } catch (err) { console.warn("Couldn't start the voice gate:", err); }
   }
+  // Push to talk without its gate (the worklet didn't load) would send everything, so a plain
+  // switch stands in: silent unless the key is held.
+  const pttSwitch = !gate && voicePrefs.mode === 'ptt' ? ctx.createGain() : null;
+  if (pttSwitch) pttSwitch.gain.value = 0;
   const out = ctx.createMediaStreamDestination();
   out.channelCount = channels;
   // The speech channel goes to the gate; on Strong, the voice channel carries on as usual.
@@ -277,6 +281,7 @@ async function micChain(ctx, track) {
   } else front.connect(fx.input);
   fx.output.connect(gain);
   if (gate) gain.connect(gate).connect(out);
+  else if (pttSwitch) gain.connect(pttSwitch).connect(out);
   else gain.connect(out);
   let source = null;
   const chain = {
@@ -292,7 +297,10 @@ async function micChain(ctx, track) {
     },
     setVolume(v) { gain.gain.setTargetAtTime(v, ctx.currentTime, 0.02); },
     /** Push to talk held or not, and the sensitivity, for the gate. */
-    setGate(settings) { gate?.port.postMessage({ ...settings, auto: settings.auto && !!split }); },
+    setGate(settings) {
+      gate?.port.postMessage({ ...settings, auto: settings.auto && !!split });
+      pttSwitch?.gain.setTargetAtTime(!settings.ptt || settings.held ? 1 : 0, ctx.currentTime, 0.01);
+    },
     destroy() {
       source?.disconnect();
       front.disconnect();
@@ -304,6 +312,7 @@ async function micChain(ctx, track) {
       fx.destroy();
       gain.disconnect();
       gate?.disconnect();
+      pttSwitch?.disconnect();
       chain.track.stop();
     },
   };
