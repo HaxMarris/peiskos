@@ -371,7 +371,7 @@ label.check input { width: auto; }
 .perm-list input:disabled + span { opacity: .5; }
 
 /* ---------- modal ---------- */
-.modal { position: fixed; inset: 0; background: rgba(20, 14, 10, .55); backdrop-filter: blur(3px); display: grid; place-items: center; padding: 16px; z-index: 10; }
+.modal { position: fixed; inset: 0; background: rgba(20, 14, 10, .55); backdrop-filter: blur(3px); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); z-index: 10; }
 .modal-card { background: var(--surface); border-radius: 20px; padding: 26px; width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
 .modal-card h2 { margin: 0; font-size: 24px; }
 .modal-card p { margin: 0; }
@@ -385,7 +385,8 @@ label.check input { width: auto; }
 /* ---------- narrow windows ---------- */
 @media (max-width: 980px) {
   .member-pane { display: none; }
-  .member-pane.open { display: block; position: fixed; right: 0; top: 0; bottom: 0; width: min(300px, 100%); background: var(--bg); z-index: 8; box-shadow: var(--shadow); }
+  /* Over the whole height, so it keeps clear of a phone's status bar and home bar itself. */
+  .member-pane.open { display: block; position: fixed; right: 0; top: 0; bottom: 0; width: min(300px, 100%); background: var(--bg); z-index: 8; box-shadow: var(--shadow); padding-top: max(18px, env(safe-area-inset-top)); padding-right: max(14px, env(safe-area-inset-right)); padding-bottom: max(18px, env(safe-area-inset-bottom)); }
   .member-pane.open .member-head { display: flex; }
   .brand-name { display: none; }
 }
@@ -426,7 +427,7 @@ label.check input { width: auto; }
   .me-btn { display: none; }
   .app.switching .sidebar { filter: brightness(.6); pointer-events: none; }
   .star { width: 44px; height: 44px; }
-  .switcher { left: 10px !important; right: 10px; top: 78px !important; width: auto; border-radius: 20px; max-height: calc(100dvh - 170px); }
+  .switcher { left: 10px !important; right: 10px; top: calc(68px + max(10px, env(safe-area-inset-top))) !important; width: auto; border-radius: 20px; max-height: calc(100dvh - 160px - max(10px, env(safe-area-inset-top))); }
 
   .sidebar { padding: 6px 10px 10px; border-right: 0; border-radius: 0; }
   .side-head { padding: 10px 2px 0 10px; }
@@ -471,7 +472,7 @@ label.check input { width: auto; }
 
   /* Pop-ups become sheets that slide up from the bottom. */
   .modal { place-items: end stretch; padding: 0; }
-  .modal-card { max-width: none; border-radius: 24px 24px 0 0; max-height: 92dvh; padding: 22px 18px calc(22px + env(safe-area-inset-bottom)); animation: sheet-up .2s ease-out; }
+  .modal-card { max-width: none; border-radius: 24px 24px 0 0; max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top) - 12px)); padding: 22px 18px calc(22px + env(safe-area-inset-bottom)); animation: sheet-up .2s ease-out; }
   .modal-card::before { content: ""; align-self: center; width: 40px; height: 5px; border-radius: 3px; background: var(--line); margin: -10px 0 4px; flex: none; }
   .modal-card.wide { width: 100%; }
   .modal-row .btn { flex: 1; padding: 12px; }
@@ -992,7 +993,7 @@ button.seat-face { cursor: pointer; }
 .pop-menu button { text-align: left; border: 0; background: none; padding: 9px 10px; border-radius: 9px; font: inherit; font-weight: 700; color: var(--text); }
 .pop-menu button:hover, .pop-menu button:focus-visible { background: var(--hover); outline: none; }
 .pop-menu .danger-item { color: var(--berry); }
-.toasts { position: fixed; right: 16px; bottom: 16px; z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
+.toasts { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: min(440px, calc(100vw - 32px)); padding: 10px 8px 10px 14px; background: var(--text-strong); color: var(--bg); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); font-size: 14px; }
 .toast span { flex: 1; }
 .toast .btn { padding: 6px 12px; flex: none; }
@@ -1252,7 +1253,7 @@ button.seat-face { cursor: pointer; }
 .call-bar #call-bar-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .call-bar .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--online); flex: none; }
 .call-bar .btn { padding: 6px 14px; }
-.ring-card { position: fixed; z-index: 40; top: 16px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: min(420px, calc(100% - 32px)); padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, .25); }
+.ring-card { position: fixed; z-index: 40; top: calc(16px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 12px; width: min(420px, calc(100% - 32px)); padding: 12px 14px; border-radius: 18px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(0, 0, 0, .25); }
 .ring-card.hidden { display: none; }
 .ring-card .avatar { flex: none; animation: ring-pulse 1.4s ease-out infinite; }
 @keyframes ring-pulse { 0% { box-shadow: 0 0 0 0 var(--online); } 100% { box-shadow: 0 0 0 12px transparent; } }
@@ -1507,7 +1508,7 @@ button.seat-face { cursor: pointer; }
 
 /* ---- the app: offline, waiting messages, quick switcher, shortcuts, servers ---- */
 
-.offline-bar { position: fixed; left: 50%; top: 8px; transform: translateX(-50%); z-index: 60; max-width: calc(100% - 32px); padding: 8px 14px; border-radius: 12px; background: var(--text-strong); color: var(--bg); font-size: 13px; font-weight: 700; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); text-align: center; }
+.offline-bar { position: fixed; left: 50%; top: calc(8px + env(safe-area-inset-top)); transform: translateX(-50%); z-index: 60; max-width: calc(100% - 32px); padding: 8px 14px; border-radius: 12px; background: var(--text-strong); color: var(--bg); font-size: 13px; font-weight: 700; box-shadow: 0 6px 20px rgb(0 0 0 / 0.18); text-align: center; }
 .outbox { margin: 0 0 6px; padding: 8px 10px; border: 1px dashed var(--line); border-radius: 12px; background: var(--surface-2); font-size: 13px; }
 .outbox-head { color: var(--muted); font-weight: 700; margin-bottom: 4px; }
 .outbox-row { display: flex; align-items: center; gap: 8px; }
