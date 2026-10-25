@@ -385,28 +385,30 @@ function record(c, source) {
   return notes;
 }
 
-// ---------- today's biggest (the hearth's leaderboard) ----------
-// Your best catch of the day goes on the hearth's board, ranked by size for its species (then stars).
-// Only a catch that beats your own best today is sent. The day runs midnight to midnight Eastern.
+// ---------- today's best (the hearth's leaderboard) ----------
+// Your most valuable catch of the day goes on the hearth's board. Its worth there leaves out your own
+// boosts (Fishmonger friend, full waters), so everyone's fish count the same. Only a catch that beats
+// your own best today is sent. The day runs midnight to midnight Eastern.
+const boardWorth = c => Math.round(FISH[c.f].base * (.5 + c.t / 100) * STAR_MUL[c.q - 1] * (c.g ? 3 : 1));
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(Date.now());
 function reportBest(c, source) {
-  const day = today(), b = S.best && S.best.day === day ? S.best : null;
-  if (b && (c.t < b.t || (c.t === b.t && c.q <= b.q))) return;
-  S.best = { day, t: c.t, q: c.q };
+  const day = today(), b = S.best && S.best.day === day ? S.best : null, w = boardWorth(c);
+  if (b && b.w !== undefined && w <= b.w) return;
+  S.best = { day, w };
   toPeiskos({ kind: 'catch', c: { f: c.f, s: c.s, t: c.t, q: c.q, g: c.g, idle: source === 'idle' } });
   if (S.tab === 'board') setTimeout(askBoard, 800);
 }
 let board = null, boardAsked = 0;
 function askBoard() { boardAsked = Date.now(); toPeiskos({ kind: 'board' }); }
 function boardHtml() {
-  let h = `<h2>Today's biggest <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's best catch today in this hearth, by hand or idle rod. Ranked by how big it is for its species, then stars.</p>`;
+  let h = `<h2>Today's best <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's most valuable catch today in this hearth, by hand or idle rod. Worth here is the fish's own value, before Fishmonger friend and full-water bonuses, so everyone counts the same.</p>`;
   if (!board) return h + `<div class="empty-state">Loading the board…</div>`;
   if (board.error) return h + `<div class="empty-state">Couldn't load the board. ${esc(board.error)}</div>`;
   if (!board.rows.length) return h + `<div class="empty-state">Nobody has caught anything yet today. Be first.</div>`;
   h += `<ol class="board">`;
   board.rows.forEach((r, i) => {
     const f = FISH[r.fish]; if (!f) return;
-    h += `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><canvas data-bfish="${r.fish}" data-t="${r.score}"></canvas><div class="who"><b>${esc(r.name)}</b><span>${f.name} · ${cm(r.size)}${r.giant ? ' · <span class="tag gold">Giant</span>' : ''}${r.idle ? ' · idle rod' : ''}</span></div><div class="score">${starsHtml(r.stars)}<b>${r.score}<small>/100</small></b></div></li>`;
+    h += `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><canvas data-bfish="${r.fish}" data-t="${r.score}"></canvas><div class="who"><b>${esc(r.name)}</b><span>${f.name} · ${cm(r.size)}${r.giant ? ' · <span class="tag gold">Giant</span>' : ''}${r.idle ? ' · idle rod' : ''}</span></div><div class="score">${starsHtml(r.stars)}<b>${fmt(r.worth)}<small> coins</small></b></div></li>`;
   });
   return h + `</ol>`;
 }
