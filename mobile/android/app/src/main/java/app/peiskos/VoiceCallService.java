@@ -19,6 +19,7 @@ public class VoiceCallService extends Service {
     private static final String MUTE = "app.peiskos.MUTE_VOICE";
     private Intent last; // what the notification shows now, kept for when only an action was tapped
     private static final int ID = 1;
+    static boolean running; // in the foreground, with its notification up
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
@@ -60,12 +61,18 @@ public class VoiceCallService extends Service {
             .addAction(0, "Leave", PendingIntent.getService(this, 1, leave, immutable))
             .build();
 
+        if (running) {
+            manager.notify(ID, notification);
+            return START_NOT_STICKY;
+        }
         try {
             ServiceCompat.startForeground(this, ID, notification, foregroundTypes(true));
+            running = true;
         } catch (Exception e) {
             // No microphone permission (joined to listen only): keep the sound going at least.
             try {
                 ServiceCompat.startForeground(this, ID, notification, foregroundTypes(false));
+                running = true;
             } catch (Exception ignored) {
                 stopSelf();
             }
@@ -78,6 +85,12 @@ public class VoiceCallService extends Service {
         int types = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
         if (microphone && Build.VERSION.SDK_INT >= 30) types |= ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE;
         return types;
+    }
+
+    @Override
+    public void onDestroy() {
+        running = false;
+        super.onDestroy();
     }
 
     // Swiping Peiskos away ends the call with it.

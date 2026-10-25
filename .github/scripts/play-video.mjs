@@ -62,6 +62,8 @@ for (const n of ['theo', 'ines']) {
 
 // The phone.
 for (const port of [3000, 7880, 7881]) adb('reverse', `tcp:${port}`, `tcp:${port}`);
+// A slow emulator's launcher can trip Android's "isn't responding" box; keep those off the video.
+try { adb('shell', 'settings', 'put', 'global', 'hide_error_dialogs', '1'); } catch (e) { log('error dialogs', e.message); }
 log('installing');
 adb('install', '-r', '-g', apk);
 for (const perm of ['RECORD_AUDIO', 'POST_NOTIFICATIONS']) {

@@ -59,7 +59,11 @@ public class VoiceCallPlugin extends Plugin {
         intent.putExtra("text", call.getString("text", "Peiskos"));
         intent.putExtra("muted", Boolean.TRUE.equals(call.getBoolean("muted", false)));
         try {
-            ContextCompat.startForegroundService(getContext(), intent);
+            // Android only lets an app start a foreground service while it's on screen, but the page also
+            // calls this from the background (muting, getting back in after the connection drops). The
+            // service is already running then, and a plain start just redraws its notification.
+            if (VoiceCallService.running) getContext().startService(intent);
+            else ContextCompat.startForegroundService(getContext(), intent);
             call.resolve();
         } catch (Exception e) {
             call.reject("Couldn't keep the call going in the background", e);
