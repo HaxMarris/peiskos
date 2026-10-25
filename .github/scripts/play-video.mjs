@@ -64,6 +64,9 @@ for (const n of ['theo', 'ines']) {
 for (const port of [3000, 7880, 7881]) adb('reverse', `tcp:${port}`, `tcp:${port}`);
 // A slow emulator's launcher can trip Android's "isn't responding" box; keep those off the video.
 try { adb('shell', 'settings', 'put', 'global', 'hide_error_dialogs', '1'); } catch (e) { log('error dialogs', e.message); }
+// A smaller screen is much less work for the emulator's software graphics.
+adb('shell', 'wm', 'size', '720x1600');
+adb('shell', 'wm', 'density', '300');
 log('installing');
 adb('install', '-r', '-g', apk);
 for (const perm of ['RECORD_AUDIO', 'POST_NOTIFICATIONS']) {
