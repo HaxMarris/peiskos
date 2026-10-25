@@ -23,6 +23,16 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 /** The address in a MAIL_FROM like `Peiskos <you@example.com>`. */
 export const mailAddress = (from?: string) => from?.match(/<([^>]+)>/)?.[1] ?? (from?.includes('@') ? from.trim() : undefined);
 
+/**
+ * Where people write about their data or child safety when LEGAL_CONTACT isn't set: the address
+ * email is sent from, or support@ at its domain when that's a no-reply address nobody reads.
+ */
+export const fallbackContact = (from?: string) => {
+  const address = mailAddress(from);
+  const m = address?.match(/^(no-?reply|do-?not-?reply)@(.+)$/i);
+  return m ? `support@${m[2]}` : address;
+};
+
 function contactHtml(contact?: string) {
   if (!contact) return 'the person who runs this server (ask in any hearth they host, or message them directly)';
   const href = /^https?:\/\//i.test(contact) ? contact : `mailto:${contact}`;

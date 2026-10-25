@@ -337,7 +337,7 @@ LEGAL_NAME=Maxwell
 LEGAL_CONTACT=hello@example.com
 ```
 
-Without `LEGAL_CONTACT` the pages use the address in `MAIL_FROM`. The wording lives in `server/src/legal.ts`; it isn't legal advice, so have it checked if your server is open to the public.
+Without `LEGAL_CONTACT` the pages use the address in `MAIL_FROM`, or `support@` at its domain when that is a no-reply address (`noreply@peiskos.app` becomes `support@peiskos.app`). The wording lives in `server/src/legal.ts`; it isn't legal advice, so have it checked if your server is open to the public.
 
 ### Uptime alerts
 
