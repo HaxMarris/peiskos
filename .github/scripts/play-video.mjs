@@ -114,19 +114,43 @@ log('signed in');
 page.on('console', (m) => ['error', 'warning'].includes(m.type()) && log('app console:', m.type(), m.text()));
 shot('1-app');
 
+// Find something on screen by its label and tap it. Returns false when it isn't there.
+const tap = (label, required = true) => {
+  adb('shell', 'uiautomator', 'dump', '/sdcard/ui.xml');
+  const xml = adb('shell', 'cat', '/sdcard/ui.xml');
+  const re = new RegExp(`text="${label}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`, 'i');
+  const m = xml.match(re);
+  if (!m) {
+    if (!required) return false;
+    writeFileSync(`${out}/ui-${label}.xml`, xml);
+    throw new Error(`no "${label}" button on screen`);
+  }
+  const [x1, y1, x2, y2] = m.slice(1).map(Number);
+  adb('shell', 'input', 'tap', String((x1 + x2) >> 1), String((y1 + y2) >> 1));
+  log('tapped', label);
+  return true;
+};
+// The emulator's launcher is slow enough to trip Android's "isn't responding" box now and then.
+const dismissHang = () => { try { tap('Wait', false); } catch (e) { log('checking for a hang box:', e.message); } };
+
+dismissHang();
 log('recording');
 const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', '8000000', '/sdcard/demo.mp4'], { stdio: 'inherit' });
 await sleep(2500);
 
 try {
+  dismissHang();
   log('joining');
-  await page.locator('li.fire-card').first().click({ timeout: 20000 });
+  await page.locator('li.fire-card .voice-room-name').first().click({ timeout: 20000 });
   log('joined');
-  await sleep(6000);
+  await sleep(5000);
+  dismissHang();
+  await sleep(1000);
   shot('2-fire');
 
   adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
   await sleep(2500);
+  dismissHang();
   adb('shell', 'cmd', 'statusbar', 'expand-notifications');
   await sleep(4000);
   shot('3-notification');
@@ -135,24 +159,11 @@ try {
 
   adb('shell', 'am', 'start', '-a', 'android.settings.SETTINGS');
   await sleep(4000);
+  dismissHang();
   shot('4-other-app');
   adb('shell', 'cmd', 'statusbar', 'expand-notifications');
   await sleep(2500);
 
-  // Find a notification button by its label and tap it.
-  const tap = (label) => {
-    adb('shell', 'uiautomator', 'dump', '/sdcard/ui.xml');
-    const xml = adb('shell', 'cat', '/sdcard/ui.xml');
-    const re = new RegExp(`text="${label}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`, 'i');
-    const m = xml.match(re);
-    if (!m) {
-      writeFileSync(`${out}/ui-${label}.xml`, xml);
-      throw new Error(`no "${label}" button on screen`);
-    }
-    const [x1, y1, x2, y2] = m.slice(1).map(Number);
-    adb('shell', 'input', 'tap', String((x1 + x2) >> 1), String((y1 + y2) >> 1));
-    log('tapped', label);
-  };
   tap('Mute');
   await sleep(3000);
   shot('5-muted');
