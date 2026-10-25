@@ -225,7 +225,7 @@ function fresh() {
   return { v: 2, coins: 0, pond: 'mill', ponds: ['mill'], rod: 'willow', rods: ['willow'],
     up: { line: 0, reel: 0, luck: 0, hook: 0, market: 0, nets: 0 }, bait: {}, baitOn: 'worms',
     hat: 'bucket', hats: ['bucket'],
-    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0 }, saved: Date.now(), tab: 'shop', shopTab: 'rods' };
+    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0, bestStreak: 0 }, streak: 0, saved: Date.now(), tab: 'shop', shopTab: 'rods' };
 }
 let S = fresh();
 function migrate(d) {
@@ -424,6 +424,7 @@ function checkAreaHat(pid) {
   addRecent({ chest: true, hat: h.id, area: true });
   post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}.`, true);
 }
+const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000];
 function openChest() {
   S.stats.chests++;
   if (S.stats.chests === 1) S.hatsNew = true;
@@ -438,10 +439,12 @@ function openChest() {
   }
   const ws = left.map(h => [40, 30, 18, 9, 3][h.r - 1] * (1 + pi * (h.r - 1) * .4));
   const h = pick(left, ws);
-  S.hats.push(h.id);
-  addRecent({ chest: true, hat: h.id });
-  post(`Pulled up a treasure chest at ${pondOf(S.pond).name}. Inside: the ${h.name} (${RARITY[h.r - 1].toLowerCase()} hat).`, true);
-  return { hat: h.id };
+  // Gold comes with the hat, more at each water (the last is for the next water to open).
+  const coins = CHEST_GOLD[Math.min(pi, CHEST_GOLD.length - 1)];
+  S.hats.push(h.id); S.coins += coins; S.stats.earned += coins;
+  addRecent({ chest: true, hat: h.id, coins });
+  post(`Pulled up a treasure chest at ${pondOf(S.pond).name}. Inside: the ${h.name} (${RARITY[h.r - 1].toLowerCase()} hat) and ${fmt(coins)} coins.`, true);
+  return { hat: h.id, coins };
 }
 
 // ---------- idle rods ----------
@@ -732,7 +735,7 @@ const G = { mode: 'fish', phase: 'idle', t0: 0, wait: 0, fish: null, zone: [0, 0
 function primary() {
   if (G.mode === 'map') { if (!G.walk) setMode('fish'); return; }
   if (G.phase === 'idle' || G.phase === 'done') return cast();
-  if (G.phase === 'wait' || G.phase === 'cast') { G.phase = 'idle'; setHint('Too early. The bobber was still.'); updateCastBtn(); return; }
+  if (G.phase === 'wait' || G.phase === 'cast') { G.phase = 'idle'; setHint('Too early. The bobber was still.'); breakStreak(); updateCastBtn(); return; }
   if (G.phase === 'bite') return hook();
 }
 function cast() {
@@ -813,18 +816,38 @@ function hook() {
   $('meter').hidden = true;
   const [a, b] = G.zone, w = b - a;
   if (m >= a && m <= b) {
+    const perfect = m >= a + w * .35 && m <= b - w * .35;
+    if (perfect) addStreak(); else breakStreak();
     if (Math.random() < chestChance()) showChest(openChest());
     else {
-      const perfect = m >= a + w * .35 && m <= b - w * .35;
       const c = rollCatch(G.fish, G.opts, perfect);
       showCatch(c, record(c, 'hand'));
       dock.caught = { f: c.f, s: c.s, q: c.q };
     }
     setHint('');
-  } else { showMiss('It slipped the hook.'); setHint(''); }
+  } else { showMiss('It slipped the hook.'); setHint(''); breakStreak(); }
   G.phase = 'done'; updateCastBtn(); save(); renderAll();
 }
-function escapeFish() { $('meter').hidden = true; setHint(''); showMiss('It got away.'); G.phase = 'done'; updateCastBtn(); }
+function escapeFish() { $('meter').hidden = true; setHint(''); showMiss('It got away.'); breakStreak(); G.phase = 'done'; updateCastBtn(); }
+
+// ---------- perfect hook streak ----------
+// Perfect hooks in a row, shown as a counter (no coin bonus).
+// Anything less (a plain hook, a miss, a fish that gets away, striking too early) starts it over.
+function addStreak() {
+  S.streak = (S.streak || 0) + 1;
+  const best = S.streak > (S.stats.bestStreak || 0);
+  if (best) S.stats.bestStreak = S.streak;
+  if (S.streak % 5 === 0) post(`${S.streak} perfect hooks in a row${best ? ', a new personal best' : ''}.`, true);
+  renderStreak(true);
+}
+function breakStreak() { if (!S.streak) return; S.streak = 0; renderStreak(); }
+function renderStreak(pop) {
+  const el = $('streak');
+  el.hidden = (S.streak || 0) < 2 || G.mode === 'map';
+  if (el.hidden) return;
+  el.textContent = `🔥 ${S.streak} perfect in a row`;
+  if (pop) { el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); }
+}
 function setHint(t, bite) { const h = $('hint'); h.textContent = t; h.className = 'hint' + (bite ? ' bite' : ''); }
 function updateCastBtn() {
   const b = $('castBtn');
@@ -844,7 +867,7 @@ function showCatch(c, notes) {
 }
 function showChest(res) {
   const h = res.hat && HAT[res.hat];
-  $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv" style="height:84px"></canvas><h3>Treasure chest!</h3>${h ? `<div class="row"><span>${h.name}</span>${rarHtml(h.r)}</div><div class="tags"><span class="tag gold">New hat</span></div>` : `<div class="row"><span>Full of coins</span><span class="val">+${fmt(res.coins)}</span></div>`}</div>`;
+  $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv" style="height:84px"></canvas><h3>Treasure chest!</h3>${h ? `<div class="row"><span>${h.name}</span>${rarHtml(h.r)}</div><div class="row"><span>Gold</span><span class="val">+${fmt(res.coins)}</span></div><div class="tags"><span class="tag gold">New hat</span></div>` : `<div class="row"><span>Full of coins</span><span class="val">+${fmt(res.coins)}</span></div>`}</div>`;
   const [c, w, ht] = sizeCanvas($('catchCv'));
   drawChest(c, w * .32, ht * .78, ht * .7, true);
   if (h) { c.fillStyle = '#f1c9a0'; c.beginPath(); c.arc(w * .68, ht * .78, ht * .17, 0, 7); c.fill(); drawHat(c, h.id, w * .68, ht * .78, ht * .17, 0); }
@@ -859,6 +882,7 @@ function setMode(m) {
   if (m === 'map') { G.phase = 'idle'; $('meter').hidden = true; setHint(''); $('catchbox').innerHTML = ''; }
   $('mapNodes').hidden = m !== 'map'; $('mapTitle').hidden = m !== 'map';
   $('pondtag').hidden = m === 'map';
+  renderStreak();
   $('scene').setAttribute('aria-label', m === 'map' ? 'Map of waters' : 'Fishing spot. Tap or press Space to cast and hook.');
   renderMapNodes(); updateCastBtn();
 }
@@ -872,7 +896,8 @@ function walkTo(id) {
   updateCastBtn();
 }
 function walkPos(now) {
-  const w = G.walk, k = Math.min(1, (now - w.t0) / w.dur), seg = k * (w.pts.length - 1), i = Math.min(w.pts.length - 2, Math.floor(seg)), f = seg - i;
+  // A frame's timestamp can be from just before the tap that started the walk, so never go below 0.
+  const w = G.walk, k = Math.max(0, Math.min(1, (now - w.t0) / w.dur)), seg = k * (w.pts.length - 1), i = Math.min(w.pts.length - 2, Math.floor(seg)), f = seg - i;
   const p = w.pts[i], q = w.pts[i + 1];
   return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, done: k >= 1, dir: q.x >= p.x ? 1 : -1 };
 }
@@ -1114,17 +1139,22 @@ function onDock(m) {
 }
 let lastIdleTick = 0;
 function frame(now) {
-  if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
-  dockTick(now);
-  if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
+  // Ask for the next frame first, so one bad frame can't stop the game for good.
   requestAnimationFrame(frame);
+  try {
+    if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
+    dockTick(now);
+    if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
+  } catch (err) {
+    console.error('Fireside Angler frame:', err);
+  }
 }
 
 
 // ---------- UI ----------
 function renderTop() {
   const total = Object.keys(FISH).length, got = Object.keys(S.coll).length;
-  $('stats').innerHTML = `<div class="stat coins"><b>${fmt(S.coins)}</b><span>coins</span></div><div class="stat"><b>${fmt(S.stats.caught)}</b><span>caught</span></div><div class="stat"><b>${got}/${total}</b><span>species</span></div>${hatsUnlocked() ? `<div class="stat"><b>${S.hats.length}/${HATS.length}</b><span>hats</span></div>` : ''}`;
+  $('stats').innerHTML = `<div class="stat coins"><b>${fmt(S.coins)}</b><span>coins</span></div><div class="stat"><b>${fmt(S.stats.caught)}</b><span>caught</span></div><div class="stat"><b>${got}/${total}</b><span>species</span></div>${S.stats.bestStreak >= 2 ? `<div class="stat"><b>${S.stats.bestStreak}</b><span>best streak</span></div>` : ''}${hatsUnlocked() ? `<div class="stat"><b>${S.hats.length}/${HATS.length}</b><span>hats</span></div>` : ''}`;
   if (!hatsUnlocked() && S.tab === 'hats') S.tab = 'shop';
   $('rodChip').textContent = rod().name;
   const b = BAIT[S.baitOn];
@@ -1199,7 +1229,7 @@ function renderPane() {
     if (S.slots.length < SLOT_COSTS.length) { const c = SLOT_COSTS[S.slots.length]; h += `<div class="slot empty"><div>A new holder fishes the water you're at. Level it up for faster bites and a better catch rate.</div><button class="buy" style="grid-row:auto" data-act="slot-buy" ${S.coins < c ? 'disabled' : ''}>Buy holder · ${fmt(c)}</button></div>`; }
     h += `</div>`;
   } else if (S.tab === 'hats') {
-    h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead. Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
+    h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead, with gold inside too (more at later waters). Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
       if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars.</p><div class="hat-grid">`;
@@ -1231,7 +1261,7 @@ function renderRecent() {
   const el = $('recent'), list = S.recent.slice(0, 6);
   if (!list.length) { el.innerHTML = `<h2>Recent catches</h2><div class="empty-state">Your last six catches show up here.</div>`; return; }
   el.innerHTML = `<h2>Recent catches <small>last ${list.length}</small></h2><div class="rc-grid">${list.map((r, i) => {
-    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span></div></div>`; }
+    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
     const c = r.c, f = FISH[c.f], tags = [];
     if (c.g) tags.push('<span class="tag gold">Giant ×3</span>');
     if (c.p) tags.push('<span class="tag green">Perfect</span>');
@@ -1243,7 +1273,7 @@ function renderRecent() {
     else paintFishCanvas(cv, FISH[r.c.f], false, r.c.t / 100);
   });
 }
-function renderAll() { renderMute(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
+function renderAll() { renderMute(); renderStreak(); renderTop(); renderNets(); renderRecent(); renderPane(); renderMapNodes(); }
 
 function modal(title, bodyHtml, actions) {
   $('modalRoot').innerHTML = `<div class="modal" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="card"><h2>${title}</h2>${bodyHtml}<div class="actions">${actions}</div></div></div>`;
@@ -1294,7 +1324,10 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target.dataset.act === 'slot-pond') { const sl = S.slots[+e.target.dataset.i]; sl.pond = e.target.value; save(); renderAll(); }
 });
-$('castBtn').addEventListener('click', primary);
+// Cast and hook the moment the button goes down, not when it's let go: timing matters on the hook.
+// A click with no pointer behind it (Enter or Space on the focused button) still works.
+$('castBtn').addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); primary(); });
+$('castBtn').addEventListener('click', e => { if (e.detail === 0) primary(); });
 $('scene').addEventListener('pointerdown', e => {
   if (e.button !== 0 || G.mode === 'map' || e.target.closest('button')) return;
   e.preventDefault(); primary();
