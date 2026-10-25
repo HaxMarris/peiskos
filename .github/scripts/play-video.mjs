@@ -14,7 +14,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 30000 });
 
 // If anything gets stuck, say where, with the phone's recent log, instead of waiting for the job to time out.
-setTimeout(() => {
+const watchdog = setTimeout(() => {
   log('STUCK, phone log:');
   try { console.log(execFileSync('adb', ['logcat', '-d', '-t', '150'], { encoding: 'utf8', timeout: 20000 })); } catch (e) { log('no phone log:', e.message); }
   process.exit(2);
@@ -198,4 +198,6 @@ try {
     console.log(`SHOT ${name} ${jpg.toString('base64')}`);
   }
   await browser.close();
+  clearTimeout(watchdog);
+  process.exit(process.exitCode ?? 0); // the phone connection can keep Node waiting
 }

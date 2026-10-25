@@ -2,13 +2,9 @@
 # carrying on in the background), on an Android emulator. The video is the run's "play-video" artifact.
 name: Play video
 
+# Run it from the Actions tab whenever Google asks for the video again.
 on:
   workflow_dispatch:
-  push:
-    branches: [claude/mobile-apps-g2qpvc]
-    paths:
-      - .github/workflows/play-video.yml
-      - .github/scripts/play-video.mjs
 
 permissions:
   contents: read
