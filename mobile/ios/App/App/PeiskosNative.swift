@@ -2,12 +2,23 @@ import UIKit
 import Capacitor
 import MediaPlayer
 import UserNotifications
+import WebKit
 
 /// The app's page, with Peiskos's own native pieces added to it.
 class PeiskosBridgeViewController: CAPBridgeViewController {
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(VoiceCallPlugin())
         bridge?.registerPluginInstance(SharePlugin())
+    }
+
+    // iOS slows a page down once it's off screen, so with Peiskos in the background or the phone
+    // locked, the voices coming in arrived late and crackled. During a call the app stays awake
+    // anyway (background audio), so let the page keep its full speed; without a call, iOS still
+    // suspends the whole app a little after it leaves the screen.
+    override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
+        let configuration = super.webViewConfiguration(for: instanceConfiguration)
+        if #available(iOS 16.4, *) { configuration.preferences.inactiveSchedulingPolicy = .none }
+        return configuration
     }
 }
 
