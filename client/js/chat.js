@@ -482,7 +482,6 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 
 function openAddServer(focus) {
   modal(`<h2>Find a hearth</h2>
-    <p class="muted">A hearth is a shared space for a group of friends, with its own rooms.</p>
     <form id="create-form">
       <label>Dig a new one<input id="new-server-name" placeholder="e.g. Friday Night Crew" maxlength="64" required /></label>
       <button type="submit" class="btn">Create hearth</button>

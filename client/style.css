@@ -146,12 +146,12 @@ label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-pic
 /* framed on the left column like before; the forest keeps drawing past its edges */
 .auth-scene svg { position: absolute; top: 0; left: 0; width: var(--scene-w); height: 100%; overflow: visible; }
 .auth-brand { position: absolute; top: 32px; left: 40px; display: flex; gap: 10px; align-items: center; font-family: var(--font-head); font-size: 26px; color: var(--scene-near); text-transform: lowercase; }
-.auth-tagline { position: absolute; top: 76px; left: 40px; right: 40px; max-width: 360px; margin: 0; color: var(--scene-near); font-size: 17px; }
-:root[data-theme="dark"] .auth-brand, :root[data-theme="dark"] .auth-tagline { color: var(--text-strong); }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .auth-brand, :root:not([data-theme="light"]) .auth-tagline { color: var(--text-strong); } }
+:root[data-theme="dark"] .auth-brand { color: var(--text-strong); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .auth-brand { color: var(--text-strong); } }
 .auth-side { grid-column: 2; display: grid; place-items: center; padding: 24px 16px; }
 .auth-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
 .auth-card h1 { margin: 0; font-size: 32px; }
+#auth-subtitle:empty { display: none; }
 .auth-card > p { margin: 0 0 8px; }
 .auth-card .btn { padding: 12px; margin-top: 4px; }
 .get-desktop { margin-top: 14px; padding-top: 16px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
@@ -402,7 +402,6 @@ label.check input { width: auto; }
   .auth-scene { inset: 0 0 auto; height: 230px; -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); mask-image: linear-gradient(to bottom, #000 62%, transparent); }
   .auth-scene svg { width: 100%; }
   .auth-side { grid-column: 1; grid-row: 2; }
-  .auth-tagline { display: none; }
   .auth-brand { top: 20px; left: 20px; }
 
   .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; grid-template-areas: "top" "main" "tabs"; height: 100dvh; }

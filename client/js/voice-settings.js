@@ -753,13 +753,12 @@ function voiceSettings() {
       <video id="vs-preview" class="cam-preview hidden" autoplay muted playsinline></video>
       <div class="mic-test"><button type="button" class="btn secondary" id="vs-cam">Preview camera</button><span class="small muted" id="vs-cam-status"></span></div>
       <label>Camera background
-        <select id="vs-background">${Object.entries(BACKGROUNDS).map(([k, label]) => `<option value="${k}" ${cameraBackground() === k ? 'selected' : ''}>${label}</option>`).join('')}</select>
-        <span class="small muted">Done on this device, before your camera is sent.</span></label>
+        <select id="vs-background">${Object.entries(BACKGROUNDS).map(([k, label]) => `<option value="${k}" ${cameraBackground() === k ? 'selected' : ''}>${label}</option>`).join('')}</select></label>
       <div class="mic-test ${cameraBackground() === 'picture' ? '' : 'hidden'}" id="vs-picture-row"><button type="button" class="btn secondary" id="vs-picture">${store.get('cameraPicture') ? 'Change the picture' : 'Pick a picture'}</button><input type="file" id="vs-picture-file" accept="image/*" hidden /></div>
       <label>Your voice quality
         <select id="voice-quality">${Object.entries(VOICE_QUALITY).map(([k, q]) => `<option value="${k}" ${voicePrefs.quality === k ? 'selected' : ''}>${q.label}</option>`).join('')}</select>
       </label>
-      <span class="small muted">Voice quality changes the next time you join a voice room. Everything else changes straight away.</span>
+      <span class="small muted">Voice quality changes the next time you join a voice room.</span>
     </div>`;
 }
 
@@ -944,7 +943,7 @@ function themeSettings() {
       <div class="wheel" id="theme-wheel" tabindex="0" role="slider" aria-label="Theme color"><span class="wheel-dot" id="theme-dot"></span></div>
       <div class="theme-side">
         <div class="color-row">${THEME_PRESETS.map(chip).join('')}</div>
-        <span class="small muted">Drag around the wheel to pick a color; nearer the middle is softer. It works with both light and dark, and only changes Peiskos for you.</span>
+        <span class="small muted">Drag around the wheel to pick a color; nearer the middle is softer.</span>
         <div><button type="button" class="btn secondary" id="theme-reset">Back to ember</button></div>
       </div>
     </div>`;

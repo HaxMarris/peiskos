@@ -202,7 +202,7 @@ function showAndroidDownload() {
 
 async function renderAuthMode() {
   $('#auth-title').textContent = registering ? 'Dig in' : 'Welcome back';
-  $('#auth-subtitle').textContent = registering ? 'Pick a username your friends will see.' : 'Log in to chat with your friends.';
+  $('#auth-subtitle').textContent = registering ? 'Pick a username your friends will see.' : '';
   $('#auth-submit').textContent = registering ? 'Create account' : 'Log in';
   $('#auth-toggle').textContent = registering ? 'Already have an account? Log in' : 'Need an account? Register';
   $('#password').autocomplete = registering ? 'new-password' : 'current-password';
