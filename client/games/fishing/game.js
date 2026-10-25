@@ -1144,7 +1144,7 @@ function frame(now) {
   try {
     if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
     dockTick(now);
-    if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
+    if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle' && !pickingPond()) renderPane(); save(); } else renderNetsLight(); }
   } catch (err) {
     console.error('Fireside Angler frame:', err);
   }
@@ -1175,6 +1175,8 @@ function renderNets() {
     <div class="netbars">${S.slots.map(s => `<div class="netbar${s.net.length >= cap ? ' full' : ''}" title="${pondOf(s.pond).name}: ${s.net.length}/${cap}"><i style="height:${s.net.length / cap * 100}%"></i></div>`).join('')}</div>
     <button class="buy" type="button" data-act="collect" ${total ? '' : 'disabled'} style="grid-row:auto">Collect all</button>`;
 }
+// An idle bite mid-pick would rebuild the pane and close the open pond dropdown.
+const pickingPond = () => document.activeElement?.dataset?.act === 'slot-pond';
 function renderNetsLight() {
   if (S.tab !== 'idle') return;
   document.querySelectorAll('[data-eta]').forEach(e => {
@@ -1295,7 +1297,8 @@ function unlockModal(id) {
 
 // ---------- events ----------
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-act],[data-tab],[data-sub],[data-go],[data-node],#pondtag'); if (!t) return;
+  // A select acts on change, not click; re-rendering here would close its dropdown the moment it opens.
+  const t = e.target.closest('[data-act],[data-tab],[data-sub],[data-go],[data-node],#pondtag'); if (!t || t.tagName === 'SELECT') return;
   if (t.id === 'pondtag') { setMode('map'); return; }
   if (t.dataset.node) {
     const n = MAP[mapIdx(t.dataset.node)];
