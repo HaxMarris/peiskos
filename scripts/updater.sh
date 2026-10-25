@@ -13,7 +13,7 @@ mkdir -p "$DIR"
 chown 1000:1000 "$DIR"
 cd /repo || exit 1
 apk add --no-cache git >/dev/null 2>&1
-git config --global --add safe.directory /repo
+git config --global --get-all safe.directory | grep -qx /repo || git config --global --add safe.directory /repo
 # The name Docker Compose knows this install by, so the rebuild replaces the running Burrow.
 PROJECT=$(docker inspect "$(hostname)" --format '{{ index .Config.Labels "com.docker.compose.project" }}' 2>/dev/null)
 [ -n "$PROJECT" ] || PROJECT=burrow
@@ -21,8 +21,8 @@ OWNER=$(stat -c %u:%g /repo)
 
 json() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g' | tr -d '\n\r\t'; }
 AUTO=${AUTO_UPDATE:-}
-result=""
-result_at=0
+result=${UPDATER_RESULT:-}
+result_at=${UPDATER_RESULT_AT:-0}
 updating=false
 last_fetch=0
 
@@ -40,23 +40,33 @@ JSON
 }
 
 # The newest published release (vX.Y.Z tag) that's ahead of what's running, if any. A release that
-# already failed to install isn't tried again until there's a newer one.
+# already failed to install isn't tried again until there's a newer one. Only tags that build on
+# what's running count: a stray tag with a high number on an old commit (like v8.0.0, made by
+# mistake for v0.8.2) would otherwise always look newest and hide every real release after it.
 release_to_install() {
   [ "$AUTO" = releases ] || return 0
-  tag=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
-  [ -n "$tag" ] || return 0
-  [ "$tag" != "$(cat "$DIR/auto-failed" 2>/dev/null)" ] || return 0
-  [ "$(git rev-parse "$tag^{commit}")" != "$(git rev-parse HEAD)" ] || return 0
-  git merge-base --is-ancestor HEAD "$tag" 2>/dev/null || return 0
-  echo "$tag"
+  for tag in $(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --no-merged HEAD --sort=-v:refname); do
+    git merge-base --is-ancestor HEAD "$tag" 2>/dev/null || continue
+    [ "$tag" != "$(cat "$DIR/auto-failed" 2>/dev/null)" ] && echo "$tag"
+    return 0
+  done
 }
+
+# git runs as root in here; hand what it wrote back to whoever owns the folder, so a `git pull`
+# over SSH keeps working.
+give_back() { chown -R "$OWNER" /repo/.git 2>/dev/null; }
+
+# This script, as it was when the updater started, so an update that changes it restarts it.
+SELF=$(md5sum scripts/updater.sh 2>/dev/null)
 
 while true; do
   now=$(date +%s)
   every=3600
   [ "$AUTO" = releases ] && every=300
   if [ $((now - last_fetch)) -ge $every ] || [ -f "$DIR/request" ]; then
-    git fetch --quiet --tags origin 2>"$DIR/fetch-error.txt" && last_fetch=$now
+    # --prune-tags drops tags deleted on GitHub, which a plain fetch keeps forever.
+    git fetch --quiet --tags --prune --prune-tags origin 2>"$DIR/fetch-error.txt" && last_fetch=$now
+    give_back
   fi
   auto_tag=$(release_to_install)
   if [ -f "$DIR/request" ] || [ -n "$auto_tag" ]; then
@@ -81,6 +91,10 @@ while true; do
     chown -R "$OWNER" /repo 2>/dev/null
     result_at=$(date +%s)
     updating=false
+    if [ "$result" = ok ] && [ "$(md5sum scripts/updater.sh 2>/dev/null)" != "$SELF" ]; then
+      write_status
+      UPDATER_RESULT=$result UPDATER_RESULT_AT=$result_at exec sh /repo/scripts/updater.sh
+    fi
   fi
   write_status
   sleep 10
