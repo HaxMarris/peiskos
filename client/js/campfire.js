@@ -15,7 +15,12 @@ const CLIP_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1 0 18 9 9 0 
 const TAB_ICON = '<svg viewBox="0 0 24 24"><path d="M3 4h7l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1 5v9h16V9H4Z"/></svg>';
 const EYE_ICON = '<svg viewBox="0 0 24 24"><path d="M12 5c5 0 8.7 3.6 10 7-1.3 3.4-5 7-10 7S3.3 15.4 2 12c1.3-3.4 5-7 10-7Zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>';
 
-const poppedOutKey = () => (poppedKey && document.pictureInPictureElement && tiles.get(poppedKey)?.media === document.pictureInPictureElement ? poppedKey : null);
+/** The stream that's popped out, if it's still out. */
+function poppedOutKey() {
+  if (!poppedKey || !tiles.has(poppedKey)) return null;
+  if (popWin) return popWin.win.closed ? null : poppedKey;
+  return document.pictureInPictureElement && tiles.get(poppedKey).media === document.pictureInPictureElement ? poppedKey : null;
+}
 
 /** The extra buttons in a video tile's corner. */
 function streamTools(t) {
@@ -33,7 +38,7 @@ function streamTools(t) {
   if (t.kind === 'screen') out.push(button('tool-draw', 'Draw on this screen', PEN_ICON, () => toggleDrawing(t)));
   if (t.kind === 'screen' && t.id !== state.me.id && window.MediaRecorder) out.push(button('tool-clip', 'Keep clips of this stream', CLIP_ICON, () => (clips.has(t.key) ? saveClip(t) : startClips(t))));
   out.push(button('tool-chat', 'Fireside chat over the video', CHAT_ICON, () => toggleStreamChat(t)));
-  if (document.pictureInPictureEnabled) out.push(button('tool-pip', 'Pop out, to keep watching while you chat', PIP_ICON, () => popOut(t)));
+  if (desktopPopout || document.pictureInPictureEnabled) out.push(button('tool-pip', 'Pop out, to keep watching while you chat', PIP_ICON, () => popOut(t)));
   return out;
 }
 function updateStreamTools(t) {
@@ -53,15 +58,103 @@ function updateStreamTools(t) {
   }
 }
 
-// ---- pop out: the browser's own picture-in-picture window, which stays on top while you chat
+// ---- pop out. In the desktop app a stream gets a window of its own, which goes behind other
+// windows and resizes like any other, with a pin to keep it on top. In a browser it's the
+// browser's picture-in-picture window, which always stays on top.
+
+const desktopPopout = !!window.burrowDesktop?.popout;
+let popWin = null; // the desktop pop-out: { win, key, track, video, info }
 
 async function popOut(t) {
+  if (desktopPopout) return popOutWindow(t);
   try {
     if (poppedOutKey() === t.key) return await document.exitPictureInPicture();
     if (t.media?.requestPictureInPicture) await t.media.requestPictureInPicture();
   } catch (err) {
     toast(`Couldn't pop it out: ${err.message}`);
   }
+}
+
+function popOutWindow(t) {
+  const again = popWin?.key === t.key;
+  closePopWindow();
+  if (again || !t.track) return;
+  // Sized to the video, about as wide as a small player.
+  const ratio = t.media?.videoWidth ? t.media.videoWidth / t.media.videoHeight : 16 / 9;
+  const width = 640, height = Math.round(Math.min(1.5, 1 / ratio) * width);
+  const win = window.open('', 'peiskos-popout', `width=${width},height=${height}`);
+  if (!win) return toast("Couldn't pop it out");
+  const doc = win.document;
+  doc.head.innerHTML = `<meta charset="utf-8"><style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    button { position: fixed; top: 10px; right: 10px; width: 34px; height: 34px; padding: 7px; border: 0; border-radius: 8px;
+      background: rgb(0 0 0 / .55); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s; }
+    body:hover button, button:focus-visible, button.on { opacity: 1; }
+    button:hover { background: rgb(0 0 0 / .8); }
+    button.on { background: #e8762c; }
+    button svg { width: 100%; height: 100%; fill: currentColor; }
+  </style>`;
+  doc.title = t.label.textContent || 'Peiskos'; // after the head, which would replace it
+  const video = doc.createElement('video');
+  video.autoplay = true;
+  video.muted = true; // sound comes through the voice mix
+  video.playsInline = true;
+  video.srcObject = new MediaStream([t.track.mediaStreamTrack]);
+  video.ondblclick = () => (doc.fullscreenElement ? doc.exitFullscreen() : video.requestFullscreen()).catch(() => {});
+  const pin = doc.createElement('button');
+  pin.type = 'button';
+  pin.innerHTML = PIN_ICON;
+  const setPinned = (on) => {
+    pin.classList.toggle('on', on);
+    pin.title = on ? 'Stop keeping on top' : 'Keep on top of other windows';
+    pin.setAttribute('aria-label', pin.title);
+    window.burrowDesktop.popout.setOnTop(on);
+    try { localStorage.setItem('popoutOnTop', on ? '1' : ''); } catch {}
+  };
+  pin.onclick = () => setPinned(!pin.classList.contains('on'));
+  doc.body.replaceChildren(video, pin);
+  let pinned = false;
+  try { pinned = !!localStorage.getItem('popoutOnTop'); } catch {}
+  setPinned(pinned);
+  win.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !doc.fullscreenElement) win.close(); });
+  win.addEventListener('pagehide', () => { if (popWin?.win === win) closePopWindow(); });
+
+  // Tell the voice server the video is wanted (and how big) while this window is showing,
+  // even with the app's own window minimized or back in the chat.
+  const visible = () => !win.closed && doc.visibilityState === 'visible';
+  const info = {
+    element: video,
+    get visible() { return visible(); },
+    get pictureInPicture() { return visible(); },
+    visibilityChangedAt: 0,
+    width: () => video.clientWidth,
+    height: () => video.clientHeight,
+    onResize: () => info.handleResize?.(),
+    onVisibility: () => { info.visibilityChangedAt = Date.now(); info.handleVisibilityChanged?.(); },
+    observe() { win.addEventListener('resize', info.onResize); doc.addEventListener('visibilitychange', info.onVisibility); },
+    stopObserving() { win.removeEventListener('resize', info.onResize); doc.removeEventListener('visibilitychange', info.onVisibility); },
+  };
+  t.track.observeElementInfo?.(info);
+  popWin = { win, key: t.key, track: t.track, video, info };
+  poppedKey = t.key;
+  renderStage();
+}
+
+function closePopWindow(render = true) {
+  const p = popWin;
+  if (!p) return;
+  popWin = null;
+  if (poppedKey === p.key) poppedKey = null;
+  p.track.stopObservingElementInfo?.(p.info);
+  p.video.srcObject = null;
+  if (!p.win.closed) p.win.close();
+  if (render && tiles.has(p.key)) renderStage();
+}
+
+/** Closes the pop-out once its stream has ended or changed. */
+function checkPopWindow() {
+  if (popWin && tiles.get(popWin.key)?.track !== popWin.track) closePopWindow(false);
 }
 
 // ---- the fireside chat over a stream, so you can read and write while it fills the screen

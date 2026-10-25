@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('burrowDesktop', {
   },
   /** Strokes friends draw on the screen you're sharing, shown on that screen too; null closes it. */
   drawOverlay: (strokes) => ipcRenderer.send('draw-overlay', strokes),
+  /** A popped-out stream's window: whether it stays on top of other windows. */
+  popout: { setOnTop: (on) => ipcRenderer.send('popout-on-top', on) },
   /** Unread count on the app's icon; Windows also wants a picture of it. */
   setBadge: (count, image) => ipcRenderer.send('set-badge', count, image),
   /** Seconds since the keyboard or mouse was last used anywhere on the computer. */
