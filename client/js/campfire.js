@@ -15,7 +15,12 @@ const CLIP_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1 0 18 9 9 0 
 const TAB_ICON = '<svg viewBox="0 0 24 24"><path d="M3 4h7l2 3h9a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Zm1 5v9h16V9H4Z"/></svg>';
 const EYE_ICON = '<svg viewBox="0 0 24 24"><path d="M12 5c5 0 8.7 3.6 10 7-1.3 3.4-5 7-10 7S3.3 15.4 2 12c1.3-3.4 5-7 10-7Zm0 3a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/></svg>';
 
-const poppedOutKey = () => (poppedKey && document.pictureInPictureElement && tiles.get(poppedKey)?.media === document.pictureInPictureElement ? poppedKey : null);
+/** The stream that's popped out, if it's still out. */
+function poppedOutKey() {
+  if (!poppedKey || !tiles.has(poppedKey)) return null;
+  if (popWin) return popWin.win.closed ? null : poppedKey;
+  return document.pictureInPictureElement && tiles.get(poppedKey).media === document.pictureInPictureElement ? poppedKey : null;
+}
 
 /** The extra buttons in a video tile's corner. */
 function streamTools(t) {
@@ -33,7 +38,7 @@ function streamTools(t) {
   if (t.kind === 'screen') out.push(button('tool-draw', 'Draw on this screen', PEN_ICON, () => toggleDrawing(t)));
   if (t.kind === 'screen' && t.id !== state.me.id && window.MediaRecorder) out.push(button('tool-clip', 'Keep clips of this stream', CLIP_ICON, () => (clips.has(t.key) ? saveClip(t) : startClips(t))));
   out.push(button('tool-chat', 'Fireside chat over the video', CHAT_ICON, () => toggleStreamChat(t)));
-  if (document.pictureInPictureEnabled) out.push(button('tool-pip', 'Pop out, to keep watching while you chat', PIP_ICON, () => popOut(t)));
+  if (desktopPopout || document.pictureInPictureEnabled) out.push(button('tool-pip', 'Pop out, to keep watching while you chat', PIP_ICON, () => popOut(t)));
   return out;
 }
 function updateStreamTools(t) {
@@ -53,15 +58,122 @@ function updateStreamTools(t) {
   }
 }
 
-// ---- pop out: the browser's own picture-in-picture window, which stays on top while you chat
+// ---- pop out. In the desktop app a stream gets a window of its own, which goes behind other
+// windows and resizes like any other, with a pin to keep it on top. In a browser it's the
+// browser's picture-in-picture window, which always stays on top.
+
+const desktopPopout = !!window.burrowDesktop?.popout;
+let popWin = null; // the desktop pop-out: { win, key, track, video, info }
 
 async function popOut(t) {
+  if (desktopPopout) return popOutWindow(t);
   try {
     if (poppedOutKey() === t.key) return await document.exitPictureInPicture();
     if (t.media?.requestPictureInPicture) await t.media.requestPictureInPicture();
   } catch (err) {
     toast(`Couldn't pop it out: ${err.message}`);
   }
+}
+
+function popOutWindow(t) {
+  const again = popWin?.key === t.key;
+  closePopWindow();
+  if (again || !t.track) return;
+  // Sized to the video, about as wide as a small player.
+  const ratio = t.media?.videoWidth ? t.media.videoWidth / t.media.videoHeight : 16 / 9;
+  const width = 640, height = Math.round(Math.min(1.5, 1 / ratio) * width);
+  const win = window.open('', 'peiskos-popout', `width=${width},height=${height}`);
+  if (!win) return toast("Couldn't pop it out");
+  const doc = win.document;
+  doc.head.innerHTML = `<meta charset="utf-8"><style>
+    html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+    video { width: 100%; height: 100%; object-fit: contain; display: block; }
+    .pin { position: fixed; top: 10px; right: 10px; width: 34px; height: 34px; padding: 7px; border: 0; border-radius: 8px;
+      background: rgb(0 0 0 / .55); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s; }
+    body:hover .pin, .pin:focus-visible, .pin.on { opacity: 1; }
+    .pin:hover { background: rgb(0 0 0 / .8); }
+    .pin.on { background: #e8762c; }
+    svg { width: 100%; height: 100%; fill: currentColor; }
+    .stream-audio { position: fixed; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px;
+      border-radius: 999px; background: rgb(20 14 10 / .72); color: #fbf4ec; font: 700 12px system-ui, sans-serif; opacity: 0; transition: opacity .15s; }
+    body:hover .stream-audio, .stream-audio.muted, .stream-audio:focus-within { opacity: 1; }
+    .stream-audio button { display: grid; place-items: center; width: 24px; height: 24px; padding: 4px; border: 0; background: none; color: inherit; border-radius: 50%; cursor: pointer; }
+    .stream-audio button:hover { background: rgb(255 255 255 / .14); }
+    .stream-audio.muted button { color: #ff9a92; }
+    .stream-audio input { width: 110px; accent-color: #fbf4ec; }
+    .stream-audio span { min-width: 34px; text-align: right; }
+  </style>`;
+  doc.title = t.label.textContent || 'Peiskos'; // after the head, which would replace it
+  const video = doc.createElement('video');
+  video.autoplay = true;
+  video.muted = true; // sound comes through the voice mix
+  video.playsInline = true;
+  video.srcObject = new MediaStream([t.track.mediaStreamTrack]);
+  video.ondblclick = () => (doc.fullscreenElement ? doc.exitFullscreen() : video.requestFullscreen()).catch(() => {});
+  const pin = doc.createElement('button');
+  pin.type = 'button';
+  pin.className = 'pin';
+  pin.innerHTML = PIN_ICON;
+  const setPinned = (on) => {
+    pin.classList.toggle('on', on);
+    pin.title = on ? 'Stop keeping on top' : 'Keep on top of other windows';
+    pin.setAttribute('aria-label', pin.title);
+    window.burrowDesktop.popout.setOnTop(on);
+    try { localStorage.setItem('popoutOnTop', on ? '1' : ''); } catch {}
+  };
+  pin.onclick = () => setPinned(!pin.classList.contains('on'));
+  doc.body.replaceChildren(video, pin);
+  let pinned = false;
+  try { pinned = !!localStorage.getItem('popoutOnTop'); } catch {}
+  setPinned(pinned);
+  win.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !doc.fullscreenElement) win.close(); });
+  win.addEventListener('pagehide', () => { if (popWin?.win === win) closePopWindow(); });
+
+  // Tell the voice server the video is wanted (and how big) while this window is showing,
+  // even with the app's own window minimized or back in the chat.
+  const visible = () => !win.closed && doc.visibilityState === 'visible';
+  const info = {
+    element: video,
+    get visible() { return visible(); },
+    get pictureInPicture() { return visible(); },
+    visibilityChangedAt: 0,
+    width: () => video.clientWidth,
+    height: () => video.clientHeight,
+    onResize: () => info.handleResize?.(),
+    onVisibility: () => { info.visibilityChangedAt = Date.now(); info.handleVisibilityChanged?.(); },
+    observe() { win.addEventListener('resize', info.onResize); doc.addEventListener('visibilitychange', info.onVisibility); },
+    stopObserving() { win.removeEventListener('resize', info.onResize); doc.removeEventListener('visibilitychange', info.onVisibility); },
+  };
+  t.track.observeElementInfo?.(info);
+  popWin = { win, key: t.key, track: t.track, video, info, audio: null };
+  poppedKey = t.key;
+  checkPopWindow();
+  renderStage();
+}
+
+function closePopWindow(render = true) {
+  const p = popWin;
+  if (!p) return;
+  popWin = null;
+  if (poppedKey === p.key) poppedKey = null;
+  p.track.stopObservingElementInfo?.(p.info);
+  p.video.srcObject = null;
+  if (!p.win.closed) p.win.close();
+  if (render && tiles.has(p.key)) renderStage();
+}
+
+/** Closes the pop-out once its stream has ended or changed, and keeps its volume control current. */
+function checkPopWindow() {
+  if (!popWin) return;
+  const t = tiles.get(popWin.key);
+  if (t?.track !== popWin.track) return closePopWindow(false);
+  // A screen's own sound when it shares some, or the person's voice over their camera.
+  const voice = t.kind === 'camera' && t.id !== state.me.id;
+  const want = voice ? 'voice' : t.audio ? 'stream' : null;
+  if ((popWin.audio?.kind ?? null) === want) return;
+  popWin.audio?.remove();
+  popWin.audio = want ? streamAudioControl(t.id, popWin.win.document.body, { doc: popWin.win.document, voice }) : null;
+  if (popWin.audio) popWin.audio.kind = want;
 }
 
 // ---- the fireside chat over a stream, so you can read and write while it fills the screen
@@ -859,33 +971,43 @@ const SPEAKER_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12
 const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7Z"/></svg>';
 
 /** The mute button and slider on a shared screen that has sound. */
-function streamAudioControl(userId, tile) {
-  const box = document.createElement('div');
+/**
+ * A mute button and slider for someone's shared sound, in the corner of their tile (or of a
+ * popped-out window, whose document is `doc`). `voice` makes it their voice instead.
+ */
+function streamAudioControl(userId, tile, { doc = document, voice = false } = {}) {
+  const get = voice ? volumeFor : streamVolumeFor;
+  const set = voice ? setVolume : setStreamVolume;
+  const what = voice ? 'their voice' : 'the stream';
+  const box = doc.createElement('div');
   box.className = 'stream-audio';
-  box.innerHTML = '<button type="button"></button><input type="range" min="0" max="200" step="5" aria-label="Stream volume" /><span></span>';
+  box.innerHTML = `<button type="button"></button><input type="range" min="0" max="200" step="5" aria-label="${voice ? 'Voice volume' : 'Stream volume'}" /><span></span>`;
   const [button, slider, readout] = box.children;
   let before = 1; // what unmuting goes back to
   const show = () => {
-    const v = streamVolumeFor(userId);
+    const v = get(userId);
     slider.value = Math.round(v * 100);
     readout.textContent = `${Math.round(v * 100)}%`;
     button.innerHTML = v === 0 ? SPEAKER_OFF : SPEAKER_ON;
-    button.title = v === 0 ? 'Unmute the stream' : 'Mute the stream';
+    button.title = v === 0 ? `Unmute ${what}` : `Mute ${what}`;
     box.classList.toggle('muted', v === 0);
   };
+  const change = (v) => { set(userId, v); for (const c of volumeControls()) c.show(); };
   box.onclick = (e) => e.stopPropagation(); // don't enlarge or shrink the tile
   box.ondblclick = (e) => e.stopPropagation();
   button.onclick = () => {
-    const v = streamVolumeFor(userId);
+    const v = get(userId);
     if (v > 0) before = v;
-    setStreamVolume(userId, v > 0 ? 0 : before || 1);
-    show();
+    change(v > 0 ? 0 : before || 1);
   };
-  slider.oninput = () => { setStreamVolume(userId, Number(slider.value) / 100); show(); };
+  slider.oninput = () => change(Number(slider.value) / 100);
+  box.show = show;
   show();
   tile.append(box);
   return box;
 }
+/** Every volume control showing, so changing one updates the others. */
+const volumeControls = () => [...[...tiles.values()].map((t) => t.audio), popWin?.audio].filter(Boolean);
 
 // The desktop app can't show the browser's screen picker, so it asks us to show one.
 window.burrowDesktop?.onPickScreen((sources) => {

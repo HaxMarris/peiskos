@@ -480,7 +480,7 @@ const EXIT_FULLSCREEN_ICON = '<svg viewBox="0 0 24 24" class="exit"><path d="M8 
 const tiles = new Map(); // "identity:camera" or "identity:screen" -> { el, track, video }
 let focusKey = null;     // the tile shown big, if any
 let sideBySide = false;  // every shared screen shown big, next to each other
-let poppedKey = null;    // the tile playing in its own picture-in-picture window
+let poppedKey = null;    // the tile playing in its own pop-out window
 
 function nameOf(userId, fallback = '?') {
   const here = state.servers.get(state.serverId)?.members.find((m) => m.id === userId);
@@ -814,6 +814,7 @@ function renderStage() {
     updateStreamTools(t);
     t.el.title = focusKey === w.key ? 'Click to shrink, double-click for full screen' : 'Click to make bigger, double-click for full screen';
   }
+  checkPopWindow();
   const order = wanted.map((w) => tiles.get(w.key).el);
   const big = order.filter((el) => el.classList.contains('focus'));
   const focused = big[0];

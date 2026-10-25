@@ -106,6 +106,8 @@ function createWindow({ hidden = false } = {}) {
   });
 
   win.on('closed', () => {
+    popout?.close();
+    ipcMain.removeAllListeners('popout-on-top');
     appAudio.stop();
     drawOverlay.close();
     ipcMain.removeAllListeners('draw-overlay');
@@ -153,11 +155,30 @@ function createWindow({ hidden = false } = {}) {
     win.webContents.send('pick-screen', sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() })));
   });
 
-  // Links in messages open in the user's browser, never inside the app.
-  win.webContents.setWindowOpenHandler(({ url }) => {
+  // Links in messages open in the user's browser, never inside the app. The one window the page
+  // opens itself is a popped-out stream: an ordinary window that goes behind others and resizes
+  // freely, kept on top only while its pin is on.
+  let popout = null;
+  win.webContents.setWindowOpenHandler(({ url, frameName }) => {
+    if (url === 'about:blank' && frameName === 'peiskos-popout') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: { minWidth: 200, minHeight: 120, backgroundColor: '#000000', autoHideMenuBar: true, title: 'Peiskos' },
+      };
+    }
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
+  win.webContents.on('did-create-window', (child, { frameName }) => {
+    if (frameName !== 'peiskos-popout') return;
+    popout = child;
+    child.setMenu(null);
+    child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    child.webContents.on('will-navigate', (e) => e.preventDefault());
+    child.on('closed', () => { if (popout === child) popout = null; });
+  });
+  ipcMain.on('popout-on-top', (_e, on) => popout?.setAlwaysOnTop(!!on));
+  win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) popout?.close(); });
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('file://')) {
       e.preventDefault();
