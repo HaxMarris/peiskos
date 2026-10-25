@@ -735,6 +735,7 @@ function primary() {
   if (G.phase === 'bite') return hook();
 }
 function cast() {
+  try { audio = audio || new AudioContext(); if (audio.state === 'suspended') audio.resume(); } catch { /* no sound here */ }
   G.bait = S.baitOn;
   if (S.baitOn !== 'worms') {
     S.bait[S.baitOn] = (S.bait[S.baitOn] || 0) - 1;
@@ -750,19 +751,53 @@ function cast() {
 function startBite() {
   G.opts = handOpts(G.bait);
   G.fish = rollFish(S.pond, G.opts);
-  const r = rod();
-  const w = Math.max(.08, .2 + r.zone + .0125 * S.up.hook - G.fish.rf * .1);
+  // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
+  // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
+  const r = rod(), pi = pondIdx(S.pond), rf = G.fish.rf;
+  const w = Math.max(.06, (.2 + r.zone + .0125 * S.up.hook) * (1 - .1 * pi) * (1 - .45 * rf));
   const c = w / 2 + Math.random() * (1 - w);
   G.zone = [c - w / 2, c + w / 2];
-  G.speed = .7 + G.fish.rf * .9;
+  G.speed = .7 + rf * .9 + pi * .15;
+  G.fight = rf * (1 + pi) * .024;
   G.phase = 'bite'; G.t0 = performance.now();
+  biteSound(G.fish.r >= 4);
   setHint(G.fish.r >= 4 ? 'Something heavy!' : 'Bite!', true);
   $('meter').hidden = false;
   $('zone').style.left = (G.zone[0] * 100) + '%';
   $('zone').style.width = (w * 100) + '%';
   updateCastBtn();
 }
-function markerPos(now) { const x = (((now - G.t0) / 1000) * G.speed) % 2; return x < 1 ? x : 2 - x; }
+function markerPos(now) {
+  const t = (now - G.t0) / 1000, x = ((t + (G.fight || 0) * Math.sin(t * 5)) * G.speed) % 2;
+  return x < 1 ? x : 2 - x;
+}
+
+// ---------- the bite sound ----------
+// A plop and a tug on the line, made on the spot (nothing to download). Heavy fish sound deeper.
+// Phones that can also give a short buzz.
+let audio = null;
+function biteSound(heavy) {
+  try {
+    audio = audio || new AudioContext();
+    if (audio.state === 'suspended') audio.resume();
+    const t = audio.currentTime, out = audio.createGain();
+    out.gain.value = .35; out.connect(audio.destination);
+    // the plop: a quick falling tone
+    const o = audio.createOscillator(), g = audio.createGain();
+    o.type = 'sine'; o.frequency.setValueAtTime(heavy ? 420 : 760, t); o.frequency.exponentialRampToValueAtTime(heavy ? 90 : 180, t + .14);
+    g.gain.setValueAtTime(.0001, t); g.gain.exponentialRampToValueAtTime(1, t + .01); g.gain.exponentialRampToValueAtTime(.0001, t + .2);
+    o.connect(g).connect(out); o.start(t); o.stop(t + .22);
+    // the splash: a short burst of filtered noise
+    const n = audio.createBufferSource(), buf = audio.createBuffer(1, audio.sampleRate * .25, audio.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    const f = audio.createBiquadFilter(), ng = audio.createGain();
+    f.type = 'bandpass'; f.frequency.value = heavy ? 700 : 1400; f.Q.value = .8; ng.gain.value = .5;
+    n.buffer = buf; n.connect(f).connect(ng).connect(out); n.start(t + .02);
+    // a second tug for the big ones
+    if (heavy) { const o2 = audio.createOscillator(), g2 = audio.createGain(); o2.type = 'sine'; o2.frequency.setValueAtTime(300, t + .22); o2.frequency.exponentialRampToValueAtTime(70, t + .38); g2.gain.setValueAtTime(.0001, t + .22); g2.gain.exponentialRampToValueAtTime(.9, t + .23); g2.gain.exponentialRampToValueAtTime(.0001, t + .42); o2.connect(g2).connect(out); o2.start(t + .22); o2.stop(t + .45); }
+  } catch { /* no sound here */ }
+  try { navigator.vibrate?.(heavy ? [60, 60, 90] : 60); } catch { /* no buzz either */ }
+}
 function hook() {
   const m = markerPos(performance.now());
   $('meter').hidden = true;
