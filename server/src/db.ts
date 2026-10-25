@@ -203,6 +203,7 @@ export function openDb(file: string): Db {
   addIdFloor(db);
   addCasino(db);
   addFishing(db);
+  addSafetyReports(db);
   hashSessionTokens(db);
   return db;
 }
@@ -837,6 +838,32 @@ function addFishing(db: Db) {
       caught_at INTEGER NOT NULL,
       PRIMARY KEY (server_id, day, user_id)
     );
+  `);
+}
+
+/**
+ * Reports sent to whoever runs the server (Report to Peiskos), from any message, DMs included.
+ * Hearth reports to moderators stay in reports. content keeps the message's text even after it's deleted.
+ */
+function addSafetyReports(db: Db) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS admin_reports (
+      id          INTEGER PRIMARY KEY,
+      message_id  INTEGER REFERENCES messages(id) ON DELETE SET NULL,
+      channel_id  INTEGER,
+      place       TEXT NOT NULL DEFAULT '',
+      author_id   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      content     TEXT NOT NULL DEFAULT '',
+      files       INTEGER NOT NULL DEFAULT 0,
+      reporter_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      category    TEXT NOT NULL,
+      reason      TEXT NOT NULL DEFAULT '',
+      created_at  INTEGER NOT NULL,
+      resolved_at INTEGER,
+      resolved_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      outcome     TEXT -- 'deleted' or 'dismissed'
+    );
+    CREATE INDEX IF NOT EXISTS admin_reports_open ON admin_reports(resolved_at, id);
   `);
 }
 

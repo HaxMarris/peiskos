@@ -1913,6 +1913,103 @@ export function createApp(opts: AppOptions): Server {
     return { ok: true };
   });
 
+  // Report to Peiskos: anyone can send any message they can see (DMs too) to whoever runs the
+  // server, past the hearth's own moderators. Child safety reports are listed first.
+  const SAFETY_CATEGORIES: Record<string, string> = {
+    child: 'Child safety',
+    sexual: 'Sexual content',
+    harassment: 'Harassment or threats',
+    selfharm: 'Self-harm',
+    spam: 'Spam or scam',
+    other: 'Something else',
+  };
+  const openAdminReports = () => (db.prepare('SELECT COUNT(*) AS n FROM admin_reports WHERE resolved_at IS NULL').get() as { n: number }).n;
+  const adminReportsChanged = () => {
+    const open = openAdminReports();
+    sendTo(new Set([...online].filter((id) => admin.isAdmin(id))), { type: 'admin_reports', open });
+  };
+  /** Where a message is, in words, for someone who isn't in that conversation. */
+  const placeText = (channelId: number) => {
+    const c = db.prepare('SELECT c.name, c.kind, p.name AS parentName, s.id AS serverId, s.name AS serverName, s.kind AS serverKind FROM channels c JOIN servers s ON s.id = c.server_id LEFT JOIN channels p ON p.id = c.parent_id WHERE c.id = ?')
+      .get(channelId) as { name: string; kind: string; parentName: string | null; serverId: number; serverName: string; serverKind: string } | undefined;
+    if (!c) return '';
+    if (c.serverKind === 'dm') {
+      const names = (db.prepare('SELECT COALESCE(u.display_name, u.username) AS n FROM members m JOIN users u ON u.id = m.user_id WHERE m.server_id = ? ORDER BY u.id').all(c.serverId) as { n: string }[]).map((r) => r.n);
+      return `${names.length > 2 ? `Group${c.serverName ? ` "${c.serverName}"` : ''}` : 'Direct messages'} between ${names.join(', ')}`;
+    }
+    return c.kind === 'thread' ? `${c.serverName} › #${c.parentName} › ${c.name}` : `${c.serverName} › #${c.name}`;
+  };
+  route('POST', '/api/messages/:id/report-to-admin', ({ user, params, body }) => {
+    const { channel, authorId } = visibleMessage(user, Number(params[0]));
+    if (authorId === user.id) throw new HttpError(400, "That's your own message");
+    const category = typeof body.category === 'string' && SAFETY_CATEGORIES[body.category] ? body.category : null;
+    if (!category) throw new HttpError(400, 'Pick what the report is about');
+    const reason = typeof body.reason === 'string' ? body.reason.trim() : '';
+    if (reason.length > 500) throw new HttpError(400, 'The details can be at most 500 characters');
+    const message = messageById(Number(params[0]))!;
+    if (db.prepare('SELECT 1 FROM admin_reports WHERE message_id = ? AND reporter_id = ? AND resolved_at IS NULL').get(message.id as number, user.id))
+      throw new HttpError(409, "You've already reported this message");
+    if ((db.prepare('SELECT COUNT(*) AS n FROM admin_reports WHERE reporter_id = ? AND resolved_at IS NULL').get(user.id) as { n: number }).n >= 20)
+      throw new HttpError(429, "You have 20 reports waiting already. They'll be looked at soon.");
+    db.prepare(
+      `INSERT INTO admin_reports (message_id, channel_id, place, author_id, content, files, reporter_id, category, reason, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).run(message.id as number, channel.id, placeText(channel.id), authorId, String(message.content ?? '').slice(0, 4000),
+      (message.attachments as Json[] | undefined)?.length ?? 0, user.id, category, reason, now());
+    adminReportsChanged();
+    // Whoever runs the server hears about it even with Peiskos closed. What was said stays out of the email.
+    const contact = opts.legal?.contact ?? fallbackContact(opts.mail?.from);
+    if (opts.mail && contact && looksLikeEmail(contact)) {
+      const label = SAFETY_CATEGORIES[category];
+      const where = (opts.publicUrl ?? '').replace(/\/$/, '');
+      sendMail(opts.mail, {
+        to: contact,
+        subject: `Peiskos report: ${label}`,
+        text: `Someone reported a message to you (${label}).\n\nOpen ${where || 'Peiskos'}, then Server admin › Reports to look at it.\n`,
+      }).catch((err) => console.error('Sending a report email failed:', err));
+    }
+    return { ok: true };
+  });
+  route('GET', '/api/admin/reports', ({ user }) => {
+    if (!admin.isAdmin(user.id)) throw new HttpError(403, 'Only whoever runs this Peiskos can do that');
+    const rows = db.prepare(
+      `SELECT r.id, r.message_id AS messageId, r.channel_id AS channelId, r.place, r.content, r.files, r.category, r.reason, r.created_at AS createdAt,
+              r.author_id AS authorId, COALESCE(ua.display_name, ua.username) AS author, ua.username AS authorUsername, ${avatarUrl('ua.avatar')} AS authorAvatar,
+              ur.username AS reporter, r.resolved_at AS resolvedAt, uv.username AS resolvedBy, r.outcome
+       FROM admin_reports r LEFT JOIN users ua ON ua.id = r.author_id LEFT JOIN users ur ON ur.id = r.reporter_id LEFT JOIN users uv ON uv.id = r.resolved_by
+       WHERE r.resolved_at IS NULL OR r.resolved_at > ?
+       ORDER BY r.resolved_at IS NOT NULL, r.category = 'child' DESC, r.id DESC LIMIT 200`,
+    ).all(now() - 30 * 86400e3) as Json[];
+    return rows.map((r) => {
+      // Still there: its files too, so they can be looked at (attachment links work without being in the conversation).
+      const live = r.messageId == null ? undefined : messageById(r.messageId as number);
+      return { ...r, label: SAFETY_CATEGORIES[r.category as string] ?? r.category, attachments: live?.attachments ?? [], gone: !live };
+    });
+  });
+  // Dealt with: optionally deleting the message too. Every open report on that message closes.
+  route('POST', '/api/admin/reports/:id/resolve', ({ user, params, body }) => {
+    if (!admin.isAdmin(user.id)) throw new HttpError(403, 'Only whoever runs this Peiskos can do that');
+    const report = db.prepare('SELECT message_id, author_id FROM admin_reports WHERE id = ?').get(Number(params[0])) as
+      | { message_id: number | null; author_id: number | null }
+      | undefined;
+    if (!report) throw new HttpError(404, 'Report not found');
+    const message = report.message_id === null ? undefined : (db.prepare('SELECT id, channel_id, content FROM messages WHERE id = ?').get(report.message_id) as Json | undefined);
+    const deleting = !!body.deleteMessage && !!message;
+    if (deleting) {
+      const channel = channelById(message!.channel_id as number)!;
+      if (isBurrow(channel.serverId)) audit(channel.serverId, user.id, 'message_delete', report.author_id, `in #${channel.name}: ${String(message!.content).slice(0, 120)}`);
+      removeFiles(db.prepare('SELECT id FROM attachments WHERE message_id = ?').all(message!.id as number) as Json[]);
+      db.prepare('DELETE FROM messages WHERE id = ?').run(message!.id as number);
+      broadcastToChannel(channel, { type: 'message_deleted', id: message!.id, channelId: channel.id });
+      if (channel.kind === 'thread') threadChanged(channel);
+    }
+    db.prepare('UPDATE admin_reports SET resolved_at = ?, resolved_by = ?, outcome = ? WHERE resolved_at IS NULL AND (id = ? OR (message_id IS NOT NULL AND message_id = ?))').run(
+      now(), user.id, deleting ? 'deleted' : 'dismissed', Number(params[0]), report.message_id ?? -1,
+    );
+    adminReportsChanged();
+    return { ok: true };
+  });
+
   // Upload limits: a size for the burrow, and roles that allow more (or less). 0 means no files.
   const cleanUploadMb = (value: unknown) => {
     if (value === null || value === '') return null;
@@ -2457,7 +2554,7 @@ export function createApp(opts: AppOptions): Server {
       emailVerified: !!r.email_verified,
       ...profileOf(user.id),
       twoStep: !!r.totp_secret,
-      ...(admin.isAdmin(user.id) ? { admin: true } : {}),
+      ...(admin.isAdmin(user.id) ? { admin: true, adminReports: openAdminReports() } : {}),
       recoveryCodesLeft: (JSON.parse(r.recovery_codes) as string[]).length,
       blockedIds: blockedBy(user.id),
     };

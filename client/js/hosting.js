@@ -24,16 +24,18 @@ async function copyText(text, button) {
 
 // ---------------------------------------------------------------- the admin page
 
-const ADMIN_TABS = [['overview', 'Overview'], ['people', 'People'], ['signups', 'Signing up'], ['backups', 'Backups'], ['errors', 'Crashes']];
+const ADMIN_TABS = [['overview', 'Overview'], ['reports', 'Reports'], ['people', 'People'], ['signups', 'Signing up'], ['backups', 'Backups'], ['errors', 'Crashes']];
 let adminData = null;
 let adminTab = 'overview';
 let updatePoll = null;
 
 function syncAdminButton() {
   $('#admin-btn').classList.toggle('hidden', !state.me?.admin);
+  const open = state.me?.adminReports ?? 0;
+  $('#admin-btn').textContent = open ? `Server admin · ${open} report${open === 1 ? '' : 's'}` : 'Server admin';
 }
 
-async function openAdmin(tab = adminTab) {
+async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
   adminTab = tab;
   modal(`<h2>Server admin</h2>
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
@@ -55,7 +57,7 @@ function showAdminTab(tab) {
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
   const pane = $('#admin-pane');
   if (!pane || !adminData) return;
-  ({ overview: adminOverview, people: adminPeople, signups: adminSignups, backups: adminBackups, errors: adminErrors })[tab](pane);
+  ({ overview: adminOverview, reports: adminReports, people: adminPeople, signups: adminSignups, backups: adminBackups, errors: adminErrors })[tab](pane);
 }
 
 function adminOverview(pane) {
@@ -256,6 +258,45 @@ function adminBackups(pane) {
       } catch (err) { alertError(err); }
     };
   }
+}
+
+// Reports people sent with Report to Peiskos, from any message, DMs included.
+async function adminReports(pane) {
+  pane.innerHTML = '<p class="muted">Loading…</p>';
+  let reports = [];
+  try { reports = await api('/api/admin/reports'); } catch (err) { pane.textContent = err.message; return; }
+  pane.innerHTML = `<p class="small muted">Messages people reported to you, from anywhere, DMs included. Child safety reports come first. Handled ones stay here for 30 days.</p>
+    <p class="small muted">For child sexual abuse material: report it to the <a href="https://report.cybertip.org/" target="_blank" rel="noopener">NCMEC CyberTipline</a> (download the files first, the report can include them) before deleting the message, then delete the account under People.</p>
+    <div id="admin-report-list" class="card-list"></div>`;
+  const list = $('#admin-report-list');
+  if (!reports.length) return (list.innerHTML = '<p class="muted">No reports.</p>');
+  list.replaceChildren(...reports.map((r) => {
+    const status = r.resolvedAt ? ` · ${r.outcome === 'deleted' ? 'deleted' : 'dismissed'} by ${r.resolvedBy ?? 'someone'}` : r.gone ? ' · the message has since been deleted' : '';
+    const note = `${r.label} · reported by ${r.reporter ?? 'a deleted account'} · ${r.place}${r.reason ? `\n"${r.reason}"` : ''}${status}`;
+    const m = { id: r.messageId, channelId: r.channelId, author: `${r.author ?? 'Someone'}${r.authorUsername ? ` (@${r.authorUsername})` : ''}`, authorId: r.authorId, authorAvatar: r.authorAvatar, content: r.content, createdAt: r.createdAt, attachments: r.attachments };
+    const resolve = (deleteMessage) => (b) => {
+      if (deleteMessage && !confirm('Delete this message and its files for everyone? This can\'t be undone.')) return;
+      b.disabled = true;
+      api(`/api/admin/reports/${r.id}/resolve`, { method: 'POST', body: { deleteMessage } })
+        .then(() => { if (!r.resolvedAt) state.me.adminReports = Math.max(0, (state.me.adminReports ?? 1) - 1); syncAdminButton(); adminReports(pane); })
+        .catch(alertError);
+    };
+    const card = messageCard(m, null, {
+      note,
+      buttons: r.resolvedAt ? [] : [...(r.gone ? [] : [['Delete message', resolve(true), 'danger']]), ['Dismiss', resolve(false)]],
+    });
+    card.querySelector('.msg-card-note')?.style.setProperty('white-space', 'pre-line');
+    if (r.attachments?.length) {
+      const files = document.createElement('div');
+      files.className = 'small';
+      files.innerHTML = 'Files: ' + r.attachments.map((a) => `<a href="${escapeHtml(state.serverUrl + a.url)}" target="_blank" rel="noopener" download>${escapeHtml(a.name)}</a>`).join(', ');
+      card.querySelector('.msg-card-actions')?.before(files) ?? card.append(files);
+    } else if (r.files && r.gone) {
+      card.insertAdjacentHTML('beforeend', `<div class="muted small">It had ${r.files} file${r.files === 1 ? '' : 's'}, deleted with it.</div>`);
+    }
+    if (r.resolvedAt) card.classList.add('resolved');
+    return card;
+  }));
 }
 
 async function adminErrors(pane) {
