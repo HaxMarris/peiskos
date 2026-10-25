@@ -154,9 +154,9 @@ export function createApp(opts: AppOptions): Server {
   const USER_COLS = `id, username, display_name AS displayName, ${avatarUrl('avatar')} AS avatar`;
   const userById = (id: number) => db.prepare(`SELECT ${USER_COLS} FROM users WHERE id = ?`).get(id) as User | undefined;
   /** Bots stay in the one burrow they were made for: no joining others, no DMs, no friends. */
+  const isBotUser = (id: number) => !!(db.prepare('SELECT bot FROM users WHERE id = ?').get(id) as { bot: number } | undefined)?.bot;
   const notBot = (user: User) => {
-    if ((db.prepare('SELECT bot FROM users WHERE id = ?').get(user.id) as { bot: number } | undefined)?.bot)
-      throw new HttpError(403, "Bots can't do that");
+    if (isBotUser(user.id)) throw new HttpError(403, "Bots can't do that");
   };
   /** The name someone goes by in a burrow: their nickname there, else their display name, else their username. */
   const nameSql = (userAlias: string, serverIdSql: string) =>
@@ -419,6 +419,9 @@ export function createApp(opts: AppOptions): Server {
   const socketTokens = new WeakMap<WebSocket, string>(); // which login (its token's hash) each socket belongs to
   const online = new Set<number>();
   const inVoice = new Map<number, number>(); // userId -> voice channel they are in
+  // The connection (so the device) someone sat down at the fire with. Their other devices can't
+  // change how they sit there, and that device going offline takes them out of the fire.
+  const voiceSockets = new Map<number, WebSocket>();
 
   const voiceFlags = new Map<number, { muted: boolean; deafened: boolean }>(); // userId -> mic off / not listening
   const speaking = new Set<number>(); // people talking right now, as their apps report it
@@ -469,7 +472,10 @@ export function createApp(opts: AppOptions): Server {
   const voiceTime = voiceTimeTracker(db);
   const setVoice = (userId: number, channelId: number | null, flags?: { muted: boolean; deafened: boolean }) => {
     const prev = inVoice.get(userId);
-    if (channelId === null) voiceFlags.delete(userId);
+    if (channelId === null) {
+      voiceFlags.delete(userId);
+      voiceSockets.delete(userId);
+    }
     else if (flags) voiceFlags.set(userId, flags);
     if (prev === channelId) {
       // Same room: only muting or deafening changed.
@@ -908,6 +914,7 @@ export function createApp(opts: AppOptions): Server {
   const dmPeople = (user: User, ids: unknown) => {
     const list = [...new Set((Array.isArray(ids) ? ids : []).map(Number))].filter((id) => id !== user.id);
     for (const id of list) {
+      if (isBotUser(id)) throw new HttpError(403, "Bots can't be messaged directly");
       if (!sharesBurrow(user.id, id) && !areFriends(user.id, id)) throw new HttpError(403, 'You can only message friends and people who share a hearth with you');
       if (blockedEitherWay(user.id, id)) throw new HttpError(403, "You can't message this person");
     }
@@ -985,6 +992,8 @@ export function createApp(opts: AppOptions): Server {
 
   /** Leaves a group conversation. The last one out takes it with them. */
   const leaveGroup = (serverId: number, user: User) => {
+    // Out of its call too, if they're in it.
+    for (const id of voiceRoomIds(serverId)) kickFromVoice(user.id, id);
     db.prepare('DELETE FROM members WHERE server_id = ? AND user_id = ?').run(serverId, user.id);
     sendTo([user.id], { type: 'server_deleted', serverId });
     if (serverMemberIds(serverId).length) {
@@ -1039,6 +1048,12 @@ export function createApp(opts: AppOptions): Server {
   /** A host leaving deletes the burrow, with its files, pictures and emoji. */
   const deleteBurrow = (serverId: number) => {
     broadcastToServer(serverId, { type: 'server_deleted', serverId });
+    // Its bots belong to it alone, so their tokens stop working with it.
+    for (const { id } of db.prepare('SELECT id FROM users WHERE bot = 1 AND bot_server_id = ? AND deleted_at IS NULL').all(serverId) as { id: number }[]) {
+      db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
+      for (const ws of sockets.get(id) ?? []) ws.close(4001, 'Signed out');
+      db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(now(), id);
+    }
     for (const id of voiceRoomIds(serverId)) closeVoiceRoom(id);
     removeFiles(
       db
@@ -1211,7 +1226,9 @@ export function createApp(opts: AppOptions): Server {
     if (target.host || target.rank <= me.rank || targetId === user.id) throw new HttpError(403, "You can't remove them");
     if (body.ban) db.prepare('INSERT OR IGNORE INTO bans (server_id, user_id, banned_at) VALUES (?, ?, ?)').run(serverId, targetId, now());
     audit(serverId, user.id, body.ban ? 'ban' : 'remove', targetId);
-    removeMember(serverId, targetId);
+    // A bot can't come back, so removing it is the same as deleting it: its token and webhook stop too.
+    if (isBotUser(targetId)) removeBot(serverId, targetId);
+    else removeMember(serverId, targetId);
     sendTo([targetId], { type: 'server_deleted', serverId });
     return { ok: true };
   });
@@ -1260,54 +1277,58 @@ export function createApp(opts: AppOptions): Server {
     const channel = visibleRoom(Number(params[0]), user.id);
     if (channel.kind === 'thread') return renameThread(channel, user, body.name);
     allowed(channel.serverId, user, 'rooms');
-    if (body.name !== undefined) db.prepare('UPDATE channels SET name = ? WHERE id = ?').run(roomName(body.name, channel.kind), channel.id);
-    if (body.private !== undefined) db.prepare('UPDATE channels SET private = ? WHERE id = ?').run(body.private ? 1 : 0, channel.id);
-    if (body.memberIds !== undefined || body.roleIds !== undefined)
-      setAccess(channel.id, accessList(channel.serverId, body.memberIds), roleList(channel.serverId, body.roleIds));
-    if (body.topic !== undefined) {
-      const topic = typeof body.topic === 'string' ? body.topic.trim() : '';
-      if (topic.length > MAX_TOPIC) throw new HttpError(400, `The topic can be at most ${MAX_TOPIC} characters`);
-      db.prepare('UPDATE channels SET topic = ? WHERE id = ?').run(topic, channel.id);
-    }
-    if (body.slow !== undefined) {
-      const slow = Math.floor(Number(body.slow) || 0);
-      if (slow < 0 || slow > 6 * 3600) throw new HttpError(400, 'Slow mode can be at most 6 hours');
-      db.prepare('UPDATE channels SET slow_seconds = ? WHERE id = ?').run(slow, channel.id);
-    }
-    if (body.announce !== undefined) db.prepare('UPDATE channels SET announce = ? WHERE id = ?').run(body.announce ? 1 : 0, channel.id);
-    if (body.postRoleIds !== undefined) {
-      db.prepare('DELETE FROM channel_post_roles WHERE channel_id = ?').run(channel.id);
-      for (const id of roleList(channel.serverId, body.postRoleIds))
-        db.prepare('INSERT INTO channel_post_roles (channel_id, role_id) VALUES (?, ?)').run(channel.id, id);
-    }
-    if (body.readOnlyRoleIds !== undefined) {
-      db.prepare('DELETE FROM channel_read_only WHERE channel_id = ?').run(channel.id);
-      for (const id of roleList(channel.serverId, body.readOnlyRoleIds))
-        db.prepare('INSERT INTO channel_read_only (channel_id, role_id) VALUES (?, ?)').run(channel.id, id);
-    }
-    if (body.userLimit !== undefined && channel.kind === 'voice') {
-      const limit = Math.floor(Number(body.userLimit) || 0);
-      if (limit < 0 || limit > 99) throw new HttpError(400, 'A fire can have up to 99 seats');
-      db.prepare('UPDATE channels SET user_limit = ? WHERE id = ?').run(limit, channel.id);
-    }
-    if (body.keepChat !== undefined && channel.kind === 'voice') {
-      db.prepare('UPDATE channels SET keep_chat = ? WHERE id = ?').run(body.keepChat ? 1 : 0, channel.id);
-      // Turned off: what was kept goes, and the chat now lives only while people are at the fire.
-      if (!body.keepChat) db.prepare('DELETE FROM fireside_messages WHERE channel_id = ?').run(channel.id);
-      else if (fireside.has(channel.id)) {
-        for (const m of fireside.get(channel.id)!)
-          db.prepare('INSERT INTO fireside_messages (channel_id, user_id, author, content, created_at) VALUES (?, ?, ?, ?, ?)').run(channel.id, m.userId as number, m.author as string, m.content as string, m.createdAt as number);
-        fireside.delete(channel.id);
+    // All of it or none: one field that doesn't check out leaves the others as they were.
+    inTransaction(db, () => {
+      if (body.name !== undefined) db.prepare('UPDATE channels SET name = ? WHERE id = ?').run(roomName(body.name, channel.kind), channel.id);
+      if (body.private !== undefined) db.prepare('UPDATE channels SET private = ? WHERE id = ?').run(body.private ? 1 : 0, channel.id);
+      if (body.memberIds !== undefined || body.roleIds !== undefined)
+        setAccess(channel.id, accessList(channel.serverId, body.memberIds), roleList(channel.serverId, body.roleIds));
+      if (body.topic !== undefined) {
+        const topic = typeof body.topic === 'string' ? body.topic.trim() : '';
+        if (topic.length > MAX_TOPIC) throw new HttpError(400, `The topic can be at most ${MAX_TOPIC} characters`);
+        db.prepare('UPDATE channels SET topic = ? WHERE id = ?').run(topic, channel.id);
       }
-    }
-    if (body.archived !== undefined && channel.kind === 'text') {
-      if (body.archived && !channel.archivedAt) {
-        const open = db.prepare("SELECT COUNT(*) AS n FROM channels WHERE server_id = ? AND kind = 'text' AND archived_at IS NULL").get(channel.serverId) as { n: number };
-        if (open.n <= 1) throw new HttpError(400, 'A hearth needs at least one text room that isn\'t archived');
+      if (body.slow !== undefined) {
+        const slow = Math.floor(Number(body.slow) || 0);
+        if (slow < 0 || slow > 6 * 3600) throw new HttpError(400, 'Slow mode can be at most 6 hours');
+        db.prepare('UPDATE channels SET slow_seconds = ? WHERE id = ?').run(slow, channel.id);
       }
-      db.prepare('UPDATE channels SET archived_at = ? WHERE id = ?').run(body.archived ? channel.archivedAt ?? now() : null, channel.id);
-    }
-    audit(channel.serverId, user.id, 'room_edit', null, `#${channelById(channel.id)!.name}`);
+      if (body.announce !== undefined) db.prepare('UPDATE channels SET announce = ? WHERE id = ?').run(body.announce ? 1 : 0, channel.id);
+      if (body.postRoleIds !== undefined) {
+        db.prepare('DELETE FROM channel_post_roles WHERE channel_id = ?').run(channel.id);
+        for (const id of roleList(channel.serverId, body.postRoleIds))
+          db.prepare('INSERT INTO channel_post_roles (channel_id, role_id) VALUES (?, ?)').run(channel.id, id);
+      }
+      if (body.readOnlyRoleIds !== undefined) {
+        db.prepare('DELETE FROM channel_read_only WHERE channel_id = ?').run(channel.id);
+        for (const id of roleList(channel.serverId, body.readOnlyRoleIds))
+          db.prepare('INSERT INTO channel_read_only (channel_id, role_id) VALUES (?, ?)').run(channel.id, id);
+      }
+      if (body.userLimit !== undefined && channel.kind === 'voice') {
+        const limit = Math.floor(Number(body.userLimit) || 0);
+        if (limit < 0 || limit > 99) throw new HttpError(400, 'A fire can have up to 99 seats');
+        db.prepare('UPDATE channels SET user_limit = ? WHERE id = ?').run(limit, channel.id);
+      }
+      if (body.keepChat !== undefined && channel.kind === 'voice') {
+        db.prepare('UPDATE channels SET keep_chat = ? WHERE id = ?').run(body.keepChat ? 1 : 0, channel.id);
+        // Turned off: what was kept goes, and the chat now lives only while people are at the fire.
+        if (!body.keepChat) db.prepare('DELETE FROM fireside_messages WHERE channel_id = ?').run(channel.id);
+        else if (fireside.has(channel.id)) {
+          for (const m of fireside.get(channel.id)!)
+            db.prepare('INSERT INTO fireside_messages (channel_id, user_id, author, content, created_at) VALUES (?, ?, ?, ?, ?)').run(channel.id, m.userId as number, m.author as string, m.content as string, m.createdAt as number);
+        }
+      }
+      if (body.archived !== undefined && channel.kind === 'text') {
+        if (body.archived && !channel.archivedAt) {
+          const open = db.prepare("SELECT COUNT(*) AS n FROM channels WHERE server_id = ? AND kind = 'text' AND archived_at IS NULL").get(channel.serverId) as { n: number };
+          if (open.n <= 1) throw new HttpError(400, 'A hearth needs at least one text room that isn\'t archived');
+        }
+        db.prepare('UPDATE channels SET archived_at = ? WHERE id = ?').run(body.archived ? channel.archivedAt ?? now() : null, channel.id);
+      }
+      audit(channel.serverId, user.id, 'room_edit', null, `#${channelById(channel.id)!.name}`);
+    });
+    // Now kept in the database, so the copy in memory goes (only once the change is saved).
+    if (body.keepChat && channel.kind === 'voice') fireside.delete(channel.id);
     accessChanged(channel.serverId);
     return serverSummary(channel.serverId, user.id);
   });
@@ -1318,6 +1339,9 @@ export function createApp(opts: AppOptions): Server {
     if (channel.kind !== 'thread') allowed(channel.serverId, user, 'rooms');
     const textRooms = db.prepare("SELECT COUNT(*) AS n FROM channels WHERE server_id = ? AND kind = 'text'").get(channel.serverId) as { n: number };
     if (channel.kind === 'text' && textRooms.n <= 1) throw new HttpError(400, 'A hearth needs at least one text room');
+    // Nor can the last room people can still write in go, leaving only archived ones.
+    const openRooms = db.prepare("SELECT COUNT(*) AS n FROM channels WHERE server_id = ? AND kind = 'text' AND archived_at IS NULL").get(channel.serverId) as { n: number };
+    if (channel.kind === 'text' && channel.archivedAt === null && openRooms.n <= 1) throw new HttpError(400, "A hearth needs at least one text room that isn't archived");
     if (channel.kind === 'voice') closeVoiceRoom(channel.id);
     if (channel.kind !== 'thread') audit(channel.serverId, user.id, 'room_delete', null, `#${channel.name}`);
     removeFiles(
@@ -1335,6 +1359,7 @@ export function createApp(opts: AppOptions): Server {
     const channel = visibleRoom(Number(params[0]), user.id);
     if (channel.kind !== 'voice') throw new HttpError(400, 'That is not a voice room');
     if (!opts.voice) throw new HttpError(503, 'Voice is not set up on this server');
+    dmBlockCheck(channel.serverId, user.id);
     checkSeat(channel, user.id);
     const canSpeak = !serverMuted(channel.serverId, user.id);
     return { url: opts.voice.url ?? null, token: voiceToken(opts.voice, user, `room-${channel.id}`, undefined, canSpeak), canSpeak };
@@ -1564,6 +1589,8 @@ export function createApp(opts: AppOptions): Server {
     const kind = serverKind(serverId);
     if (kind !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
     if (!opts.voice) throw new HttpError(503, 'Voice is not set up on this server');
+    // Nobody can ring someone who blocked them (or whom they blocked), or an account that's gone.
+    dmBlockCheck(serverId, user.id);
     let channelId = callRoom(serverId);
     if (channelId === undefined) {
       channelId = Number(db.prepare("INSERT INTO channels (server_id, name, kind, created_at) VALUES (?, 'Call', 'voice', ?)").run(serverId, now()).lastInsertRowid);
@@ -1614,6 +1641,11 @@ export function createApp(opts: AppOptions): Server {
   route('PATCH', '/api/messages/:id', ({ user, params, body }) => {
     const id = Number(params[0]);
     const channel = ownMessage(user, id);
+    // Archived rooms stay as they were, and a timeout stops editing as well as writing.
+    const room = channel.kind === 'thread' && channel.parentId !== null ? channelById(channel.parentId) ?? channel : channel;
+    if (room.archivedAt !== null) throw new HttpError(403, 'This room is archived');
+    const left = timeoutLeft(channel.serverId, user.id);
+    if (left) throw new HttpError(403, `You're timed out for ${left}`);
     const hasFiles = !!db.prepare('SELECT 1 FROM attachments WHERE message_id = ?').get(id);
     if (typeof body.content !== 'string' || (!body.content.trim() && !hasFiles)) throw new HttpError(400, 'Message is empty');
     if (body.content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
@@ -1982,6 +2014,13 @@ export function createApp(opts: AppOptions): Server {
       unlink(filePath(id)).catch(() => {});
       throw new HttpError(400, 'File is empty');
     }
+    // The room may have been deleted (or they lost access) while it uploaded.
+    try {
+      visibleRoom(channel.id, user.id);
+    } catch (err) {
+      unlink(filePath(id)).catch(() => {});
+      throw err;
+    }
     // Voice messages say how long they are, so the player can show it before loading.
     const voiceSeconds = Number(req.headers['x-voice-seconds']);
     const voice = type.startsWith('audio/') && voiceSeconds > 0 && voiceSeconds <= 3600 ? Math.round(voiceSeconds * 10) / 10 : null;
@@ -2237,6 +2276,13 @@ export function createApp(opts: AppOptions): Server {
     const name = `${gif.title.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 60) || 'gif'}.${kind.ext}`;
     await mkdir(opts.uploadDir!, { recursive: true });
     await writeFile(filePath(id), data);
+    // The room may have been deleted (or they lost access) while it downloaded.
+    try {
+      visibleRoom(channel.id, user.id);
+    } catch (err) {
+      unlink(filePath(id)).catch(() => {});
+      throw err;
+    }
     db.prepare(
       'INSERT INTO attachments (id, channel_id, uploader_id, name, type, size, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
     ).run(id, channel.id, user.id, name, kind.type, data.length, now());
@@ -2301,6 +2347,8 @@ export function createApp(opts: AppOptions): Server {
   // up email, an email when a mention is still unread a while later.
 
   const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  /** @name as a whole username: not the start of a longer one (@max in @max-bot or @max.b), though a full stop after it is fine. */
+  const mentionRe = (username: string) => new RegExp(`@${escapeRe(username)}(?![\\w-])(?!\\.[\\w-])`, 'i');
   const serverKind = (serverId: number) => (db.prepare('SELECT kind FROM servers WHERE id = ?').get(serverId) as { kind: string } | undefined)?.kind;
 
   /** @everyone, @here and @Role, if the author's roles let them ping those. */
@@ -2326,7 +2374,7 @@ export function createApp(opts: AppOptions): Server {
       const names = db
         .prepare(`SELECT id, username FROM users WHERE id IN (${audience.map(() => '?').join(',') || 'NULL'})`)
         .all(...audience) as { id: number; username: string }[];
-      for (const u of names) if (new RegExp(`@${escapeRe(u.username)}\\b`, 'i').test(content)) forWhom.add(u.id);
+      for (const u of names) if (mentionRe(u.username).test(content)) forWhom.add(u.id);
     }
     if (replyId !== null) {
       const to = (db.prepare('SELECT author_id FROM messages WHERE id = ?').get(replyId) as { author_id: number } | undefined)?.author_id;
@@ -2418,7 +2466,7 @@ export function createApp(opts: AppOptions): Server {
     if (typeof tz !== 'string' || tz.length > 64) return false;
     try { new Intl.DateTimeFormat('en', { timeZone: tz }); return true; } catch { return false; }
   };
-  /** Status, custom status, quiet hours and the email switch, from PATCH /api/me. */
+  /** Status, custom status, quiet hours and the email switch, from PATCH /api/me. Says whether others need telling. */
   const updateMyPresence = (user: User, body: Json) => {
     let changed = false;
     if (body.status !== undefined) {
@@ -2455,10 +2503,7 @@ export function createApp(opts: AppOptions): Server {
         db.prepare('UPDATE users SET quiet_start = ?, quiet_end = ?, time_zone = ? WHERE id = ?').run(start, end, q.timeZone as string, user.id);
       }
     }
-    if (changed) {
-      sendPresence(user.id);
-      sendTo([user.id], { type: 'me_updated', me: meJson(user) }); // your other devices
-    }
+    return changed;
   };
 
   /** Whether it's within someone's quiet hours where they are. */
@@ -2872,13 +2917,20 @@ export function createApp(opts: AppOptions): Server {
 
   // Turning DM read receipts on or off. Your conversations update for both sides.
   route('PATCH', '/api/me', ({ user, body }) => {
+    // All of it or none, and nobody hears about it until it's saved.
+    const changed = inTransaction(db, () => {
+      if (body.readReceipts !== undefined) db.prepare('UPDATE users SET read_receipts = ? WHERE id = ?').run(body.readReceipts ? 1 : 0, user.id);
+      return { profile: updateProfile(user, body), presence: updateMyPresence(user, body) };
+    });
     if (body.readReceipts !== undefined) {
-      db.prepare('UPDATE users SET read_receipts = ? WHERE id = ?').run(body.readReceipts ? 1 : 0, user.id);
       const dms = db.prepare("SELECT s.id FROM members m JOIN servers s ON s.id = m.server_id WHERE m.user_id = ? AND s.kind = 'dm'").all(user.id) as { id: number }[];
       for (const { id } of dms) sendServerUpdate(id);
     }
-    updateProfile(user, body);
-    updateMyPresence(user, body);
+    if (changed.profile) userChanged(user.id);
+    if (changed.presence) {
+      sendPresence(user.id);
+      sendTo([user.id], { type: 'me_updated', me: meJson(user) }); // your other devices
+    }
     return meJson(userById(user.id)!);
   });
 
@@ -3220,6 +3272,9 @@ export function createApp(opts: AppOptions): Server {
     else tries.count++;
     const text = typeof body.content === 'string' ? body.content : typeof body.text === 'string' ? body.text : '';
     if (!text.trim()) throw new HttpError(400, 'Send { "content": "your message" }');
+    const room = channelById(hook.channelId);
+    if (!room || !isMember(room.serverId, hook.userId)) throw new HttpError(404, 'No such webhook');
+    if (room.archivedAt !== null) throw new HttpError(403, 'This room is archived');
     const message = postMessage(userById(hook.userId)!, hook.channelId, { content: text.slice(0, MAX_MESSAGE_LENGTH) }, { webhook: true });
     return { id: message.id };
   }, false);
@@ -3808,6 +3863,7 @@ export function createApp(opts: AppOptions): Server {
     if (!me?.host) throw new HttpError(403, 'Only the host can hand the hearth over');
     const to = Number(body.userId);
     if (to === user.id || !isMember(serverId, to)) throw new HttpError(400, "They aren't in this hearth");
+    if (isBotUser(to)) throw new HttpError(400, "A bot can't be the host");
     db.prepare('UPDATE servers SET owner_id = ? WHERE id = ?').run(to, serverId);
     accessChanged(serverId);
     return serverSummary(serverId, user.id);
@@ -4139,7 +4195,7 @@ export function createApp(opts: AppOptions): Server {
     if (!m || month < 1 || month > 12 || day < 1 || day > new Date(Date.UTC(2024, month, 0)).getUTCDate()) throw new HttpError(400, 'Pick a month and day');
     return value as string;
   };
-  /** Display name, bio, birthday and accent colour, from PATCH /api/me. */
+  /** Display name, bio, birthday and accent colour, from PATCH /api/me. Says whether others need telling. */
   const updateProfile = (user: User, body: Json) => {
     let changed = false;
     if (body.displayName !== undefined) {
@@ -4162,7 +4218,7 @@ export function createApp(opts: AppOptions): Server {
       db.prepare('UPDATE users SET accent = ? WHERE id = ?').run(body.accent === null ? null : cleanColor(body.accent), user.id);
       changed = true;
     }
-    if (changed) userChanged(user.id);
+    return changed;
   };
 
   const setBannerFile = (user: User, file: string | null) => {
@@ -4275,8 +4331,8 @@ export function createApp(opts: AppOptions): Server {
     failedTry([`friend:${user.id}`], 60 * 60 * 1000); // every request counts, so nobody is flooded
     const target = (
       body.userId != null
-        ? db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL').get(Number(body.userId))
-        : db.prepare('SELECT id FROM users WHERE username = ? AND deleted_at IS NULL').get(String(body.username ?? '').trim().replace(/^@/, ''))
+        ? db.prepare('SELECT id FROM users WHERE id = ? AND deleted_at IS NULL AND bot = 0').get(Number(body.userId))
+        : db.prepare('SELECT id FROM users WHERE username = ? AND deleted_at IS NULL AND bot = 0').get(String(body.username ?? '').trim().replace(/^@/, ''))
     ) as { id: number } | undefined;
     if (target?.id === user.id) throw new HttpError(400, "You can't add yourself");
     // The same answer for nobody and for someone who blocked you.
@@ -4777,7 +4833,7 @@ export function createApp(opts: AppOptions): Server {
     // header the client sends has to be listed here, or the apps' browsers refuse the request.
     res.setHeader('access-control-allow-origin', '*');
     res.setHeader('access-control-allow-headers', 'authorization, content-type, x-filename, x-voice-seconds, x-width, x-height');
-    res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') return res.writeHead(204).end();
 
     const url = new URL(req.url ?? '/', 'http://localhost');
@@ -4905,6 +4961,8 @@ export function createApp(opts: AppOptions): Server {
       ws.ping();
     }, 30_000);
 
+    /** Whether this connection is the one they sit at the fire with (or they aren't at one). */
+    const voiceDevice = () => (voiceSockets.get(user.id) ?? ws) === ws;
     ws.on('message', (raw) => {
       const text = String(raw);
       const game = text.startsWith('{"type":"game"');
@@ -4929,7 +4987,13 @@ export function createApp(opts: AppOptions): Server {
             throw new HttpError(404, 'Room not found');
           checkSeat(channel, user.id);
           pendingMoves.delete(user.id);
+          // Sitting down on another device: the one they were at the fire on gets up.
+          const was = voiceSockets.get(user.id);
+          voiceSockets.set(user.id, ws);
+          if (was && was !== ws && was.readyState === WebSocket.OPEN) was.send(JSON.stringify({ type: 'voice_elsewhere', channelId: channel.id }));
           setVoice(user.id, channel.id, flagsFrom(msg));
+        } else if (!voiceDevice() && ['voice_status', 'voice_leave', 'voice_live', 'voice_speaking'].includes(msg.type as string)) {
+          // From a device that isn't the one at the fire (or one that just lost it to another).
         } else if (msg.type === 'voice_status') {
           // Muted or deafened, in the room they're already in.
           const channelId = inVoice.get(user.id);
@@ -4948,6 +5012,7 @@ export function createApp(opts: AppOptions): Server {
           const content = typeof msg.content === 'string' ? msg.content.trim() : '';
           if (!content) throw new HttpError(400, 'Message is empty');
           if (content.length > 1000) throw new HttpError(400, 'Message is too long');
+          if (!postAllowance.take(user.id)) throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
           const author = nameIn(channelById(channelId)!.serverId, user.id);
           const message = { id: ++firesideId, userId: user.id, author, content, createdAt: Date.now() };
           if (channelById(channelId)?.keepChat) {
@@ -5026,6 +5091,8 @@ export function createApp(opts: AppOptions): Server {
       games.closed(user.id, ws);
       dock.closed(user.id, ws);
       casinoTables.closed(ws);
+      // The device they were at the fire on is gone, even if another one is still connected.
+      if (voiceSockets.get(user.id) === ws) setVoice(user.id, null);
       if (set!.size === 0) {
         sockets.delete(user.id);
         online.delete(user.id);
