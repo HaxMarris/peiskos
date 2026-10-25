@@ -199,7 +199,7 @@ async function claimFreeChips() {
   try {
     const r = await api(casinoApi('/free'), { method: 'POST', body: {} });
     setWallet(r.wallet);
-    toast(`+${chipsText(r.got)} chips. Have fun!`);
+    toast(`+${chipsText(r.got)} chips.`);
   } catch (err) { toast(err.message); }
 }
 

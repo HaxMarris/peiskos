@@ -402,7 +402,7 @@ function boardHtml() {
   let h = `<h2>Today's biggest <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's best catch today in this hearth, by hand or idle rod. Ranked by how big it is for its species, then stars.</p>`;
   if (!board) return h + `<div class="empty-state">Loading the board…</div>`;
   if (board.error) return h + `<div class="empty-state">Couldn't load the board. ${esc(board.error)}</div>`;
-  if (!board.rows.length) return h + `<div class="empty-state">Nobody has caught anything yet today. Be first.</div>`;
+  if (!board.rows.length) return h + `<div class="empty-state">Nobody has caught anything yet today.</div>`;
   h += `<ol class="board">`;
   board.rows.forEach((r, i) => {
     const f = FISH[r.fish]; if (!f) return;

@@ -48,7 +48,6 @@ function openGamePicker() {
         <span class="btn">${playing ? 'Open' : 'Join'}</span>
       </button>`;
   modal(`<h2>Play a game together</h2>
-    <p class="small muted">Everyone at the fire can join, and you can keep talking while you play.</p>
     <div class="game-picks">${running || Object.entries(FIRE_GAMES).map(([name, f]) => `
       <button type="button" class="game-pick" data-game="${name}">
         <span class="game-pick-icon" aria-hidden="true">${f.icon}</span>

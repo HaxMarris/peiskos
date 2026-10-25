@@ -574,7 +574,7 @@ function timeModal(title, intro, pick, extra = '') {
 }
 
 function openRemind(m) {
-  timeModal('Remind me', "It's saved, and Peiskos brings it back at the time you pick.", async (remindAt) => {
+  timeModal('Remind me', '', async (remindAt) => {
     await api(`/api/messages/${m.id}/save`, { method: 'POST', body: { remindAt } });
     toast(`I'll remind you ${formatTime(new Date(remindAt)).replace(/^(Today|Yesterday)/, (w) => w.toLowerCase())}.`);
   });
@@ -592,7 +592,7 @@ function showReminder(ev) {
 }
 
 async function openSaved() {
-  modal(`<h2>Saved messages</h2><p class="muted small">Only you see these. Save a message from its ⋯ menu.</p>
+  modal(`<h2>Saved messages</h2><p class="muted small">Save a message from its ⋯ menu.</p>
     <div id="saved-list" class="card-list"><p class="muted">Loading…</p></div>
     <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
   try {
@@ -646,7 +646,7 @@ async function openReports(serverId) {
     const reports = await api(`/api/servers/${serverId}/reports`);
     const list = $('#report-list');
     if (!list) return;
-    if (!reports.length) return (list.innerHTML = '<p class="muted">No reports. All quiet.</p>');
+    if (!reports.length) return (list.innerHTML = '<p class="muted">No reports.</p>');
     list.replaceChildren(...reports.map((r) => {
       const who = r.reporter ? `Reported by ${r.reporter}` : 'Caught by the word filter';
       const note = `${who}${r.reporter && r.reason ? `: ${r.reason}` : r.reason && !r.reporter ? ` (${r.reason.replace(/^Word filter: /, '')})` : ''}`

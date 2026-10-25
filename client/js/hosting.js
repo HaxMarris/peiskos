@@ -262,7 +262,7 @@ async function adminErrors(pane) {
   pane.innerHTML = '<p class="muted">Loading…</p>';
   let errors = [];
   try { errors = (await api('/api/admin/errors')).errors; } catch (err) { pane.textContent = err.message; return; }
-  pane.innerHTML = `<p class="small muted">Crashes in people's apps, the same one counted once. Just the error and where; nothing anyone typed.</p>
+  pane.innerHTML = `<p class="small muted">Crashes in people's apps, the same one counted once.</p>
     ${errors.length ? `<ul class="error-list">${errors.map((e) => `<li><details><summary><b>${escapeHtml(e.message)}</b><span class="small muted"> · ${e.count}× · last ${ago(e.lastAt)}${e.username ? ` · ${escapeHtml(e.username)}` : ''}</span></summary>
         <pre class="small">${escapeHtml(e.where)}\n${escapeHtml(e.stack)}\n\n${escapeHtml(e.app)}</pre></details></li>`).join('')}</ul>
       <div class="admin-row"><button type="button" class="btn secondary" id="errors-clear">Clear the list</button></div>` : '<p>No crashes reported.</p>'}`;

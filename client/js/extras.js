@@ -521,7 +521,7 @@ async function openYearReview(serverId, year = new Date().getFullYear()) {
       <h2>${year} in review</h2>
       ${r.years.length > 1 ? `<select id="review-year" aria-label="Year">${r.years.map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>` : ''}
     </div>
-    ${empty ? '<p class="muted">A quiet year by this fire. Nothing to look back on yet.</p>' : `
+    ${empty ? '<p class="muted">Nothing to look back on yet.</p>' : `
     <div class="review-stats">
       <div><b>${n(r.messages)}</b><span>messages</span></div>
       <div><b>${r.fireHours < 1 ? Math.round(r.fireHours * 60) : n(Math.round(r.fireHours))}</b><span>${r.fireHours < 1 ? 'minutes' : 'hours'} around the fire</span></div>

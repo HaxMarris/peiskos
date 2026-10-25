@@ -350,7 +350,7 @@ function setMicMuted(voice, muted) {
 function toggleMute() {
   const voice = state.voice;
   if (!voice?.room) return;
-  if (voice.serverMuted) return toast('A moderator muted you here. They can let you speak again.');
+  if (voice.serverMuted) return toast('A moderator muted you here.');
   // Unmuting while deafened turns your sound back on too, like Discord.
   if (voice.deafened && voice.muted) setDeafened(voice, false);
   setMicMuted(voice, !voice.muted);
