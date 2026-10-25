@@ -88,12 +88,20 @@ function popOutWindow(t) {
   doc.head.innerHTML = `<meta charset="utf-8"><style>
     html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
     video { width: 100%; height: 100%; object-fit: contain; display: block; }
-    button { position: fixed; top: 10px; right: 10px; width: 34px; height: 34px; padding: 7px; border: 0; border-radius: 8px;
+    .pin { position: fixed; top: 10px; right: 10px; width: 34px; height: 34px; padding: 7px; border: 0; border-radius: 8px;
       background: rgb(0 0 0 / .55); color: #fff; cursor: pointer; opacity: 0; transition: opacity .15s; }
-    body:hover button, button:focus-visible, button.on { opacity: 1; }
-    button:hover { background: rgb(0 0 0 / .8); }
-    button.on { background: #e8762c; }
-    button svg { width: 100%; height: 100%; fill: currentColor; }
+    body:hover .pin, .pin:focus-visible, .pin.on { opacity: 1; }
+    .pin:hover { background: rgb(0 0 0 / .8); }
+    .pin.on { background: #e8762c; }
+    svg { width: 100%; height: 100%; fill: currentColor; }
+    .stream-audio { position: fixed; right: 10px; bottom: 10px; display: flex; align-items: center; gap: 6px; padding: 3px 10px 3px 4px;
+      border-radius: 999px; background: rgb(20 14 10 / .72); color: #fbf4ec; font: 700 12px system-ui, sans-serif; opacity: 0; transition: opacity .15s; }
+    body:hover .stream-audio, .stream-audio.muted, .stream-audio:focus-within { opacity: 1; }
+    .stream-audio button { display: grid; place-items: center; width: 24px; height: 24px; padding: 4px; border: 0; background: none; color: inherit; border-radius: 50%; cursor: pointer; }
+    .stream-audio button:hover { background: rgb(255 255 255 / .14); }
+    .stream-audio.muted button { color: #ff9a92; }
+    .stream-audio input { width: 110px; accent-color: #fbf4ec; }
+    .stream-audio span { min-width: 34px; text-align: right; }
   </style>`;
   doc.title = t.label.textContent || 'Peiskos'; // after the head, which would replace it
   const video = doc.createElement('video');
@@ -104,6 +112,7 @@ function popOutWindow(t) {
   video.ondblclick = () => (doc.fullscreenElement ? doc.exitFullscreen() : video.requestFullscreen()).catch(() => {});
   const pin = doc.createElement('button');
   pin.type = 'button';
+  pin.className = 'pin';
   pin.innerHTML = PIN_ICON;
   const setPinned = (on) => {
     pin.classList.toggle('on', on);
@@ -136,8 +145,9 @@ function popOutWindow(t) {
     stopObserving() { win.removeEventListener('resize', info.onResize); doc.removeEventListener('visibilitychange', info.onVisibility); },
   };
   t.track.observeElementInfo?.(info);
-  popWin = { win, key: t.key, track: t.track, video, info };
+  popWin = { win, key: t.key, track: t.track, video, info, audio: null };
   poppedKey = t.key;
+  checkPopWindow();
   renderStage();
 }
 
@@ -152,9 +162,18 @@ function closePopWindow(render = true) {
   if (render && tiles.has(p.key)) renderStage();
 }
 
-/** Closes the pop-out once its stream has ended or changed. */
+/** Closes the pop-out once its stream has ended or changed, and keeps its volume control current. */
 function checkPopWindow() {
-  if (popWin && tiles.get(popWin.key)?.track !== popWin.track) closePopWindow(false);
+  if (!popWin) return;
+  const t = tiles.get(popWin.key);
+  if (t?.track !== popWin.track) return closePopWindow(false);
+  // A screen's own sound when it shares some, or the person's voice over their camera.
+  const voice = t.kind === 'camera' && t.id !== state.me.id;
+  const want = voice ? 'voice' : t.audio ? 'stream' : null;
+  if ((popWin.audio?.kind ?? null) === want) return;
+  popWin.audio?.remove();
+  popWin.audio = want ? streamAudioControl(t.id, popWin.win.document.body, { doc: popWin.win.document, voice }) : null;
+  if (popWin.audio) popWin.audio.kind = want;
 }
 
 // ---- the fireside chat over a stream, so you can read and write while it fills the screen
@@ -952,33 +971,43 @@ const SPEAKER_ON = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12
 const SPEAKER_OFF = '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.6 3 2.7-2.7-1.4-1.4-2.7 2.7-2.7-2.7-1.4 1.4 2.7 2.7-2.7 2.7 1.4 1.4 2.7-2.7 2.7 2.7 1.4-1.4-2.7-2.7Z"/></svg>';
 
 /** The mute button and slider on a shared screen that has sound. */
-function streamAudioControl(userId, tile) {
-  const box = document.createElement('div');
+/**
+ * A mute button and slider for someone's shared sound, in the corner of their tile (or of a
+ * popped-out window, whose document is `doc`). `voice` makes it their voice instead.
+ */
+function streamAudioControl(userId, tile, { doc = document, voice = false } = {}) {
+  const get = voice ? volumeFor : streamVolumeFor;
+  const set = voice ? setVolume : setStreamVolume;
+  const what = voice ? 'their voice' : 'the stream';
+  const box = doc.createElement('div');
   box.className = 'stream-audio';
-  box.innerHTML = '<button type="button"></button><input type="range" min="0" max="200" step="5" aria-label="Stream volume" /><span></span>';
+  box.innerHTML = `<button type="button"></button><input type="range" min="0" max="200" step="5" aria-label="${voice ? 'Voice volume' : 'Stream volume'}" /><span></span>`;
   const [button, slider, readout] = box.children;
   let before = 1; // what unmuting goes back to
   const show = () => {
-    const v = streamVolumeFor(userId);
+    const v = get(userId);
     slider.value = Math.round(v * 100);
     readout.textContent = `${Math.round(v * 100)}%`;
     button.innerHTML = v === 0 ? SPEAKER_OFF : SPEAKER_ON;
-    button.title = v === 0 ? 'Unmute the stream' : 'Mute the stream';
+    button.title = v === 0 ? `Unmute ${what}` : `Mute ${what}`;
     box.classList.toggle('muted', v === 0);
   };
+  const change = (v) => { set(userId, v); for (const c of volumeControls()) c.show(); };
   box.onclick = (e) => e.stopPropagation(); // don't enlarge or shrink the tile
   box.ondblclick = (e) => e.stopPropagation();
   button.onclick = () => {
-    const v = streamVolumeFor(userId);
+    const v = get(userId);
     if (v > 0) before = v;
-    setStreamVolume(userId, v > 0 ? 0 : before || 1);
-    show();
+    change(v > 0 ? 0 : before || 1);
   };
-  slider.oninput = () => { setStreamVolume(userId, Number(slider.value) / 100); show(); };
+  slider.oninput = () => change(Number(slider.value) / 100);
+  box.show = show;
   show();
   tile.append(box);
   return box;
 }
+/** Every volume control showing, so changing one updates the others. */
+const volumeControls = () => [...[...tiles.values()].map((t) => t.audio), popWin?.audio].filter(Boolean);
 
 // The desktop app can't show the browser's screen picker, so it asks us to show one.
 window.burrowDesktop?.onPickScreen((sources) => {
