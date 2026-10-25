@@ -758,11 +758,11 @@ function startBite() {
   // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
   // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
   const r = rod(), pi = pondIdx(S.pond), rf = G.fish.rf;
-  const w = Math.max(.06, (.2 + r.zone + .0125 * S.up.hook) * (1 - .1 * pi) * (1 - .45 * rf));
+  const w = Math.max(.06, (.2 + r.zone + .0125 * S.up.hook) * (1 - .05 * pi) * (1 - .4 * rf));
   const c = w / 2 + Math.random() * (1 - w);
   G.zone = [c - w / 2, c + w / 2];
-  G.speed = .7 + rf * .9 + pi * .15;
-  G.fight = rf * (1 + pi) * .024;
+  G.speed = .7 + rf * .8 + pi * .07;
+  G.fight = rf * (1 + pi) * .016;
   G.phase = 'bite'; G.t0 = performance.now();
   biteSound(G.fish.r >= 4);
   setHint(G.fish.r >= 4 ? 'Something heavy!' : 'Bite!', true);
