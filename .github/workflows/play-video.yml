@@ -1,0 +1,95 @@
+# Records the screen video Google Play asks for about the Android app's foreground service (voice
+# carrying on in the background), on an Android emulator. The video is the run's "play-video" artifact.
+name: Play video
+
+# Run it from the Actions tab whenever Google asks for the video again.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # A test build that can talk to the demo server on this machine over plain http.
+      - name: Build the app
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run copy-client
+          jq '.android.allowMixedContent = true' capacitor.config.json > c.json && mv c.json capacitor.config.json
+          npx cap sync android
+          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
+          cd android && ./gradlew --no-daemon assembleDebug
+
+      - name: Demo server
+        run: |
+          docker run -d --name livekit --network host livekit/livekit-server:v1.13.7 --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+          cd server && npm ci
+          PORT=3000 DB_FILE=$RUNNER_TEMP/demo.db LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret LIVEKIT_URL=ws://localhost:7880 \
+            nohup node --no-warnings src/index.ts > $RUNNER_TEMP/server.log 2>&1 &
+          for i in $(seq 30); do curl -sf localhost:3000/api/config > /dev/null && break; sleep 1; done
+          curl -sf localhost:3000/api/config
+
+      - name: Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      # The emulator's microphone reads from the machine's sound system, and the emulator quits when
+      # there isn't one, so give it a silent one.
+      - name: Sound server
+        timeout-minutes: 5
+        run: |
+          sudo apt-get install -y -qq pulseaudio > /dev/null
+          nohup pulseaudio --daemonize=no --exit-idle-time=-1 -n \
+            --load="module-native-protocol-unix socket=/tmp/pulse.sock auth-anonymous=1" \
+            --load="module-null-sink sink_name=silence" > $RUNNER_TEMP/pulse.log 2>&1 &
+          for i in $(seq 20); do [ -S /tmp/pulse.sock ] && break; sleep 1; done
+          export PULSE_SERVER=unix:/tmp/pulse.sock
+          timeout 10 pactl set-default-source silence.monitor || cat $RUNNER_TEMP/pulse.log
+          timeout 10 pactl info || cat $RUNNER_TEMP/pulse.log
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Record
+        timeout-minutes: 15
+        env:
+          PULSE_SERVER: unix:/tmp/pulse.sock
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -camera-front none
+          disable-animations: false
+          script: OUT_DIR=video node .github/scripts/play-video.mjs mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Server logs
+        if: always()
+        run: |
+          tail -n 30 $RUNNER_TEMP/server.log
+          docker logs --tail 30 livekit 2>&1
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-video
+          path: video/
