@@ -1297,7 +1297,10 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target.dataset.act === 'slot-pond') { const sl = S.slots[+e.target.dataset.i]; sl.pond = e.target.value; save(); renderAll(); }
 });
-$('castBtn').addEventListener('click', primary);
+// Cast and hook the moment the button goes down, not when it's let go: timing matters on the hook.
+// A click with no pointer behind it (Enter or Space on the focused button) still works.
+$('castBtn').addEventListener('pointerdown', e => { if (e.button !== 0) return; e.preventDefault(); primary(); });
+$('castBtn').addEventListener('click', e => { if (e.detail === 0) primary(); });
 $('scene').addEventListener('pointerdown', e => {
   if (e.button !== 0 || G.mode === 'map' || e.target.closest('button')) return;
   e.preventDefault(); primary();
