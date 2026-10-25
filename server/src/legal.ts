@@ -16,7 +16,7 @@ export interface LegalOptions {
 }
 
 /** The date these were last changed. Bump it whenever the wording changes. */
-export const LEGAL_UPDATED = '15 October 2026';
+export const LEGAL_UPDATED = '25 October 2026';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -76,45 +76,51 @@ function page(title: string, body: string, o: LegalOptions) {
 export function privacyPage(o: LegalOptions) {
   const runBy = o.name ? esc(o.name) : 'the person who runs this server';
   const backups = o.backupDays > 0
-    ? `<li><b>Backups.</b> The server copies everything once a day and keeps the last ${o.backupDays} days of copies${o.offsite ? ', on the server and in a separate storage service' : ''}, so something you delete can stay in a backup for up to ${o.backupDays} days before it's gone for good.</li>`
+    ? `<li><b>Backups.</b> The server copies everything once a day and keeps the last ${o.backupDays} days of copies, so something you delete can stay in a backup for up to ${o.backupDays} days before it's gone from the server for good.${o.offsite ? ` Copies are also sent to a separate storage service in case the server is lost. Those can be kept longer, until ${runBy} clears them.` : ''}</li>`
     : '';
   return page('Privacy policy', `
     <p>Peiskos is a place to chat, talk and hang out with friends. It runs on its own server, managed by ${runBy}. There are no ads, nothing is sold, and there's no tracking or analytics. This page says what the server keeps, who can see it, and how you get it back or deleted.</p>
 
     <h2>What Peiskos keeps</h2>
     <ul>
-      <li><b>Your account:</b> your username, display name, password (scrambled so it can't be read), email address if you give one, and whatever you add to your profile: picture, banner, bio, birthday, color and status.</li>
-      <li><b>What you post:</b> messages and their earlier versions when you edit them, reactions, files, pictures, voice messages, polls, stickers and emoji you add, saved messages and reminders.</li>
-      <li><b>Where you are:</b> the hearths and groups you're in, your roles, your friends and the people you've blocked, and what you've read.</li>
-      <li><b>Logins:</b> for each device you're logged in on, its name, its IP address, and when it was last used, so you can see them under Login and security and log them out. Logins you don't use for 30 days end on their own. Passkeys and two-step login keep only what's needed to check them.</li>
-      <li><b>Time at the fire:</b> how long you spend in voice, which unlocks fire decorations.</li>
-      <li><b>Playing now:</b> if you turn on "Show the game I'm playing" in the desktop app, the name of the game. Nothing else about your computer leaves it.</li>
+      <li><b>Your account:</b> your username, display name, password (scrambled so it can't be read), email address, and whatever you add to your profile: picture, banner, bio, birthday, color and status. Also your settings, like quiet hours and your time zone.</li>
+      <li><b>What you post:</b> messages and their earlier versions when you edit them, reactions, files, pictures, voice messages, polls and votes, events, stickers and emoji you add, saved messages and reminders. Large photos are resized before they're sent, which also removes hidden details like where they were taken. Smaller photos, videos and other files are kept exactly as you send them.</li>
+      <li><b>Where you are:</b> the hearths and groups you're in, your roles and nicknames, your friends and the people you've blocked, and what you've read, which is how other people in a conversation can see you've seen a message.</li>
+      <li><b>Logins:</b> for each device you're logged in on, a description of the browser or app, its IP address, and when it was last used, so you can see them under Login and security and log them out. Logins you don't use for 30 days end on their own. Passkeys and two-step login keep only what's needed to check them.</li>
+      <li><b>Time at the fire:</b> when you join and leave voice, which unlocks fire decorations and makes the year in review.</li>
+      <li><b>Games:</b> your play chips, items and progress in the games at the fire.</li>
       <li><b>Notifications:</b> if you turn them on, the address your browser or phone gives the server to deliver them.</li>
-      <li><b>Crash reports:</b> when the app hits an error, the error message, which app it was, and your account, so it can be fixed. Only the latest 200 are kept.</li>
-      <li><b>Safety records:</b> reports you send or that are made about you, bans, and a log of moderator actions in each hearth.</li>
+      <li><b>Crash reports:</b> when the app hits an error, the error and where in the app it happened, which app it was and its browser or system version, and your account, so it can be fixed. Only the latest 200 are kept.</li>
+      <li><b>Safety records:</b> reports you send or that are made about you, including a copy of the reported message, bans, and a log of moderator actions in each hearth. When a moderator deletes someone's message, the start of it is kept in that log.</li>
     </ul>
+
+    <h2>Being online</h2>
+    <p>While Peiskos is open on any of your devices, you show as online to people you share a hearth with and to your friends. After 10 minutes without using any of them, you show as away. If you use the desktop app, it also shows the name of the game you're playing, unless you turn off "Show the game I'm playing". Nothing else about your computer leaves it. None of this is saved: the server only keeps when each login was last used and your time at the fire.</p>
 
     <h2>What Peiskos doesn't keep</h2>
     <ul>
-      <li>Voice calls, video and screen shares aren't recorded. Voice is end-to-end encrypted, so the server passes it along without being able to listen.</li>
-      <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire.</li>
+      <li>Voice calls, video and screen shares aren't recorded. They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
+      <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire, unless the hearth's host chose to keep that fire's chat.</li>
+      <li>The server doesn't keep a record of the pages you open or what you do in the app beyond what's listed above.</li>
     </ul>
     <p>Text messages and files are not end-to-end encrypted. They're stored on the server so they're there on all your devices, which means ${runBy} could technically read them. They won't, except to deal with a report or a legal obligation.</p>
 
     <h2>Who sees what</h2>
     <ul>
-      <li><b>Other people</b> see what you post in the hearths, rooms and conversations you share with them, and your profile.</li>
-      <li><b>Moderators and hosts</b> of a hearth can see reports about it and remove messages there.</li>
+      <li><b>Other people</b> see what you post in the hearths, rooms and conversations you share with them, your profile, and whether you're online.</li>
+      <li><b>Moderators and hosts</b> of a hearth can see reports and the moderator log for it, and remove messages there.</li>
+      <li><b>${o.name ? esc(o.name) : 'Whoever runs the server'}</b> sees a list of accounts with when each was made and last used, how many devices are logged in, how much storage and how many messages each has, and who's online or at a fire right now, plus crash reports. They can reset a password, log someone out, or delete an account.</li>
       <li><b>The server's cloud provider</b> stores the server's disk, and backups go to a storage service if they're turned on. Neither uses your data for anything else.</li>
-      <li><b>Email:</b> if you give an address, it's used only to confirm it and to send password reset codes, through the server's email provider. No newsletters.</li>
-      <li><b>Notifications</b> pass through your browser's or phone's notification service (Apple, Google or Mozilla). Their contents are encrypted so that service can't read them.</li>
-      <li><b>Link previews and GIF search</b> are fetched by the server itself, so the websites and the GIF service (KLIPY) see the server, not you. KLIPY does see the words you search for.</li>
-      <li><b>Listen together</b> plays YouTube videos in YouTube's privacy-enhanced player, which loads from YouTube in your app, so YouTube sees your IP address while it plays.</li>
+      <li><b>Email:</b> your address is used only to confirm it and to send password reset codes, through the server's email provider. No newsletters.</li>
+      <li><b>Notifications in a browser</b> pass through your browser's notification service (Apple, Google or Mozilla), encrypted so that service can't read them.</li>
+      <li><b>Notifications in the phone apps</b> pass through Apple (iPhone) or Google (Android) so your phone can show them. They carry who wrote, where, and the start of the message, which Apple or Google can read on the way.</li>
+      <li><b>Link previews and GIF search</b> are fetched by the server itself, so the websites and the GIF service (KLIPY) see the server, not you. KLIPY does see the words you search for, along with an anonymous code that's the same each time you search, so it can tell searches came from the same person without knowing who.</li>
+      <li><b>Listen together</b> and YouTube links play in YouTube's privacy-enhanced player, which loads from YouTube in your app, so YouTube sees your IP address while it plays.</li>
     </ul>
 
     <h2>How long it's kept</h2>
     <ul>
-      <li>Your account and what you post stay until you delete them.</li>
+      <li>Your account and what you post stay until you delete them. A deleted message, its earlier versions and its files are removed from the server straight away.</li>
       <li>Logins end after 30 days unused. Crash reports roll off after the newest 200.</li>
       ${backups}
     </ul>
@@ -123,7 +129,7 @@ export function privacyPage(o: LegalOptions) {
     <ul>
       <li><b>Get a copy:</b> Your account › Your data › Download my data gives you a zip of your account, your messages and the files you sent.</li>
       <li><b>Fix or remove things:</b> edit or delete your messages, change your profile, or remove your email under Your account › Login and security at any time.</li>
-      <li><b>Delete your account:</b> Your account › Your data › Delete my account. You choose whether your messages are deleted too or stay as "Deleted user". Your profile, email, friends, logins and passkeys are removed either way.</li>
+      <li><b>Delete your account:</b> Your account › Your data › Delete my account. You choose whether your messages and files are deleted too or stay as "Deleted user". Your profile, email, friends, blocks, logins, passkeys, notification addresses, saved messages and reminders are removed either way. Your reactions, votes, time at the fire and game progress stay, under "Deleted user".</li>
       <li><b>Anything else</b>, including a question about your data, a correction, or a complaint: contact ${contactHtml(o.contact)}. If you're in the EU or UK you can also complain to your data protection authority.</li>
     </ul>
 
@@ -167,7 +173,10 @@ export function termsPage(o: LegalOptions) {
     </ul>
 
     <h2>Your content</h2>
-    <p>What you post is yours. You give Peiskos permission to store it and show it to the people you shared it with, which is all it's used for. Only post things you have the right to share. If you believe something posted here infringes your copyright, contact ${contactHtml(o.contact)}.</p>
+    <p>What you post is yours. You give Peiskos permission to store it, back it up, show it to the people you shared it with and send them alerts about it, which is all it's used for. Only post things you have the right to share. If you believe something posted here infringes your copyright, contact ${contactHtml(o.contact)}.</p>
+
+    <h2>Games and play chips</h2>
+    <p>Chips, items, skins and everything else in the games at the fire are for fun. They have no money value: they can't be bought, sold or cashed out, and they can be reset or changed at any time. Don't trade them for real money or anything else of value.</p>
 
     <h2>No guarantees</h2>
     <p>Peiskos is run by a person, for friends, free of charge. It's provided as it is: it may go down, lose things, or change, and there's no promise it will always be available. Keep your own copies of anything important. As far as the law allows, ${runBy} isn't liable for losses from using it.</p>
