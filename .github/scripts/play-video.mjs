@@ -4,7 +4,7 @@
 // two friends already at the fire from a desktop browser.
 import { _android, chromium } from 'playwright';
 import { execFileSync, spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 
 const out = process.env.OUT_DIR ?? 'video';
 const apk = process.argv[2];
@@ -64,10 +64,13 @@ await sleep(6000);
 
 const shots = [];
 const shot = (name) => {
-  const png = execFileSync('adb', ['exec-out', 'screencap', '-p']);
-  writeFileSync(`${out}/${name}.png`, png);
-  shots.push(name);
-  log('screenshot', name);
+  try {
+    writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p']));
+    shots.push(name);
+    log('screenshot', name);
+  } catch (e) {
+    log('screenshot', name, 'failed:', e.message);
+  }
 };
 
 const [device] = await _android.devices();
@@ -134,10 +137,20 @@ try {
   shot('error');
   process.exitCode = 1;
 } finally {
-  adb('shell', 'pkill', '-INT', 'screenrecord');
-  await new Promise((r) => rec.on('exit', r));
+  const quiet = (...a) => { try { return adb(...a); } catch (e) { log(a.join(' '), 'failed:', e.message.split('\n')[1] ?? e.message); } };
+  quiet('shell', 'pkill', '-INT', 'screenrecord');
+  await Promise.race([new Promise((r) => rec.on('exit', r)), sleep(10000)]);
   await sleep(2000);
-  adb('pull', '/sdcard/demo.mp4', `${out}/peiskos-voice-in-background.mp4`);
+  quiet('pull', '/sdcard/demo.mp4', `${out}/peiskos-voice-in-background.mp4`);
   writeFileSync(`${out}/shots.txt`, shots.join('\n'));
+
+  // Small previews in the log, so the run can be checked without downloading anything.
+  const preview = await (await browser.newContext({ viewport: { width: 270, height: 600 } })).newPage();
+  for (const name of shots) {
+    const png = readFileSync(`${out}/${name}.png`).toString('base64');
+    await preview.setContent(`<body style="margin:0"><img src="data:image/png;base64,${png}" style="width:270px;display:block">`);
+    const jpg = await preview.locator('img').screenshot({ type: 'jpeg', quality: 55 });
+    console.log(`SHOT ${name} ${jpg.toString('base64')}`);
+  }
   await browser.close();
 }

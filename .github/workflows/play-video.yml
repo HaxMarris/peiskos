@@ -40,7 +40,7 @@ jobs:
 
       - name: Demo server
         run: |
-          docker run -d --name livekit --network host livekit/livekit-server:v1.8.4 --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+          docker run -d --name livekit --network host livekit/livekit-server:v1.13.7 --dev --bind 0.0.0.0 --node-ip 127.0.0.1
           cd server && npm ci
           PORT=3000 DB_FILE=$RUNNER_TEMP/demo.db LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret LIVEKIT_URL=ws://localhost:7880 \
             nohup node --no-warnings src/index.ts > $RUNNER_TEMP/server.log 2>&1 &
@@ -59,6 +59,9 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Record
+        env:
+          # The emulator's microphone works, but there's no sound card on this machine to feed it.
+          QEMU_AUDIO_DRV: none
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34
@@ -69,17 +72,11 @@ jobs:
           disable-animations: false
           script: OUT_DIR=video node .github/scripts/play-video.mjs mobile/android/app/build/outputs/apk/debug/app-debug.apk
 
-      # Small previews in the log, so the run can be checked without downloading anything.
-      - name: Previews
+      - name: Server logs
         if: always()
         run: |
-          for f in video/*.png; do
-            [ -f "$f" ] || continue
-            ffmpeg -loglevel error -y -i "$f" -vf scale=270:-1 -q:v 8 "${f%.png}.jpg"
-            echo "SHOT $(basename "$f") $(base64 -w0 "${f%.png}.jpg")"
-          done
-          tail -n 40 $RUNNER_TEMP/server.log
-          docker logs --tail 40 livekit
+          tail -n 30 $RUNNER_TEMP/server.log
+          docker logs --tail 30 livekit 2>&1
 
       - uses: actions/upload-artifact@v4
         if: always()
