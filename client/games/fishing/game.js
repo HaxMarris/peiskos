@@ -438,10 +438,12 @@ function openChest() {
   }
   const ws = left.map(h => [40, 30, 18, 9, 3][h.r - 1] * (1 + pi * (h.r - 1) * .4));
   const h = pick(left, ws);
-  S.hats.push(h.id);
-  addRecent({ chest: true, hat: h.id });
-  post(`Pulled up a treasure chest at ${pondOf(S.pond).name}. Inside: the ${h.name} (${RARITY[h.r - 1].toLowerCase()} hat).`, true);
-  return { hat: h.id };
+  // Gold comes with the hat: 100 at the Millpond, five times more at each water after it.
+  const coins = 100 * Math.pow(5, pi);
+  S.hats.push(h.id); S.coins += coins; S.stats.earned += coins;
+  addRecent({ chest: true, hat: h.id, coins });
+  post(`Pulled up a treasure chest at ${pondOf(S.pond).name}. Inside: the ${h.name} (${RARITY[h.r - 1].toLowerCase()} hat) and ${fmt(coins)} coins.`, true);
+  return { hat: h.id, coins };
 }
 
 // ---------- idle rods ----------
@@ -844,7 +846,7 @@ function showCatch(c, notes) {
 }
 function showChest(res) {
   const h = res.hat && HAT[res.hat];
-  $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv" style="height:84px"></canvas><h3>Treasure chest!</h3>${h ? `<div class="row"><span>${h.name}</span>${rarHtml(h.r)}</div><div class="tags"><span class="tag gold">New hat</span></div>` : `<div class="row"><span>Full of coins</span><span class="val">+${fmt(res.coins)}</span></div>`}</div>`;
+  $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv" style="height:84px"></canvas><h3>Treasure chest!</h3>${h ? `<div class="row"><span>${h.name}</span>${rarHtml(h.r)}</div><div class="row"><span>Gold</span><span class="val">+${fmt(res.coins)}</span></div><div class="tags"><span class="tag gold">New hat</span></div>` : `<div class="row"><span>Full of coins</span><span class="val">+${fmt(res.coins)}</span></div>`}</div>`;
   const [c, w, ht] = sizeCanvas($('catchCv'));
   drawChest(c, w * .32, ht * .78, ht * .7, true);
   if (h) { c.fillStyle = '#f1c9a0'; c.beginPath(); c.arc(w * .68, ht * .78, ht * .17, 0, 7); c.fill(); drawHat(c, h.id, w * .68, ht * .78, ht * .17, 0); }
@@ -1199,7 +1201,7 @@ function renderPane() {
     if (S.slots.length < SLOT_COSTS.length) { const c = SLOT_COSTS[S.slots.length]; h += `<div class="slot empty"><div>A new holder fishes the water you're at. Level it up for faster bites and a better catch rate.</div><button class="buy" style="grid-row:auto" data-act="slot-buy" ${S.coins < c ? 'disabled' : ''}>Buy holder · ${fmt(c)}</button></div>`; }
     h += `</div>`;
   } else if (S.tab === 'hats') {
-    h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead. Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
+    h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead, with gold inside too (more at later waters). Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
       if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars.</p><div class="hat-grid">`;
@@ -1231,7 +1233,7 @@ function renderRecent() {
   const el = $('recent'), list = S.recent.slice(0, 6);
   if (!list.length) { el.innerHTML = `<h2>Recent catches</h2><div class="empty-state">Your last six catches show up here.</div>`; return; }
   el.innerHTML = `<h2>Recent catches <small>last ${list.length}</small></h2><div class="rc-grid">${list.map((r, i) => {
-    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span></div></div>`; }
+    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
     const c = r.c, f = FISH[c.f], tags = [];
     if (c.g) tags.push('<span class="tag gold">Giant ×3</span>');
     if (c.p) tags.push('<span class="tag green">Perfect</span>');
