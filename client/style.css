@@ -140,14 +140,16 @@ label input, .modal-card input, .modal-card textarea, .gif-picker input { backgr
 label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-picker input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* ---------- auth ---------- */
-.auth { height: 100%; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, 1fr); }
-.auth-scene { position: relative; overflow: hidden; background: var(--scene-sky); }
-.auth-scene svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* One scene behind the whole page: the forest fades into the form side instead of stopping at an edge. */
+.auth { position: relative; isolation: isolate; height: 100%; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(360px, 1fr); background: linear-gradient(to right, var(--scene-sky) 30%, var(--bg) 75%); }
+.auth-scene { --scene-w: min(52.38%, calc(100% - 360px)); position: absolute; inset: 0; z-index: -1; overflow: hidden; -webkit-mask-image: linear-gradient(to right, #000 calc(var(--scene-w) - 120px), transparent calc(var(--scene-w) + 160px)); mask-image: linear-gradient(to right, #000 calc(var(--scene-w) - 120px), transparent calc(var(--scene-w) + 160px)); }
+/* framed on the left column like before; the forest keeps drawing past its edges */
+.auth-scene svg { position: absolute; top: 0; left: 0; width: var(--scene-w); height: 100%; overflow: visible; }
 .auth-brand { position: absolute; top: 32px; left: 40px; display: flex; gap: 10px; align-items: center; font-family: var(--font-head); font-size: 26px; color: var(--scene-near); text-transform: lowercase; }
 .auth-tagline { position: absolute; top: 76px; left: 40px; right: 40px; max-width: 360px; margin: 0; color: var(--scene-near); font-size: 17px; }
 :root[data-theme="dark"] .auth-brand, :root[data-theme="dark"] .auth-tagline { color: var(--text-strong); }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .auth-brand, :root:not([data-theme="light"]) .auth-tagline { color: var(--text-strong); } }
-.auth-side { display: grid; place-items: center; padding: 24px 16px; background: var(--bg); }
+.auth-side { grid-column: 2; display: grid; place-items: center; padding: 24px 16px; }
 .auth-card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 14px; }
 .auth-card h1 { margin: 0; font-size: 32px; }
 .auth-card > p { margin: 0 0 8px; }
@@ -396,7 +398,10 @@ label.check input { width: auto; }
 
 /* ---------- phones: one screen at a time ---------- */
 @media (max-width: 760px) {
-  .auth { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; }
+  .auth { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; background: linear-gradient(to bottom, var(--scene-sky), var(--bg) 230px); }
+  .auth-scene { inset: 0 0 auto; height: 230px; -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); mask-image: linear-gradient(to bottom, #000 62%, transparent); }
+  .auth-scene svg { width: 100%; }
+  .auth-side { grid-column: 1; grid-row: 2; }
   .auth-tagline { display: none; }
   .auth-brand { top: 20px; left: 20px; }
 
