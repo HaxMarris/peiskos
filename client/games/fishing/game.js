@@ -424,6 +424,7 @@ function checkAreaHat(pid) {
   addRecent({ chest: true, hat: h.id, area: true });
   post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}.`, true);
 }
+const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000];
 function openChest() {
   S.stats.chests++;
   if (S.stats.chests === 1) S.hatsNew = true;
@@ -438,8 +439,8 @@ function openChest() {
   }
   const ws = left.map(h => [40, 30, 18, 9, 3][h.r - 1] * (1 + pi * (h.r - 1) * .4));
   const h = pick(left, ws);
-  // Gold comes with the hat: 100 at the Millpond, five times more at each water after it.
-  const coins = 100 * Math.pow(5, pi);
+  // Gold comes with the hat, more at each water (the last is for the next water to open).
+  const coins = CHEST_GOLD[Math.min(pi, CHEST_GOLD.length - 1)];
   S.hats.push(h.id); S.coins += coins; S.stats.earned += coins;
   addRecent({ chest: true, hat: h.id, coins });
   post(`Pulled up a treasure chest at ${pondOf(S.pond).name}. Inside: the ${h.name} (${RARITY[h.r - 1].toLowerCase()} hat) and ${fmt(coins)} coins.`, true);
