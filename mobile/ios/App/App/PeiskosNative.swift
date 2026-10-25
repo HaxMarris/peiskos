@@ -17,7 +17,7 @@ class PeiskosBridgeViewController: CAPBridgeViewController {
     // suspends the whole app a little after it leaves the screen.
     override func webViewConfiguration(for instanceConfiguration: InstanceConfiguration) -> WKWebViewConfiguration {
         let configuration = super.webViewConfiguration(for: instanceConfiguration)
-        if #available(iOS 16.4, *) { configuration.preferences.inactiveSchedulingPolicy = .none }
+        if #available(iOS 17.0, *) { configuration.preferences.inactiveSchedulingPolicy = .none }
         return configuration
     }
 }
