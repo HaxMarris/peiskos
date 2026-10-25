@@ -251,3 +251,44 @@ test('a bot token works on the live connection', async () => {
   assert.ok(first.type);
   ws.close();
 });
+
+test('Report to Peiskos: any message, DMs too, reaches whoever runs the server', async () => {
+  const eve = (await reg('eve2')).data;
+  const hearth = (await call('/api/servers', { body: { name: 'Safety' }, token: eve.token })).data;
+  await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: sam.token });
+  const dm = (await call('/api/dms', { body: { userId: sam.user.id }, token: eve.token })).data;
+  const sent = (await call(`/api/channels/${dm.channels[0].id}/messages`, { body: { content: 'something awful' }, token: eve.token })).data;
+  // Admins hear about it as it happens.
+  const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${max.token}`);
+  const events: any[] = [];
+  ws.on('message', (d) => events.push(JSON.parse(String(d))));
+  await new Promise((r) => ws.once('message', r));
+
+  const report = (body: object, token = sam.token) => call(`/api/messages/${sent.id}/report-to-admin`, { body, token });
+  assert.equal((await report({ category: 'nope' })).status, 400);
+  assert.equal((await report({ category: 'child' }, eve.token)).status, 400, "not your own message");
+  assert.equal((await report({ category: 'child' }, max.token)).status, 404, "only messages you can see");
+  assert.equal((await report({ category: 'child', reason: 'asked my age' })).status, 200);
+  assert.equal((await report({ category: 'child' })).status, 409);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(events.some((e) => e.type === 'admin_reports' && e.open === 1));
+  assert.equal((await call('/api/me', { token: max.token })).data.adminReports, 1);
+
+  assert.equal((await call('/api/admin/reports', { token: sam.token })).status, 403);
+  const [r] = (await call('/api/admin/reports', { token: max.token })).data;
+  assert.equal(r.label, 'Child safety');
+  assert.equal(r.content, 'something awful');
+  assert.equal(r.reason, 'asked my age');
+  assert.equal(r.reporter, 'sam');
+  assert.equal(r.authorUsername, 'eve2');
+  assert.match(r.place, /^Direct messages between /);
+
+  assert.equal((await call(`/api/admin/reports/${r.id}/resolve`, { body: { deleteMessage: true }, token: sam.token })).status, 403);
+  assert.equal((await call(`/api/admin/reports/${r.id}/resolve`, { body: { deleteMessage: true }, token: max.token })).status, 200);
+  const after = (await call('/api/admin/reports', { token: max.token })).data[0];
+  assert.equal(after.outcome, 'deleted');
+  assert.equal(after.content, 'something awful', 'the text is kept with the report');
+  assert.deepEqual((await call(`/api/channels/${dm.channels[0].id}/messages`, { token: sam.token })).data, []);
+  assert.equal((await call('/api/me', { token: max.token })).data.adminReports, 0);
+  ws.close();
+});

@@ -101,7 +101,7 @@ export function privacyPage(o: LegalOptions) {
       <li><b>Games:</b> your play chips, items and progress in the games at the fire.</li>
       <li><b>Notifications:</b> if you turn them on, the address your browser or phone gives the server to deliver them.</li>
       <li><b>Crash reports:</b> when the app hits an error, the error and where in the app it happened, which app it was and its browser or system version, and your account, so it can be fixed. Only the latest 200 are kept.</li>
-      <li><b>Safety records:</b> reports you send or that are made about you, including a copy of the reported message, bans, and a log of moderator actions in each hearth. When a moderator deletes someone's message, the start of it is kept in that log.</li>
+      <li><b>Safety records:</b> reports you send or that are made about you, to a hearth's moderators or to ${runBy}, including a copy of the reported message, bans, and a log of moderator actions in each hearth. When a moderator deletes someone's message, the start of it is kept in that log.</li>
     </ul>
 
     <h2>Being online</h2>
@@ -177,7 +177,7 @@ export function termsPage(o: LegalOptions) {
 
     <h2>Keeping it safe</h2>
     <ul>
-      <li>You can report a message, block a person, or leave a hearth at any time. Reports go to that hearth's moderators.</li>
+      <li>You can report a message, block a person, or leave a hearth at any time. Report to moderators goes to that hearth's moderators; Report to Peiskos, on any message including direct messages, goes to ${runBy}.</li>
       <li>Hosts and moderators can remove messages and people from their hearths. ${runBy} can remove anything, or suspend or delete any account, that breaks these terms, usually within 24 hours of a report.</li>
       <li>To report something to ${runBy} directly, contact ${contactHtml(o.contact)}.</li>
     </ul>
@@ -217,8 +217,8 @@ export function childSafetyPage(o: LegalOptions) {
 
     <h2>How to report it</h2>
     <ul>
-      <li><b>In the app:</b> open the menu on a message and choose Report. The hearth's moderators see it right away.</li>
-      <li><b>Directly to ${runBy}:</b> contact ${contactHtml(o.contact)}. Use this for anything in a direct message or a profile, anything the hearth's own moderators might be part of, or anything you'd rather not report in the app.</li>
+      <li><b>In the app:</b> open the menu on any message, in a hearth or a direct message, choose Report to Peiskos, and pick Child safety. It goes straight to ${runBy}, who is emailed about it, and the person you report isn't told who reported them. In a hearth, Report to moderators also tells that hearth's moderators.</li>
+      <li><b>Directly to ${runBy}:</b> contact ${contactHtml(o.contact)}. Use this for anything that isn't a message, like a profile or something said in voice, or if you'd rather not report in the app.</li>
       <li><b>To the authorities:</b> if a child is in immediate danger, call your local emergency number. You can also report to the <a href="https://report.cybertip.org/">NCMEC CyberTipline</a> (United States) or your country's hotline listed by <a href="https://www.inhope.org/EN/articles/where-can-i-report">INHOPE</a>.</li>
     </ul>
 

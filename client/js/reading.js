@@ -431,6 +431,7 @@ function messageMenuItems(m) {
     mine && m.embeds?.length && { label: 'Remove link previews', run: () => api(`/api/messages/${m.id}/embeds`, { method: 'POST' }).catch(alertError) },
     mine && m.poll && !m.poll.closed && { label: 'End poll now', run: () => api(`/api/messages/${m.id}/poll/end`, { method: 'POST' }).catch(alertError) },
     s && !isDm(s) && !mine && { label: 'Report to moderators', run: () => openReport(m) },
+    !mine && { label: 'Report to Peiskos', run: () => openSafetyReport(m) },
     s && !isDm(s) && can(s, 'messages') && { label: 'Delete from here down', danger: true, run: () => bulkDeleteFrom(m) },
     (mine || can(s, 'messages')) && { label: 'Delete', danger: true, run: () => confirmDelete(m) },
   ];
@@ -623,6 +624,33 @@ function openReport(m) {
       await api(`/api/messages/${m.id}/report`, { method: 'POST', body: { reason: $('#report-reason').value.trim() } });
       closeModal();
       toast('Reported to the moderators.');
+    } catch (err) { alertError(err); }
+  };
+}
+
+// Report to Peiskos: any message, DMs too, straight to whoever runs the server.
+const SAFETY_REASONS = [
+  ['child', 'Child safety', 'A child is at risk, or the message sexualizes or exploits a minor'],
+  ['sexual', 'Sexual content', 'Explicit content sent to someone who didn\'t want it, or shared without consent'],
+  ['harassment', 'Harassment or threats', ''],
+  ['selfharm', 'Self-harm', 'Someone may hurt themselves'],
+  ['spam', 'Spam or scam', ''],
+  ['other', 'Something else', ''],
+];
+function openSafetyReport(m) {
+  modal(`<h2>Report to Peiskos</h2>
+    <p class="muted small">This goes to whoever runs Peiskos, not to this conversation or the hearth's moderators. They'll see this message, who wrote it, and what you add. The person you report isn't told who reported them.</p>
+    <div class="report-reasons">${SAFETY_REASONS.map(([id, label, hint], i) => `<label class="check"><input type="radio" name="safety-reason" value="${id}" /> <span><b>${label}</b>${hint ? `<br><span class="muted small">${hint}</span>` : ''}</span></label>`).join('')}</div>
+    <label>Anything else they should know (optional)<textarea id="safety-details" maxlength="500" rows="3"></textarea></label>
+    <p class="muted small">If someone is in danger right now, call your local emergency number.</p>
+    <div class="modal-row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" id="safety-send">Report</button></div>`);
+  $('#safety-send').onclick = async () => {
+    const category = document.querySelector('input[name="safety-reason"]:checked')?.value;
+    if (!category) return toast('Pick what the report is about.');
+    try {
+      await api(`/api/messages/${m.id}/report-to-admin`, { method: 'POST', body: { category, reason: $('#safety-details').value.trim() } });
+      closeModal();
+      toast('Reported to Peiskos.');
     } catch (err) { alertError(err); }
   };
 }

@@ -346,6 +346,9 @@ ul { list-style: none; margin: 0; padding: 0; }
 @media (hover: none) { .room-gear { opacity: 1 !important; } }
 label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 label.check input { width: auto; }
+.report-reasons { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
+.report-reasons label.check { align-items: flex-start; font-weight: 400; }
+.report-reasons label.check input { margin-top: 3px; }
 .access-list { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; padding: 4px 2px; }
 .modal-row .spacer { flex: 1; }
 .ban-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; font-weight: 600; }

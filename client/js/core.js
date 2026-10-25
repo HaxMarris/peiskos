@@ -816,6 +816,10 @@ function handleEvent(ev) {
       if (state.voice) leaveVoice();
       toast(`${ev.by} took you out of the fire.`);
       break;
+    case 'admin_reports':
+      if (state.me) state.me.adminReports = ev.open;
+      syncAdminButton();
+      break;
     case 'reports': {
       const s = state.servers.get(ev.serverId);
       if (s) s.openReports = ev.open;
