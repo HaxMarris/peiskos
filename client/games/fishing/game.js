@@ -875,7 +875,8 @@ function walkTo(id) {
   updateCastBtn();
 }
 function walkPos(now) {
-  const w = G.walk, k = Math.min(1, (now - w.t0) / w.dur), seg = k * (w.pts.length - 1), i = Math.min(w.pts.length - 2, Math.floor(seg)), f = seg - i;
+  // A frame's timestamp can be from just before the tap that started the walk, so never go below 0.
+  const w = G.walk, k = Math.max(0, Math.min(1, (now - w.t0) / w.dur)), seg = k * (w.pts.length - 1), i = Math.min(w.pts.length - 2, Math.floor(seg)), f = seg - i;
   const p = w.pts[i], q = w.pts[i + 1];
   return { x: p.x + (q.x - p.x) * f, y: p.y + (q.y - p.y) * f, done: k >= 1, dir: q.x >= p.x ? 1 : -1 };
 }
@@ -1117,10 +1118,15 @@ function onDock(m) {
 }
 let lastIdleTick = 0;
 function frame(now) {
-  if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
-  dockTick(now);
-  if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
+  // Ask for the next frame first, so one bad frame can't stop the game for good.
   requestAnimationFrame(frame);
+  try {
+    if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
+    dockTick(now);
+    if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle') renderPane(); save(); } else renderNetsLight(); }
+  } catch (err) {
+    console.error('Fireside Angler frame:', err);
+  }
 }
 
 
