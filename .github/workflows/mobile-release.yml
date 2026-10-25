@@ -3,8 +3,8 @@
 # - On every pull request that touches the apps or the web client, both are built to check
 #   they still build (the Android test build can be downloaded from the run's page).
 # - "Start release" (release.yml) runs it for a draft release, and so does publishing a release
-#   on GitHub by hand (tag e.g. v0.7.0): the Android app is attached to the release, signed with
-#   Peiskos's own key, and the iPhone app goes to TestFlight and is sent for Apple's review. Each
+#   on GitHub by hand (tag e.g. v0.7.0): the Android app (.apk to download, .aab for the Play
+#   Store) is attached to the release, signed with Peiskos's own key, and the iPhone app goes to TestFlight and is sent for Apple's review. Each
 #   only happens once its secrets are set; see mobile/README.md.
 name: Mobile release
 
@@ -107,8 +107,10 @@ jobs:
             echo "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/peiskos.keystore"
             export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/peiskos.keystore"
             [ -n "$ANDROID_KEY_PASSWORD" ] || unset ANDROID_KEY_PASSWORD
-            ./gradlew --no-daemon assembleRelease
+            # The .apk is for the download on peiskos.app; the Play Store only takes an .aab bundle.
+            ./gradlew --no-daemon assembleRelease bundleRelease
             cp app/build/outputs/apk/release/app-release.apk "../dist/Peiskos-$APP_VERSION.apk"
+            cp app/build/outputs/bundle/release/app-release.aab "../dist/Peiskos-$APP_VERSION.aab"
           else
             # No signing key yet: a test build, signed with a throwaway key. It installs, but the
             # next one won't update it, so it isn't attached to releases.
@@ -118,13 +120,15 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: peiskos-android
-          path: mobile/dist/*.apk
+          path: |
+            mobile/dist/*.apk
+            mobile/dist/*.aab
           if-no-files-found: error
       - name: Attach to the release
         if: env.RELEASE_TAG != '' && hashFiles('mobile/dist/*-test.apk') == ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$RELEASE_TAG" mobile/dist/*.apk --clobber --repo "$GITHUB_REPOSITORY"
+        run: gh release upload "$RELEASE_TAG" mobile/dist/*.apk mobile/dist/*.aab --clobber --repo "$GITHUB_REPOSITORY"
 
   ios:
     name: iPhone app

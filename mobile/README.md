@@ -32,7 +32,8 @@ The `Mobile release` workflow (`.github/workflows/mobile-release.yml`) runs:
 - **On every pull request** that changes `mobile/` or `client/`: it builds both apps to check
   they still build. The Android test build can be downloaded from the run's page under *Artifacts*.
 - **For each release** (*Start release* in the Actions tab, see "Releasing a new version" in the
-  main README): the Android app is attached to the release as `Peiskos-1.2.3.apk`, and the iPhone
+  main README): the Android app is attached to the release as `Peiskos-1.2.3.apk` (plus `Peiskos-1.2.3.aab`
+  for the Play Store), and the iPhone
   app goes to TestFlight and is sent for Apple's review; the release is published once Apple
   approves. Each step only happens once its secrets below are set; until then the release just
   gets the desktop apps.
@@ -67,6 +68,11 @@ kept safe for good. Lose it and everyone has to uninstall and reinstall.
 The next release then has `Peiskos-x.y.z.apk` attached. To install it, friends open it on their
 phone and allow their browser to install apps when Android asks. Updates install the same way, over
 the old version, keeping them logged in.
+
+It also has `Peiskos-x.y.z.aab`, the same app packed the way the Play Store wants it. To put a
+version on Play, download that file from the release and upload it in Play Console (*Test and
+release*, pick the track, *Create new release*). Both files are signed with the same key, so the
+Play version and the download are the same app to Android.
 
 ### Android: alerts while the app is closed (Firebase, free)
 
