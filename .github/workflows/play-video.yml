@@ -57,10 +57,10 @@ jobs:
       - name: Sound server
         run: |
           sudo apt-get install -y -qq pulseaudio > /dev/null
-          pulseaudio -D --exit-idle-time=-1
-          pactl load-module module-null-sink sink_name=silence
-          pactl set-default-source silence.monitor
-          pactl info | grep -i default
+          pulseaudio -D --exit-idle-time=-1 -n --load="module-native-protocol-unix socket=/tmp/pulse.sock auth-anonymous=1" --load="module-null-sink sink_name=silence"
+          sleep 2
+          PULSE_SERVER=unix:/tmp/pulse.sock pactl set-default-source silence.monitor
+          PULSE_SERVER=unix:/tmp/pulse.sock pactl info
 
       - name: Enable KVM
         run: |
@@ -69,6 +69,8 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Record
+        env:
+          PULSE_SERVER: unix:/tmp/pulse.sock
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 34

@@ -74,16 +74,17 @@ const shot = (name) => {
 };
 
 const [device] = await _android.devices();
-const webview = await device.webView({ pkg: 'app.peiskos' }, { timeout: 60000 });
-const page = await webview.page();
-page.on('console', (m) => m.type() !== 'debug' && log('app console:', m.type(), m.text()));
+const appPage = async () => (await device.webView({ pkg: 'app.peiskos' }, { timeout: 60000 })).page();
+let page = await appPage();
 await page.evaluate((t) => {
   localStorage.setItem('serverUrl', 'http://localhost:3000');
   localStorage.setItem('token', t);
   localStorage.setItem('theme', 'light');
+  setTimeout(() => location.reload(), 100);
 }, u.maya.token);
-await page.reload();
-await sleep(6000);
+await sleep(7000);
+page = await appPage();
+page.on('console', (m) => ['error', 'warning'].includes(m.type()) && log('app console:', m.type(), m.text()));
 shot('1-app');
 
 const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', '8000000', '/sdcard/demo.mp4'], { stdio: 'inherit' });
