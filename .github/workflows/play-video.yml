@@ -55,12 +55,16 @@ jobs:
       # The emulator's microphone reads from the machine's sound system, and the emulator quits when
       # there isn't one, so give it a silent one.
       - name: Sound server
+        timeout-minutes: 5
         run: |
           sudo apt-get install -y -qq pulseaudio > /dev/null
-          pulseaudio -D --exit-idle-time=-1 -n --load="module-native-protocol-unix socket=/tmp/pulse.sock auth-anonymous=1" --load="module-null-sink sink_name=silence"
-          sleep 2
-          PULSE_SERVER=unix:/tmp/pulse.sock pactl set-default-source silence.monitor
-          PULSE_SERVER=unix:/tmp/pulse.sock pactl info
+          nohup pulseaudio --daemonize=no --exit-idle-time=-1 -n \
+            --load="module-native-protocol-unix socket=/tmp/pulse.sock auth-anonymous=1" \
+            --load="module-null-sink sink_name=silence" > $RUNNER_TEMP/pulse.log 2>&1 &
+          for i in $(seq 20); do [ -S /tmp/pulse.sock ] && break; sleep 1; done
+          export PULSE_SERVER=unix:/tmp/pulse.sock
+          timeout 10 pactl set-default-source silence.monitor || cat $RUNNER_TEMP/pulse.log
+          timeout 10 pactl info || cat $RUNNER_TEMP/pulse.log
 
       - name: Enable KVM
         run: |
