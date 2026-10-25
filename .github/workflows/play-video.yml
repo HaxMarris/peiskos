@@ -73,6 +73,7 @@ jobs:
           sudo udevadm trigger --name-match=kvm
 
       - name: Record
+        timeout-minutes: 15
         env:
           PULSE_SERVER: unix:/tmp/pulse.sock
         uses: reactivecircus/android-emulator-runner@v2

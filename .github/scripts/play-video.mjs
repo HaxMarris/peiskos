@@ -11,7 +11,14 @@ const apk = process.argv[2];
 mkdirSync(out, { recursive: true });
 const base = 'http://localhost:3000';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8' });
+const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8', timeout: 30000 });
+
+// If anything gets stuck, say where, with the phone's recent log, instead of waiting for the job to time out.
+setTimeout(() => {
+  log('STUCK, phone log:');
+  try { console.log(execFileSync('adb', ['logcat', '-d', '-t', '150'], { encoding: 'utf8', timeout: 20000 })); } catch (e) { log('no phone log:', e.message); }
+  process.exit(2);
+}, 6 * 60 * 1000).unref();
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
 
 const call = async (path, body, token, method) => {
@@ -55,6 +62,7 @@ for (const n of ['theo', 'ines']) {
 
 // The phone.
 for (const port of [3000, 7880, 7881]) adb('reverse', `tcp:${port}`, `tcp:${port}`);
+log('installing');
 adb('install', '-r', '-g', apk);
 for (const perm of ['RECORD_AUDIO', 'POST_NOTIFICATIONS']) {
   try { adb('shell', 'pm', 'grant', 'app.peiskos', `android.permission.${perm}`); } catch (e) { log('grant', perm, e.message); }
@@ -65,7 +73,7 @@ await sleep(6000);
 const shots = [];
 const shot = (name) => {
   try {
-    writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p']));
+    writeFileSync(`${out}/${name}.png`, execFileSync('adb', ['exec-out', 'screencap', '-p'], { timeout: 30000 }));
     shots.push(name);
     log('screenshot', name);
   } catch (e) {
@@ -73,6 +81,7 @@ const shot = (name) => {
   }
 };
 
+log('connecting to the app');
 const [device] = await _android.devices();
 const appPage = async () => (await device.webView({ pkg: 'app.peiskos' }, { timeout: 60000 })).page();
 let page = await appPage();
@@ -87,11 +96,14 @@ page = await appPage();
 page.on('console', (m) => ['error', 'warning'].includes(m.type()) && log('app console:', m.type(), m.text()));
 shot('1-app');
 
+log('recording');
 const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', '8000000', '/sdcard/demo.mp4'], { stdio: 'inherit' });
 await sleep(2500);
 
 try {
+  log('joining');
   await page.locator('li.fire-card').first().click({ timeout: 20000 });
+  log('joined');
   await sleep(6000);
   shot('2-fire');
 
