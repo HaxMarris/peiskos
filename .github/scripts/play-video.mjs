@@ -1,0 +1,143 @@
+// Records the video Google Play asks for about the Android app's foreground service: joining a voice
+// room, the call carrying on from the home screen and another app, and Mute/Leave in the notification.
+// Runs in the "Play video" workflow against a demo server and voice server on the same machine, with
+// two friends already at the fire from a desktop browser.
+import { _android, chromium } from 'playwright';
+import { execFileSync, spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+
+const out = process.env.OUT_DIR ?? 'video';
+const apk = process.argv[2];
+mkdirSync(out, { recursive: true });
+const base = 'http://localhost:3000';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const adb = (...args) => execFileSync('adb', args, { encoding: 'utf8' });
+const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+
+const call = async (path, body, token, method) => {
+  const r = await fetch(base + path, {
+    method: method ?? (body ? 'POST' : 'GET'),
+    headers: { 'content-type': 'application/json', ...(token ? { authorization: 'Bearer ' + token } : {}) },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await r.json();
+  if (!r.ok) throw new Error(path + ' ' + JSON.stringify(j));
+  return j;
+};
+
+// A small demo hearth.
+const people = [['maya', 'Maya'], ['theo', 'Theo'], ['ines', 'Inês'], ['jonas', 'Jonas']];
+const u = {};
+for (const [n, d] of people) {
+  u[n] = await call('/api/register', { username: n, password: 'demo-pass-123', email: `${n}@example.com` });
+  await call('/api/me', { displayName: d }, u[n].token, 'PATCH');
+}
+const s = await call('/api/servers', { name: 'The Cabin' }, u.maya.token);
+for (const n of ['theo', 'ines', 'jonas']) await call('/api/join', { inviteCode: s.inviteCode }, u[n].token);
+await call(`/api/servers/${s.id}/channels`, { name: 'Campfire', kind: 'voice' }, u.maya.token);
+const general = s.channels.find((c) => c.kind === 'text').id;
+await call(`/api/channels/${general}/messages`, { content: 'fire is lit, come hang out' }, u.theo.token);
+log('seeded');
+
+// Friends already at the fire, from a desktop browser with a fake microphone.
+const browser = await chromium.launch({ args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'] });
+for (const n of ['theo', 'ines']) {
+  const ctx = await browser.newContext({ permissions: ['microphone'] });
+  const p = await ctx.newPage();
+  p.on('console', (m) => m.type() === 'error' && log(n, 'console:', m.text()));
+  await p.goto(base);
+  await p.evaluate((t) => localStorage.setItem('token', t), u[n].token);
+  await p.goto(base);
+  await p.locator('li.fire-card').first().click({ timeout: 20000 });
+  await sleep(3000);
+  log(n, 'joined the fire');
+}
+
+// The phone.
+for (const port of [3000, 7880, 7881]) adb('reverse', `tcp:${port}`, `tcp:${port}`);
+adb('install', '-r', '-g', apk);
+for (const perm of ['RECORD_AUDIO', 'POST_NOTIFICATIONS']) {
+  try { adb('shell', 'pm', 'grant', 'app.peiskos', `android.permission.${perm}`); } catch (e) { log('grant', perm, e.message); }
+}
+adb('shell', 'am', 'start', '-n', 'app.peiskos/.MainActivity');
+await sleep(6000);
+
+const shots = [];
+const shot = (name) => {
+  const png = execFileSync('adb', ['exec-out', 'screencap', '-p']);
+  writeFileSync(`${out}/${name}.png`, png);
+  shots.push(name);
+  log('screenshot', name);
+};
+
+const [device] = await _android.devices();
+const webview = await device.webView({ pkg: 'app.peiskos' }, { timeout: 60000 });
+const page = await webview.page();
+page.on('console', (m) => m.type() !== 'debug' && log('app console:', m.type(), m.text()));
+await page.evaluate((t) => {
+  localStorage.setItem('serverUrl', 'http://localhost:3000');
+  localStorage.setItem('token', t);
+  localStorage.setItem('theme', 'light');
+}, u.maya.token);
+await page.reload();
+await sleep(6000);
+shot('1-app');
+
+const rec = spawn('adb', ['shell', 'screenrecord', '--bit-rate', '8000000', '/sdcard/demo.mp4'], { stdio: 'inherit' });
+await sleep(2500);
+
+try {
+  await page.locator('li.fire-card').first().click({ timeout: 20000 });
+  await sleep(6000);
+  shot('2-fire');
+
+  adb('shell', 'input', 'keyevent', 'KEYCODE_HOME');
+  await sleep(2500);
+  adb('shell', 'cmd', 'statusbar', 'expand-notifications');
+  await sleep(4000);
+  shot('3-notification');
+  adb('shell', 'cmd', 'statusbar', 'collapse');
+  await sleep(1000);
+
+  adb('shell', 'am', 'start', '-a', 'android.settings.SETTINGS');
+  await sleep(4000);
+  shot('4-other-app');
+  adb('shell', 'cmd', 'statusbar', 'expand-notifications');
+  await sleep(2500);
+
+  // Find a notification button by its label and tap it.
+  const tap = (label) => {
+    adb('shell', 'uiautomator', 'dump', '/sdcard/ui.xml');
+    const xml = adb('shell', 'cat', '/sdcard/ui.xml');
+    const re = new RegExp(`text="${label}"[^>]*?bounds="\\[(\\d+),(\\d+)\\]\\[(\\d+),(\\d+)\\]"`, 'i');
+    const m = xml.match(re);
+    if (!m) {
+      writeFileSync(`${out}/ui-${label}.xml`, xml);
+      throw new Error(`no "${label}" button on screen`);
+    }
+    const [x1, y1, x2, y2] = m.slice(1).map(Number);
+    adb('shell', 'input', 'tap', String((x1 + x2) >> 1), String((y1 + y2) >> 1));
+    log('tapped', label);
+  };
+  tap('Mute');
+  await sleep(3000);
+  shot('5-muted');
+  tap('Leave');
+  await sleep(2500);
+  shot('6-left');
+  adb('shell', 'cmd', 'statusbar', 'collapse');
+  adb('shell', 'am', 'start', '-n', 'app.peiskos/.MainActivity');
+  await sleep(4000);
+  shot('7-back');
+} catch (e) {
+  log('FAILED:', e.message);
+  shot('error');
+  process.exitCode = 1;
+} finally {
+  adb('shell', 'pkill', '-INT', 'screenrecord');
+  await new Promise((r) => rec.on('exit', r));
+  await sleep(2000);
+  adb('pull', '/sdcard/demo.mp4', `${out}/peiskos-voice-in-background.mp4`);
+  writeFileSync(`${out}/shots.txt`, shots.join('\n'));
+  await browser.close();
+}

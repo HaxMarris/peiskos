@@ -1,0 +1,88 @@
+# Records the screen video Google Play asks for about the Android app's foreground service (voice
+# carrying on in the background), on an Android emulator. The video is the run's "play-video" artifact.
+name: Play video
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [claude/mobile-apps-g2qpvc]
+    paths:
+      - .github/workflows/play-video.yml
+      - .github/scripts/play-video.mjs
+
+permissions:
+  contents: read
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # A test build that can talk to the demo server on this machine over plain http.
+      - name: Build the app
+        working-directory: mobile
+        run: |
+          npm ci
+          npm run copy-client
+          jq '.android.allowMixedContent = true' capacitor.config.json > c.json && mv c.json capacitor.config.json
+          npx cap sync android
+          sed -i 's|<application|<application android:usesCleartextTraffic="true"|' android/app/src/main/AndroidManifest.xml
+          cd android && ./gradlew --no-daemon assembleDebug
+
+      - name: Demo server
+        run: |
+          docker run -d --name livekit --network host livekit/livekit-server:v1.8.4 --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+          cd server && npm ci
+          PORT=3000 DB_FILE=$RUNNER_TEMP/demo.db LIVEKIT_API_KEY=devkey LIVEKIT_API_SECRET=secret LIVEKIT_URL=ws://localhost:7880 \
+            nohup node --no-warnings src/index.ts > $RUNNER_TEMP/server.log 2>&1 &
+          for i in $(seq 30); do curl -sf localhost:3000/api/config > /dev/null && break; sleep 1; done
+          curl -sf localhost:3000/api/config
+
+      - name: Playwright
+        run: |
+          npm install --no-save playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Record
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -no-boot-anim -camera-back none -camera-front none
+          disable-animations: false
+          script: OUT_DIR=video node .github/scripts/play-video.mjs mobile/android/app/build/outputs/apk/debug/app-debug.apk
+
+      # Small previews in the log, so the run can be checked without downloading anything.
+      - name: Previews
+        if: always()
+        run: |
+          for f in video/*.png; do
+            [ -f "$f" ] || continue
+            ffmpeg -loglevel error -y -i "$f" -vf scale=270:-1 -q:v 8 "${f%.png}.jpg"
+            echo "SHOT $(basename "$f") $(base64 -w0 "${f%.png}.jpg")"
+          done
+          tail -n 40 $RUNNER_TEMP/server.log
+          docker logs --tail 40 livekit
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: play-video
+          path: video/
