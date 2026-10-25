@@ -3,7 +3,7 @@
 # - On every pull request that touches the apps or the web client, both are built to check
 #   they still build (the Android test build can be downloaded from the run's page).
 # - "Start release" (release.yml) runs it for a draft release, and so does publishing a release
-#   on GitHub by hand (tag e.g. v0.7.0): the Android app (.apk to download, .aab for the Play
+#   on GitHub that Start release didn't make (tag e.g. v0.7.0): the Android app (.apk to download, .aab for the Play
 #   Store) is attached to the release, signed with Peiskos's own key, and the iPhone app goes to TestFlight and is sent for Apple's review. Each
 #   only happens once its secrets are set; see mobile/README.md.
 name: Mobile release
@@ -48,8 +48,30 @@ env:
   RELEASE_TAG: ${{ inputs.tag || (github.event_name == 'release' && github.ref_name) || '' }}
 
 jobs:
+  # Publishing a draft that "Start release" made (by hand, or by "Finish release") fires the
+  # release event too. Start release already built both apps for it, so don't build them again:
+  # that would put a second copy of the iPhone app in TestFlight even with the iPhone unticked.
+  check:
+    name: Already built?
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    outputs:
+      built: ${{ steps.assets.outputs.built }}
+    steps:
+      - id: assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apks="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '[.assets[].name | select(endswith(".apk"))] | length')"
+          if [ "$apks" -gt 0 ]; then built=true; else built=false; fi
+          echo "built=$built" >> "$GITHUB_OUTPUT"
+          [ "$built" = false ] || echo "$RELEASE_TAG already has its apps from Start release." >> "$GITHUB_STEP_SUMMARY"
+
   android:
     name: Android app
+    needs: check
+    # The check only runs for the release event; elsewhere it's skipped and this runs as usual.
+    if: ${{ !cancelled() && needs.check.result != 'failure' && needs.check.outputs.built != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -132,6 +154,8 @@ jobs:
 
   ios:
     name: iPhone app
+    needs: check
+    if: ${{ !cancelled() && needs.check.result != 'failure' && needs.check.outputs.built != 'true' }}
     # Apple only takes apps built with Xcode 26 (the iOS 26 SDK) or newer.
     runs-on: macos-26
     # Includes waiting for Apple to process the upload, which can take a while.
