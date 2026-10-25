@@ -4773,9 +4773,10 @@ export function createApp(opts: AppOptions): Server {
     res.setHeader('referrer-policy', 'no-referrer');
     // Behind HTTPS (Caddy says so), tell browsers never to use plain HTTP for this site.
     if (req.headers['x-forwarded-proto'] === 'https') res.setHeader('strict-transport-security', 'max-age=31536000');
-    // The desktop client loads its UI locally and talks to this server cross-origin.
+    // The desktop and phone apps load their UI locally and talk to this server cross-origin, so every
+    // header the client sends has to be listed here, or the apps' browsers refuse the request.
     res.setHeader('access-control-allow-origin', '*');
-    res.setHeader('access-control-allow-headers', 'authorization, content-type, x-filename, x-voice-seconds');
+    res.setHeader('access-control-allow-headers', 'authorization, content-type, x-filename, x-voice-seconds, x-width, x-height');
     res.setHeader('access-control-allow-methods', 'GET, POST, PATCH, DELETE, OPTIONS');
     if (req.method === 'OPTIONS') return res.writeHead(204).end();
 

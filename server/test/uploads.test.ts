@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readdirSync } from 'node:fs';
+import { mkdtempSync, readdirSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
@@ -88,4 +88,19 @@ test('uploading, sending and downloading files', async () => {
   await new Promise((r) => setTimeout(r, 50));
   assert.equal(readdirSync(uploadDir).length, 0);
   assert.equal((await fetch(base + pic.url)).status, 404);
+});
+
+test('the apps may send every header the client sets', async () => {
+  // The desktop and phone apps talk to the server cross-origin, so the browser asks first which
+  // headers are allowed; one missing from the list makes the whole request fail.
+  const clientDir = join(import.meta.dirname, '../../client/js');
+  const used = new Set<string>();
+  for (const f of readdirSync(clientDir)) {
+    const code = readFileSync(join(clientDir, f), 'utf8');
+    for (const [, name] of code.matchAll(/setRequestHeader\('([\w-]+)'/g)) used.add(name.toLowerCase());
+  }
+  assert.ok(used.has('x-width'));
+  const res = await fetch(`${base}/api/channels/1/attachments`, { method: 'OPTIONS' });
+  const allowed = String(res.headers.get('access-control-allow-headers')).split(',').map((h) => h.trim());
+  for (const name of used) assert.ok(allowed.includes(name), `${name} isn't allowed cross-origin`);
 });
