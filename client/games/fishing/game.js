@@ -414,8 +414,9 @@ function boardHtml() {
 }
 
 // ---------- treasure chests (hand casts only) ----------
-// 1% base; Lucky hooks can push it to 1.2% at most.
-const chestChance = () => Math.min(.012, .01 + .0001 * S.up.luck);
+// 0.25% base; Lucky hooks can push it to 0.3% at most. A hand cast with upgrades takes only a few
+// seconds, so this is still a chest every hour or so of steady fishing.
+const chestChance = () => Math.min(.003, .0025 + .000025 * S.up.luck);
 function checkAreaHat(pid) {
   const h = HATS.find(x => x.area === pid);
   if (!h || S.hats.includes(h.id) || pondStarsDone(pid) < pondOf(pid).fish.length) return;
