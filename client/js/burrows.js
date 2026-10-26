@@ -536,17 +536,35 @@ function renderMembers() {
         const name = document.createElement('span');
         name.className = 'member-name';
         name.textContent = nameOfPerson(m);
-        const color = roleColor(s, m.id);
-        if (color) { name.classList.add('named'); name.style.setProperty('--name', color); }
+        // The role shows on the line below (and behind the row), so the name stays plain.
         if (m.bot) name.insertAdjacentHTML('beforeend', ' <span class="bot-tag">BOT</span>');
         if (isBirthdayToday(m.birthday)) name.insertAdjacentHTML('beforeend', ' <span class="cake" title="Birthday today">🎂</span>');
         text.append(name);
+        // Under the name: a flame for the host, the role they show, then what they're up to.
+        const host = isHost(s, m.id);
+        const role = shownRole(s, m);
         const sub = presenceLine(m);
-        if (sub) {
+        if (host || role || sub) {
           const line = document.createElement('span');
           line.className = 'member-sub';
-          line.innerHTML = sub;
+          if (host) line.insertAdjacentHTML('beforeend', `<span class="host-flame" title="Created this hearth">${FLAME_ICON}</span>`);
+          if (role || host) {
+            const tag = document.createElement('span');
+            tag.className = 'member-role';
+            tag.textContent = role ? role.name : 'Host';
+            if (role) {
+              tag.classList.add('named');
+              tag.style.setProperty('--name', role.color);
+              tag.title = rolesOf(s, m).map((r) => r.name).join(', ');
+            }
+            line.append(tag);
+          }
+          if (sub) line.insertAdjacentHTML('beforeend', `${host || role ? '<span class="member-sep">·</span>' : ''}<span class="member-presence">${sub}</span>`);
           text.append(line);
+        }
+        if (role) {
+          li.classList.add('has-role');
+          li.style.setProperty('--role', role.color);
         }
         li.append(av, text);
         if (m.id !== state.me.id) {
@@ -555,26 +573,10 @@ function renderMembers() {
         } else li.title = 'Your profile and nickname';
         li.classList.add('can-dm');
         li.onclick = () => openPerson(s, m);
-        const top = rolesOf(s, m)[0];
-        if (isHost(s, m.id) || top) {
-          const badge = document.createElement('span');
-          badge.className = 'owner-badge';
-          if (isHost(s, m.id)) {
-            badge.title = 'Created this hearth';
-            badge.textContent = 'host';
-          } else {
-            badge.classList.add('role');
-            badge.style.setProperty('--role', top.color);
-            badge.title = rolesOf(s, m).map((r) => r.name).join(', ');
-            badge.textContent = top.name;
-          }
-          li.append(badge);
-        }
         if (canActOn(s, m)) {
           const more = iconButton('⋯', `Manage ${nameOfPerson(m)}`, (e) => { e.stopPropagation(); openMemberMenu(s, m); });
           more.classList.add('member-more');
-          // Before the badge, so badges stay lined up on the right.
-          li.insertBefore(more, li.querySelector('.owner-badge'));
+          li.append(more);
         }
         return li;
       }),

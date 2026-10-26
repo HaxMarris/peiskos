@@ -237,7 +237,7 @@ function openPerson(s, m) {
   const me = m.id === state.me.id;
   const inVoice = s && state.voice && s.channels.some((c) => c.id === state.voice.channelId && c.voiceUsers?.includes(m.id));
   const sharing = inVoice ? state.sharing.get(m.id) : null;
-  const top = s ? rolesOf(s, m)[0] : null;
+  const top = s ? shownRole(s, m) : null;
   const status = sharing?.screen ? 'Sharing their screen' : inVoice ? 'By the fire with you' : m.online ? STATUS_LABELS[statusOf(m)] : 'Out in the woods';
   modal(`<div class="profile-card" id="profile-card"></div>
     <div class="person-meta">
@@ -280,6 +280,7 @@ function openPerson(s, m) {
     if (me) {
       add('Edit your profile', () => openAccount('profile'));
       if (s && !isDm(s)) add(`Change nickname in ${s.name}`, () => openNickname(s));
+      if (s && !isDm(s) && rolesOf(s, m).length > 1) add('Role to show', () => openShownRole(s));
     } else if (!m.deleted) {
       const blocked = isBlocked(m.id);
       if (!blocked && !(s && isDm(s) && !s.group)) add('Send a message', () => openDm(m.id));
@@ -348,6 +349,36 @@ function openNickname(s) {
       renderMembers();
       renderMessages();
     } catch (err) { $('#nick-error').textContent = err.message; }
+  };
+}
+
+// Which of your roles shows under your name (and colors it). "Top role" follows your roles as they change.
+function openShownRole(s) {
+  const mine = s.members.find((x) => x.id === state.me.id);
+  const roles = rolesOf(s, mine);
+  const picked = roles.some((r) => r.id === mine?.shownRoleId) ? mine.shownRoleId : '';
+  const option = (value, label, color) => `<li><label class="check">
+    <input type="radio" name="shown-role" value="${value}" ${String(picked) === String(value) ? 'checked' : ''} />
+    ${color ? roleDot(color) : ''}<span>${label}</span></label></li>`;
+  modal(`<h2>Role to show in ${escapeHtml(s.name)}</h2>
+    <form id="shown-role-form">
+      <ul class="access-list">
+        ${option('', `Top role <span class="small muted">(${escapeHtml(roles[0]?.name ?? '')})</span>`)}
+        ${roles.map((r) => option(r.id, escapeHtml(r.name), r.color)).join('')}
+      </ul>
+      <div class="error" id="shown-role-error"></div>
+      <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">Save</button></div>
+    </form>`);
+  $('#shown-role-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const value = $('#shown-role-form input[name="shown-role"]:checked')?.value ?? '';
+    try {
+      const srv = await api(`/api/servers/${s.id}/shown-role`, { method: 'PATCH', body: { roleId: value ? Number(value) : null } });
+      state.servers.set(srv.id, srv);
+      closeModal();
+      renderMembers();
+      renderMessages();
+    } catch (err) { $('#shown-role-error').textContent = err.message; }
   };
 }
 
