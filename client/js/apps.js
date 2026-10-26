@@ -486,20 +486,23 @@ if (isPhoneApp) {
 }
 
 // Where a call's sound plays: the phone's earpiece, its speaker, headphones, the car. The Output
-// button (voice bar and fire) opens the phone's own list, and shows where it plays now.
+// button (voice bar, and the top of the fire, since the buttons along the bottom are full) opens
+// the phone's own list, and shows where it plays now.
 const OUTPUT_ICONS = {
   speaker: '<svg viewBox="0 0 24 24"><path d="M3 9v6h4l5 4V5L7 9H3Zm13.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4ZM14 3.2v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>',
   phone: '<svg viewBox="0 0 24 24"><path d="M7 2h10a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2Zm0 3v13h10V5H7Zm5 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z"/></svg>',
+  // Headphones and the like: not the headphones icon, which is Deafen's.
+  away: '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-6.4 15.4l1.4-1.4A7 7 0 1 1 17 17l1.4 1.4A9 9 0 0 0 12 3Zm0 4a5 5 0 0 0-3.5 8.6l1.4-1.4a3 3 0 1 1 4.2 0l1.4 1.4A5 5 0 0 0 12 7Zm0 6-5 8h10l-5-8Z"/></svg>',
   car: '<svg viewBox="0 0 24 24"><path d="M5 11l1.5-4.5A2 2 0 0 1 8.4 5h7.2a2 2 0 0 1 1.9 1.5L19 11a2 2 0 0 1 2 2v5h-2v2h-3v-2H8v2H5v-2H3v-5a2 2 0 0 1 2-2Zm2.1 0h9.8l-1-3H8.1l-1 3ZM6.5 16a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Zm11 0a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>',
 };
 function showOutput(kind) {
-  const icon = kind === 'headphones' || kind === 'bluetooth' ? HEADPHONES_ON : OUTPUT_ICONS[kind] ?? OUTPUT_ICONS.speaker;
+  const icon = ['headphones', 'bluetooth', 'airplay'].includes(kind) ? OUTPUT_ICONS.away : OUTPUT_ICONS[kind] ?? OUTPUT_ICONS.speaker;
   for (const id of ['#voice-output', '#fire-output']) $(id).innerHTML = icon;
 }
 const pickOutput = () => native('VoiceCall', 'pickOutput').catch((err) => console.warn('Output', err));
 if (isPhoneApp) {
   $('#voice-output').classList.remove('hidden');
-  $('#fire-output').parentElement.classList.remove('hidden');
+  $('#fire-output').classList.remove('hidden');
   for (const id of ['#voice-output', '#fire-output']) $(id).addEventListener('click', pickOutput);
   window.Capacitor.addListener('VoiceCall', 'output', ({ kind }) => showOutput(kind));
   showOutput('speaker');
