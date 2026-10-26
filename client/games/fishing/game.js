@@ -1108,6 +1108,16 @@ function pill(text, x, y, h, bg, fg, align) {
   ctx.fillStyle = bg; ctx.beginPath(); ctx.roundRect(left, y - h / 2, w, h, h / 2); ctx.fill();
   ctx.fillStyle = fg; ctx.textAlign = 'left'; ctx.fillText(text, left + 8, y);
 }
+// Rarity colors from the dark theme, so they read on the dark pill (Common to Legendary).
+const RARITY_ON_DARK = ['#d8cabd', '#8fbf7a', '#7fb6e0', '#c49ae8', '#ffc46b'];
+/** A friend's catch: the fish's name in its rarity color, then its size and stars. */
+function catchPill(f, rest, x, y, h) {
+  const col = RARITY_ON_DARK[f.r - 1], nw = ctx.measureText(f.name + ' ').width, w = nw + ctx.measureText(rest).width + 16, left = x - w / 2;
+  ctx.fillStyle = 'rgba(31,24,19,.88)'; ctx.beginPath(); ctx.roundRect(left, y - h / 2, w, h, h / 2); ctx.fill();
+  ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+  ctx.textAlign = 'left'; ctx.fillStyle = col; ctx.fillText(f.name + ' ', left + 8, y);
+  ctx.fillStyle = '#fffaf3'; ctx.fillText(rest, left + 8 + nw, y);
+}
 /** Names under each seat, what a friend just landed, and who's fishing somewhere else. */
 function drawDockTags(sc, feetY) {
   const here = friendsHere();
@@ -1120,7 +1130,7 @@ function drawDockTags(sc, feetY) {
     const fx = W * (.22 + i * .13) + 4 * sc;
     pill(o.name, fx, tagY, th, 'rgba(31,24,19,.72)', '#fffaf3');
     const c = o.caught, f = c && FISH[c.f];
-    if (f && performance.now() - o.caughtSeen < 5000) { ctx.font = `800 ${Math.round(Math.max(11, sc * 6))}px 'Nunito Sans', sans-serif`; pill(`${f.name} · ${cm(c.s)} ${'★'.repeat(c.q)}`, fx, feetY - 62 * sc, th, '#ffc46b', '#1f1813'); ctx.font = small; }
+    if (f && performance.now() - o.caughtSeen < 5000) { ctx.font = `800 ${Math.round(Math.max(11, sc * 6))}px 'Nunito Sans', sans-serif`; catchPill(f, `· ${cm(c.s)} ${'★'.repeat(c.q)}`, fx, feetY - 62 * sc - (i % 2) * (th + 4), th); ctx.font = small; }
   });
   // Everyone else, in the top corner.
   const away = [...dock.others.values()].filter(o => !here.includes(o)), lines = away.slice(0, 2).map(o => o.status.pond === S.pond ? `🎣 ${o.name} is here too` : `🎣 ${o.name} is at ${pondOf(o.status.pond)?.name || 'another water'}`);
