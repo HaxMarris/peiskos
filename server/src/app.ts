@@ -343,6 +343,8 @@ export function createApp(opts: AppOptions): Server {
         canPost: postProblem({ ...c, serverId, private: priv, parentId: null, announce, archivedAt }, viewerId) === null,
         notify: prefs.get(c.id) ?? null,
         ...(c.kind === 'voice' ? voiceSummary(c.id) : readInfo(c.id, serverId, viewerId)),
+        // Everyone who can get into a private room, so its member list shows just them.
+        ...(priv ? { audienceIds: channelAudience({ ...c, serverId, private: priv, parentId: null, announce, archivedAt }) } : {}),
         // Who has been let in (and who may post in an announcement room), for the people who can change it.
         ...(priv && manager
           ? {
