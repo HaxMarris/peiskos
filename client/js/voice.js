@@ -474,6 +474,31 @@ $('#video-layout').onclick = () => { sideBySide = !sideBySide; focusKey = null; 
 // Phones and tablets can't share their screen from a browser.
 if (!navigator.mediaDevices?.getDisplayMedia && !window.burrowDesktop) $('#fire-screen').parentElement.classList.add('hidden');
 
+// On a phone, Share, Sounds, Listen, Games and Settings wait in a tray: drag the buttons up (or
+// tap the handle) to open it, drag down or tap anywhere else to close it.
+function openTray(open) {
+  $('.fire-controls').classList.toggle('open', open);
+  $('#fire-tray-handle').setAttribute('aria-expanded', open);
+}
+{
+  const controls = $('.fire-controls');
+  let startY = null, dragged = false;
+  controls.addEventListener('pointerdown', (e) => { startY = e.clientY; dragged = false; });
+  controls.addEventListener('pointerup', (e) => {
+    if (startY === null) return;
+    const dy = e.clientY - startY;
+    startY = null;
+    if (Math.abs(dy) < 24) return;
+    dragged = true;
+    openTray(dy < 0);
+  });
+  controls.addEventListener('pointercancel', () => { startY = null; });
+  // A drag that started on a button isn't a tap on it.
+  controls.addEventListener('click', (e) => { if (dragged) { dragged = false; e.stopPropagation(); e.preventDefault(); } }, true);
+  $('#fire-tray-handle').onclick = () => openTray(!controls.classList.contains('open'));
+  document.addEventListener('pointerdown', (e) => { if (!controls.contains(e.target) && !e.target.closest('.volume-pop')) openTray(false); });
+}
+
 // ---------------------------------------------------------------- camera and screen sharing
 //
 // Video goes through the same voice room, so it's end-to-end encrypted too. It shows on the

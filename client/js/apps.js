@@ -502,7 +502,7 @@ function showOutput(kind) {
 const pickOutput = () => native('VoiceCall', 'pickOutput').catch((err) => console.warn('Output', err));
 if (isPhoneApp) {
   $('#voice-output').classList.remove('hidden');
-  $('#fire-output').classList.remove('hidden');
+  $('#fire-output').parentElement.classList.remove('hidden');
   for (const id of ['#voice-output', '#fire-output']) $(id).addEventListener('click', pickOutput);
   window.Capacitor.addListener('VoiceCall', 'output', ({ kind }) => showOutput(kind));
   showOutput('speaker');
