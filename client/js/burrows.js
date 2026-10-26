@@ -451,6 +451,7 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   renderChannels();
   renderServers();
   renderChatHeader();
+  renderMembers();
   $('#composer-input').disabled = !ch;
   $('#send-btn').disabled = !ch;
   if (changing) loadDraft();
@@ -504,10 +505,19 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   if (!isPhone()) $('#composer-input').focus();
 }
 
+// The people a room is for: in a private room (or a thread in one), only those who can get in.
+function roomMembers(s) {
+  const where = roomById(state.channelId);
+  const room = where?.thread ? roomById(where.c.parentId)?.c : where?.c;
+  if (!s || where?.s !== s || !room?.audienceIds) return s?.members ?? [];
+  const ids = new Set(room.audienceIds);
+  return s.members.filter((m) => ids.has(m.id));
+}
+
 function renderMembers() {
   const s = state.servers.get(state.serverId);
   // Highest roles first, then by name.
-  const members = [...(s?.members ?? [])].sort((a, b) => rankOf(s, a) - rankOf(s, b) || nameOfPerson(a).localeCompare(nameOfPerson(b)));
+  const members = [...roomMembers(s)].sort((a, b) => rankOf(s, a) - rankOf(s, b) || nameOfPerson(a).localeCompare(nameOfPerson(b)));
   const section = (title, list) => {
     if (!list.length) return [];
     const h = document.createElement('h3');
@@ -596,8 +606,9 @@ function renderChannelSub() {
   }
   if (s.group) return ($('#channel-sub').textContent = `Group · ${s.members.length} people, ${s.members.filter((m) => m.online).length} around`);
   if (isDm(s)) return ($('#channel-sub').textContent = `Direct message · ${partner(s).online ? 'around' : 'away'}`);
-  const here = s.members.filter((m) => m.online).length;
+  const people = roomMembers(s);
+  const here = people.filter((m) => m.online).length;
   const topic = where?.c.topic;
-  $('#channel-sub').textContent = topic || `${s.name} · ${here} of ${s.members.length} around`;
+  $('#channel-sub').textContent = topic || `${s.name} · ${here} of ${people.length} around`;
   $('#channel-sub').title = topic || '';
 }

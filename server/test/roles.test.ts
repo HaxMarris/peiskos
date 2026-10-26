@@ -68,6 +68,10 @@ test('moderators, private rooms, removing and banning', async () => {
   const sees = async (u: any) => (await myView(u)).channels.some((c: any) => c.id === secret.id);
   assert.deepEqual([await sees(host), await sees(mod), await sees(amy), await sees(bob)], [true, true, true, false]);
   assert.equal((await myView(amy)).channels.find((c: any) => c.id === secret.id).memberIds, undefined);
+  // Everyone in it can see who else can get in, for the room's member list.
+  const audience = (await myView(amy)).channels.find((c: any) => c.id === secret.id).audienceIds;
+  assert.deepEqual([...audience].sort(), [host.user.id, mod.user.id, amy.user.id].sort());
+  assert.equal((await myView(amy)).channels.find((c: any) => c.id === general).audienceIds, undefined);
   assert.equal((await call(`/api/channels/${secret.id}/messages`, { token: bob.token })).status, 404);
   assert.equal((await call(`/api/channels/${secret.id}/messages`, { body: { content: 'hi' }, token: bob.token })).status, 404);
 
