@@ -125,3 +125,27 @@ test('moderators, private rooms, removing and banning', async () => {
   bobSocket.ws.close();
   amySocket.ws.close();
 });
+
+test('picking the role you show in the member list', async () => {
+  const reg = async (username: string) => (await call('/api/register', { body: { username, password: 'password1' } })).data;
+  const host = await reg('shower');
+  const ann = await reg('annshow');
+  const burrow = (await call('/api/servers', { body: { name: 'Roles' }, token: host.token })).data;
+  await call('/api/join', { body: { inviteCode: burrow.inviteCode }, token: ann.token });
+  const sid = burrow.id;
+  const friends = (await call(`/api/servers/${sid}/roles`, { body: { name: 'Friends', color: '#336699', perms: [] }, token: host.token })).data;
+  const friendsId = friends.roles.find((r: any) => r.name === 'Friends').id;
+  const modId = burrow.roles.find((r: any) => r.name === 'Moderator').id;
+  const annOf = (s: any) => s.members.find((m: any) => m.id === ann.user.id);
+  const pick = (roleId: number | null) => call(`/api/servers/${sid}/shown-role`, { method: 'PATCH', body: { roleId }, token: ann.token });
+
+  // Only one of your own roles.
+  assert.equal((await pick(friendsId)).status, 400);
+  await call(`/api/servers/${sid}/members/${ann.user.id}/roles`, { body: { roleIds: [modId, friendsId] }, token: host.token });
+  const picked = await pick(friendsId);
+  assert.equal(picked.status, 200);
+  assert.equal(annOf(picked.data).shownRoleId, friendsId);
+  // Everyone sees it, and null goes back to the top role.
+  assert.equal(annOf((await call('/api/servers', { token: host.token })).data.find((s: any) => s.id === sid)).shownRoleId, friendsId);
+  assert.equal(annOf((await pick(null)).data).shownRoleId, null);
+});

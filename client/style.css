@@ -30,6 +30,7 @@
   --accent: #c4561c;        /* ember */
   --accent-text: #a8420f;   /* ember dark enough to read as text on oat */
   --name-l: min(l, 0.5);    /* role-coloured names, darkened until they read on light cards */
+  --banner-a: 26%; --banner-b: 12%; /* the role-coloured fade behind a member's row */
   --accent-hover: #a84715;
   --accent-ink: #ffffff;
   --accent-soft: rgba(196, 86, 28, .13);
@@ -67,6 +68,7 @@
   --accent: #f08a4b;        /* ember by night */
   --accent-text: #f08a4b;
   --name-l: max(l, 0.74);   /* role-coloured names, lightened until they read on dark cards */
+  --banner-a: 34%; --banner-b: 15%;
   --accent-hover: #f6a06a;
   --accent-ink: #1f1813;
   --accent-soft: rgba(240, 138, 75, .16);
@@ -88,7 +90,7 @@
   :root:not([data-theme="light"]) {
     --bg: #1c1612; --sidebar: #15100d; --topbar: #110d0a; --sidebar-ink: #eadfd3; --surface: #241c17; --surface-2: #2e241d;
     --hover: rgba(240, 138, 75, .07); --line: #33281f; --field-line: #86715f; --text: #eadfd3; --text-strong: #fbf4ec; --muted: #a1907f;
-    --accent: #f08a4b; --accent-text: #f08a4b; --name-l: max(l, 0.74); --accent-hover: #f6a06a; --accent-ink: #1f1813; --accent-soft: rgba(240, 138, 75, .16);
+    --accent: #f08a4b; --accent-text: #f08a4b; --name-l: max(l, 0.74); --banner-a: 34%; --banner-b: 15%; --accent-hover: #f6a06a; --accent-ink: #1f1813; --accent-soft: rgba(240, 138, 75, .16);
     --moss: #e39a5c; --berry: #e8695e; --cloudberry: #ffc46b; --mention-bg: rgba(240, 138, 75, .16);
     --code-bg: #15100d; --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 6px 20px rgba(0, 0, 0, .3); --online: #8fbf7a;
     --ember: #f08a4b; --ember-soft: rgba(240, 138, 75, .16); --glow: #ffc46b;
@@ -336,7 +338,13 @@ ul { list-style: none; margin: 0; padding: 0; }
 .member-pane li.online .avatar::after { background: var(--online); }
 .owner-badge { font-size: 11px; font-weight: 800; color: var(--accent-text); background: var(--accent-soft); padding: 1px 7px; border-radius: 999px; margin-left: auto; }
 .member-pane li .member-more { margin-left: auto; padding: 0 6px; opacity: 0; }
-.member-pane li .member-more + .owner-badge { margin-left: 4px; }
+/* The role someone shows: a fade in its color behind their row. */
+.member-pane li.has-role {
+  --banner: linear-gradient(90deg, color-mix(in srgb, var(--role) var(--banner-a), transparent), color-mix(in srgb, var(--role) var(--banner-b), transparent) 55%, transparent);
+  background: var(--banner); border-radius: 12px;
+}
+.member-pane li.has-role:hover { background: var(--banner) var(--hover); }
+.member-pane li + li { margin-top: 3px; }
 .member-pane li:hover .member-more, .member-more:focus-visible { opacity: 1; }
 .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lock-icon { width: 13px; height: 13px; fill: currentColor; opacity: .6; flex: none; }
@@ -1321,6 +1329,14 @@ button.seat-face { cursor: pointer; }
 .member-text { display: flex; flex-direction: column; min-width: 0; flex: 1 1 auto; }
 .member-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .member-sub { font-size: 12px; font-weight: 500; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.member-pane .member-sub { display: flex; align-items: center; gap: 5px; }
+.member-role { font-weight: 700; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.member-role.named::before { content: ""; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--name); margin-right: 5px; vertical-align: 1px; }
+.member-sep { flex: none; }
+.member-presence { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.host-flame { flex: none; display: inline-flex; color: var(--accent-text); }
+.host-flame svg { width: 13px; height: 13px; fill: currentColor; }
+.member-pane .member-sub .host-flame + .member-role:not(.named) { color: var(--accent-text); }
 /* The ⋯ button only takes room while it shows, so the line under a name gets the space. */
 .member-pane li:not(:hover):not(:focus-within) .member-more { width: 0; padding: 0; overflow: hidden; }
 .member-sub .status-emoji { margin-right: 4px; }

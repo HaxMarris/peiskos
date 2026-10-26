@@ -361,7 +361,7 @@ export function createApp(opts: AppOptions): Server {
       .all(serverId) as { user_id: number; role_id: number }[];
     const members = db
       .prepare(
-        `SELECT u.id, u.username, u.display_name AS displayName, m.nickname, u.accent, ${avatarUrl('u.avatar')} AS avatar,
+        `SELECT u.id, u.username, u.display_name AS displayName, m.nickname, m.shown_role_id AS shownRoleId, u.accent, ${avatarUrl('u.avatar')} AS avatar,
                 u.deleted_at IS NOT NULL AS deleted, m.voice_muted AS voiceMuted, m.timeout_until AS timeoutUntil, u.bot,
                 u.birthday, u.fire_item AS fireItem,
                 (SELECT pet FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS pet
@@ -4354,6 +4354,18 @@ export function createApp(opts: AppOptions): Server {
     const nick = typeof body.nickname === 'string' ? body.nickname.replace(/\s+/g, ' ').trim() : '';
     if (nick.length > 32) throw new HttpError(400, 'Keep your nickname to 32 characters');
     db.prepare('UPDATE members SET nickname = ? WHERE server_id = ? AND user_id = ?').run(nick || null, serverId, user.id);
+    sendServerUpdate(serverId);
+    return serverSummary(serverId, user.id);
+  });
+
+  // The role you show under your name in the member list. Null goes back to your top role.
+  route('PATCH', '/api/servers/:id/shown-role', ({ user, params, body }) => {
+    const serverId = Number(params[0]);
+    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    const roleId = body.roleId == null ? null : Number(body.roleId);
+    if (roleId !== null && !db.prepare('SELECT 1 FROM member_roles WHERE server_id = ? AND user_id = ? AND role_id = ?').get(serverId, user.id, roleId))
+      throw new HttpError(400, "You don't have that role");
+    db.prepare('UPDATE members SET shown_role_id = ? WHERE server_id = ? AND user_id = ?').run(roleId, serverId, user.id);
     sendServerUpdate(serverId);
     return serverSummary(serverId, user.id);
   });

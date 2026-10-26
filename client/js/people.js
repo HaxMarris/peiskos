@@ -24,7 +24,12 @@ const PERMS = [
   ['everyone', 'Mention @everyone and roles', 'Ping everyone in a room with @everyone or @here, or everyone with a role with @role'],
   ['audit', 'See the audit log', 'See who removed, banned, deleted or changed what, and when'],
 ];
-const ROLE_COLORS = ['#4f8a5b', '#2f7d74', '#3f6fa8', '#7a5aa6', '#b0527a', '#c2553d', '#c98a2b', '#8a8f87'];
+const ROLE_COLORS = [
+  '#c23b3b', '#c2553d', '#d9772b', '#c98a2b', '#b5a12a', '#6e9a3a', '#4f8a5b', '#2f7d74', '#2a8fa3',
+  '#3f6fa8', '#5262c4', '#7a5aa6', '#9a4fb0', '#d0457a', '#b0527a', '#8a6a4a', '#5c6670', '#8a8f87',
+];
+
+const FLAME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.6 3.2 5 5.4 5 10.6a5 5 0 0 1-10 0c0-2.4 1.3-4 2.5-5 .1 1.7.9 2.8 2.1 3.1-.4-3-.2-5.9.4-8.7Z"/></svg>';
 
 const isHost = (s, id) => s?.ownerId === id && !isDm(s);
 const rolesOf = (s, m) => (s?.roles ?? []).filter((r) => m?.roleIds?.includes(r.id));
@@ -32,8 +37,13 @@ const rolesOf = (s, m) => (s?.roles ?? []).filter((r) => m?.roleIds?.includes(r.
 const rankOf = (s, m) => (isHost(s, m?.id) ? 0 : Math.min(Infinity, ...rolesOf(s, m).map((r) => r.position)));
 const me = (s) => s?.members.find((m) => m.id === state.me.id);
 const can = (s, perm) => !!s && !isDm(s) && (isHost(s, state.me.id) || rolesOf(s, me(s)).some((r) => r.perms.includes(perm)));
-/** The color someone's name shows in: their highest role's. */
-const roleColor = (s, userId) => (isDm(s) ? null : rolesOf(s, s?.members.find((m) => m.id === userId))[0]?.color ?? null);
+/** The role someone shows under their name: the one they picked, else their highest. */
+const shownRole = (s, m) => {
+  const roles = rolesOf(s, m);
+  return roles.find((r) => r.id === m?.shownRoleId) ?? roles[0] ?? null;
+};
+/** The color someone's name shows in: their shown role's. */
+const roleColor = (s, userId) => (isDm(s) ? null : shownRole(s, s?.members.find((m) => m.id === userId))?.color ?? null);
 /** Whether the ⋯ menu has anything for this person. */
 const canActOn = (s, m) => {
   if (can(s, 'roles') && (m.id === state.me.id || rankOf(s, m) > rankOf(s, me(s)))) return true;
