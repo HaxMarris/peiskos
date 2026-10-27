@@ -357,6 +357,7 @@ $('#auth-form').addEventListener('submit', async (e) => {
     const result = await api(registering ? '/api/register' : '/api/login', { method: 'POST', body });
     $('#password').value = '';
     if (registering && signupLink) { signupLink = null; history.replaceState(null, '', location.pathname); }
+    if (registering) store.set('welcome', '1');
     await finishLogin(result);
   } catch (err) {
     $('#auth-error').textContent = err.message === 'Failed to fetch' ? "Couldn't reach that server." : err.message;
@@ -501,7 +502,8 @@ async function enterApp() {
   setAvatar($('#me-avatar'), state.me.username, state.me.avatar);
   setAvatar($('#tab-avatar'), state.me.username, state.me.avatar);
   showView('rooms');
-  if ('Notification' in window && Notification.permission === 'default') Notification.requestPermission();
+  // A new account asks during its welcome steps instead, with a word on why.
+  if ('Notification' in window && Notification.permission === 'default' && store.get('welcome') !== '1') Notification.requestPermission();
   const config = await api('/api/config').catch(() => ({}));
   state.voiceEnabled = !!config.voice;
   state.maxUploadBytes = config.maxUploadBytes || 0;
@@ -520,6 +522,7 @@ async function enterApp() {
   startPush();
   openLinkedMessage();
   afterEnter();
+  welcomeIfNew();
 }
 
 async function loadServers() {

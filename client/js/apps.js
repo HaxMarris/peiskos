@@ -883,3 +883,81 @@ function afterEnter() {
     showView('rooms');
   }
 }
+
+// ---------------------------------------------------------------- the first time in
+
+// Right after signing up: a picture and name, alerts, and a mic check. Every step can be skipped,
+// and it shows once, on the device the account was made on.
+function welcomeIfNew() {
+  if (store.get('welcome') !== '1') return;
+  store.set('welcome', null);
+  // An invite opened on the way in goes first; the welcome waits until it's dealt with.
+  const start = () => welcomeStep(0);
+  if ($('#modal').classList.contains('hidden')) return start();
+  const watch = new MutationObserver(() => {
+    if (!$('#modal').classList.contains('hidden')) return;
+    watch.disconnect();
+    setTimeout(start, 250);
+  });
+  watch.observe($('#modal'), { attributes: true, attributeFilter: ['class'] });
+}
+
+const WELCOME_STEPS = 3;
+function welcomeStep(n) {
+  stopMicTest();
+  if (n >= WELCOME_STEPS) return closeModal();
+  const bar = `<div class="welcome-steps" aria-label="Step ${n + 1} of ${WELCOME_STEPS}">${Array.from({ length: WELCOME_STEPS }, (_, i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+  const row = (next) => `<div class="modal-row"><button type="button" class="btn secondary" id="welcome-skip">Skip</button><button type="button" class="btn" id="welcome-next">${next}</button></div>`;
+  const me = state.me;
+  if (n === 0) {
+    modal(`${bar}<h2>How should friends see you?</h2>
+      <div class="welcome-me">
+        <button type="button" class="welcome-avatar" id="welcome-avatar" ${state.maxUploadBytes ? '' : 'disabled'} aria-label="Choose a picture"><span class="avatar xl" id="welcome-avatar-pic"></span>${state.maxUploadBytes ? '<span class="welcome-avatar-add">+</span>' : ''}</button>
+        <label>Display name<input id="welcome-name" maxlength="32" placeholder="${escapeHtml(me.username)}" value="${escapeHtml(me.displayName ?? '')}" /></label>
+      </div>
+      <input type="file" id="welcome-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <div class="error" id="welcome-error"></div>
+      ${row('Next')}`, 'welcome-modal');
+    setAvatar($('#welcome-avatar-pic'), me.username, me.avatar);
+    $('#welcome-avatar').onclick = () => $('#welcome-file').click();
+    $('#welcome-file').onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      $('#welcome-error').textContent = '';
+      $('#welcome-avatar').classList.add('uploading');
+      try {
+        applyUser(await uploadPicture('/api/me/avatar', await squarePicture(file)));
+        setAvatar($('#welcome-avatar-pic'), state.me.username, state.me.avatar);
+      } catch (err) { $('#welcome-error').textContent = err.message; }
+      finally { $('#welcome-avatar')?.classList.remove('uploading'); }
+    };
+    $('#welcome-next').onclick = async () => {
+      const name = $('#welcome-name').value.trim();
+      if (name !== (me.displayName ?? '')) {
+        try { applyUser({ ...state.me, ...(await api('/api/me', { method: 'PATCH', body: { displayName: name } })) }); }
+        catch (err) { return ($('#welcome-error').textContent = err.message); }
+      }
+      welcomeStep(1);
+    };
+  } else if (n === 1) {
+    modal(`${bar}<h2>Get alerts</h2>
+      <p class="muted">When someone messages you, mentions you or calls, even with Peiskos closed. Your browser asks next.</p>
+      <div class="error" id="welcome-error"></div>
+      ${row('Turn on alerts')}`, 'welcome-modal');
+    $('#welcome-next').onclick = async () => {
+      try { await turnOnPush(true); welcomeStep(2); }
+      catch (err) { $('#welcome-error').textContent = err.message; $('#welcome-next').textContent = 'Try again'; }
+    };
+  } else {
+    modal(`${bar}<h2>Check your microphone</h2>
+      <p class="muted">Say something. The bar moves when Peiskos hears you.</p>
+      <div class="vs-test-row"><div class="level-meter"><span id="vs-level"></span></div><button type="button" class="btn secondary" id="vs-test">Test</button></div>
+      <p class="small muted" id="vs-test-status"></p>
+      ${row('Done')}`, 'welcome-modal');
+    $('#vs-test').onclick = () => (micTest ? stopMicTest() : startMicTest());
+    if (navigator.mediaDevices?.getUserMedia) startMicTest();
+    onModalClose = () => stopMicTest();
+  }
+  $('#welcome-skip').onclick = () => welcomeStep(n + 1);
+}

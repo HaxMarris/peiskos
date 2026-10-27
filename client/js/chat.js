@@ -42,6 +42,19 @@ function renderMessages({ stick = false } = {}) {
   renderSeen();
 }
 
+// While a room's messages load: a few grey rows shaped like messages.
+function showMessagePlaceholders() {
+  const widths = [[22, 64], [18, 42], [26, 80, 36], [20, 55], [24, 70]];
+  messagesEl.setAttribute('aria-busy', 'true');
+  messagesEl.replaceChildren(...widths.map((lines) => {
+    const row = document.createElement('div');
+    row.className = 'skeleton-row';
+    row.setAttribute('aria-hidden', 'true');
+    row.innerHTML = `<span class="skeleton-avatar"></span><span class="skeleton-lines">${lines.map((w) => `<span style="width:${w}%"></span>`).join('')}</span>`;
+    return row;
+  }));
+}
+
 // The last author group's message column, so a new message can join it without a redraw.
 let tailBody = null;
 
@@ -605,7 +618,13 @@ function addServer(s) {
   selectServer(s.id);
 }
 
-$('#empty-add').onclick = () => openAddServer();
+$('#empty-add').onclick = () => openAddServer('create');
+$('#empty-join').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#empty-error').textContent = '';
+  try { addServer(await api('/api/join', { method: 'POST', body: { inviteCode: $('#empty-invite').value } })); }
+  catch (err) { $('#empty-error').textContent = err.message; }
+};
 
 $('#server-menu-btn').onclick = () => {
   const s = state.servers.get(state.serverId);

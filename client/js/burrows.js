@@ -79,7 +79,10 @@ function renderServers() {
   $('#tab-messages').classList.toggle('unread', !state.inDms && dmUnread);
 
   if ($('#switcher').dataset.open) renderSwitcher();
-  $('#empty-state').classList.toggle('hidden', state.serverOrder.length > 0 || state.inDms);
+  const empty = !state.serverOrder.length && !state.inDms;
+  $('#empty-state').classList.toggle('hidden', !empty);
+  // With no hearth yet, the room list and member list have nothing to show, so they step aside.
+  $('#app').classList.toggle('no-hearth', empty);
 }
 
 // The burrow's picture, or its initials on a forest color.
@@ -469,6 +472,8 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   if (target == null && !present && (ch.unread ?? 0) > 40) target = (ch.lastReadId ?? 0) + 1;
   const parentLoad = where.thread ? loadThreadParent(ch) : null;
   let msgs;
+  // A slow load shows message-shaped placeholders instead of the last room or nothing.
+  const placeholders = setTimeout(() => { if (state.channelId === id && !state.messages.length) showMessagePlaceholders(); }, 150);
   try {
     msgs = await api(`/api/channels/${id}/messages?limit=50${target != null ? `&around=${target}` : ''}`);
   } catch (err) {
@@ -478,6 +483,7 @@ async function selectChannel(id, { around = null, present = false } = {}) {
     if (!msgs && err instanceof TypeError) return renderMessages();
     if (!msgs) return alertError(err);
   }
+  finally { clearTimeout(placeholders); messagesEl.removeAttribute('aria-busy'); }
   if (parentLoad) await parentLoad.catch(() => {});
   if (state.channelId !== id) return;
   state.messages = msgs;

@@ -447,9 +447,15 @@
       </section>
       <div id="empty-state" class="empty-state hidden">
         <div class="empty-illustration"><span class="logo-mark big"></span></div>
-        <h2>Nothing here yet</h2>
-        <p class="muted">Light a new hearth for your friends, or join one with an invite code.</p>
-        <button id="empty-add" class="btn">Create or join a hearth</button>
+        <h2>Join your friends</h2>
+        <p class="muted">Paste the invite link someone sent you, or start a hearth of your own.</p>
+        <form id="empty-join" class="empty-join">
+          <input id="empty-invite" placeholder="Invite link or code" aria-label="Invite link or code" autocomplete="off" required />
+          <button type="submit" class="btn">Join</button>
+        </form>
+        <div class="error" id="empty-error"></div>
+        <div class="or">or</div>
+        <button id="empty-add" class="btn secondary">Start a hearth</button>
       </div>
     </main>
 
