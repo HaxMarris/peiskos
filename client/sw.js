@@ -19,8 +19,22 @@ self.addEventListener('fetch', (e) => {
   // Messages, files and the live connection always go to the server; the camera background's
   // big model isn't worth keeping.
   if (req.method !== 'GET' || req.headers.has('range') || /^\/(api|ws)\//.test(url.pathname) || url.pathname.startsWith('/vendor/mediapipe/')) return;
+  // A script or stylesheet named with its ?v= never changes, so the saved copy is as good as new.
+  if (url.searchParams.has('v') && /\.(js|css)$/.test(url.pathname)) return e.respondWith(savedFirst(req, url));
   if (req.mode === 'navigate' || /\.(js|css|png|svg|woff2?|webmanifest|json|wasm|ico|html)$/.test(url.pathname)) e.respondWith(networkFirst(req));
 });
+async function savedFirst(req, url) {
+  const cache = await caches.open(APP_CACHE);
+  const saved = await cache.match(req);
+  if (saved) return saved;
+  const res = await fetch(req);
+  if (res.ok && res.type === 'basic') {
+    // Older versions of the same file aren't needed any more.
+    for (const old of await cache.keys()) if (new URL(old.url).pathname === url.pathname && old.url !== req.url) cache.delete(old).catch(() => {});
+    cache.put(req, res.clone()).catch(() => {});
+  }
+  return res;
+}
 
 // The server's copy when it answers, the saved one when it doesn't.
 async function networkFirst(req) {

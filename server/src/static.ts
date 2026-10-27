@@ -27,12 +27,28 @@ function accepted(header: string | string[] | undefined) {
   return out;
 }
 
+/** A short name for a file's contents, for the ?v= on its address. */
+const versionOf = (entry: Entry) => entry.etag.slice(3, 13);
+
+async function compress(raw: Buffer) {
+  return Promise.all([
+    // Big files (the camera background's WebAssembly) at a quicker setting, so the first download doesn't wait long.
+    brotli(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: raw.length > 2_000_000 ? 9 : 11, [constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }),
+    gzipAsync(raw, { level: 9 }),
+  ]);
+}
+
 /**
  * Serves the web app's files from memory: each is read and compressed once (and again when it
  * changes on disk), and browsers that already have it get a 304 instead of the whole file.
+ *
+ * The page itself (index.html) names its scripts and stylesheets with a ?v= of their contents.
+ * An address with the current ?v= can't change, so browsers keep it for good and opening Peiskos
+ * again asks the server only for the page; an update gives the files new addresses.
  */
 export function staticFiles() {
   const cache = new Map<string, Promise<Entry>>();
+  const pages = new Map<string, Promise<Entry>>(); // index.html with versions, by the versions it names
 
   const load = async (file: string): Promise<Entry | null> => {
     const info = await stat(file).catch(() => null);
@@ -51,13 +67,7 @@ export function staticFiles() {
         raw,
       };
       const ext = file.slice(file.lastIndexOf('.'));
-      if (COMPRESSIBLE.has(ext) && raw.length > 1024) {
-        [entry.br, entry.gzip] = await Promise.all([
-          // Big files (the camera background's WebAssembly) at a quicker setting, so the first download doesn't wait long.
-          brotli(raw, { params: { [constants.BROTLI_PARAM_QUALITY]: raw.length > 2_000_000 ? 9 : 11, [constants.BROTLI_PARAM_SIZE_HINT]: raw.length } }),
-          gzipAsync(raw, { level: 9 }),
-        ]);
-      }
+      if (COMPRESSIBLE.has(ext) && raw.length > 1024) [entry.br, entry.gzip] = await compress(raw);
       return entry;
     })();
     cache.set(file, next);
@@ -65,13 +75,44 @@ export function staticFiles() {
     return next;
   };
 
-  /** Sends `file`, or returns false when there is no such file. */
-  return async (req: IncomingMessage, res: ServerResponse, file: string, type: string) => {
-    const entry = await load(file);
+  /** index.html with ?v= on each local script and stylesheet it loads. */
+  const versionedPage = async (file: string, page: Entry) => {
+    const dir = file.slice(0, file.lastIndexOf('/') + 1);
+    const html = page.raw.toString('utf8');
+    const refs = [...new Set([...html.matchAll(/(?:src|href)="((?:js\/|vendor\/)?[\w.-]+\.(?:js|css))"/g)].map((m) => m[1]))];
+    const versions = new Map<string, string>();
+    for (const ref of refs) {
+      const entry = await load(dir + ref);
+      if (entry) versions.set(ref, versionOf(entry));
+    }
+    const key = page.etag + [...versions.values()].join('');
+    let built = pages.get(key);
+    if (!built) {
+      built = (async () => {
+        const raw = Buffer.from(html.replace(/((?:src|href)=")((?:js\/|vendor\/)?[\w.-]+\.(?:js|css))"/g, (all, attr, ref) =>
+          versions.has(ref) ? `${attr}${ref}?v=${versions.get(ref)}"` : all));
+        const [br, gz] = await compress(raw);
+        return { mtime: page.mtime, size: page.size, etag: `W/"${createHash('sha1').update(raw).digest('base64url')}"`, raw, br, gzip: gz };
+      })();
+      pages.clear(); // only the newest is ever asked for
+      pages.set(key, built);
+    }
+    return built;
+  };
+
+  /**
+   * Sends `file`, or returns false when there is no such file. `version` is the ?v= the address
+   * asked for: when it's the file's current one, browsers may keep it for good.
+   */
+  return async (req: IncomingMessage, res: ServerResponse, file: string, type: string, version?: string | null) => {
+    let entry = await load(file);
     if (!entry) return false;
+    if (file.endsWith('/index.html')) entry = await versionedPage(file, entry);
+    const lasting = !!version && version === versionOf(entry);
     const headers: Record<string, string | number> = {
       'content-type': type,
-      'cache-control': 'no-cache', // always check, but a 304 costs almost nothing
+      // Otherwise always check, but a 304 costs almost nothing.
+      'cache-control': lasting ? 'public, max-age=31536000, immutable' : 'no-cache',
       etag: entry.etag,
       vary: 'accept-encoding',
     };

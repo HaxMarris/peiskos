@@ -4926,11 +4926,11 @@ export function createApp(opts: AppOptions): Server {
   // ---- HTTP plumbing ------------------------------------------------------
 
   const sendFile = staticFiles();
-  const serveStatic = async (req: IncomingMessage, res: ServerResponse, pathname: string) => {
+  const serveStatic = async (req: IncomingMessage, res: ServerResponse, pathname: string, version: string | null) => {
     const rel = normalize(pathname === '/' ? '/index.html' : pathname).replace(/^(\.\.[/\\])+/, '');
     const file = join(opts.publicDir, rel);
     if (!file.startsWith(opts.publicDir)) return send(res, 404, { error: 'Not found' });
-    if (await sendFile(req, res, file, MIME[extname(file)] ?? 'application/octet-stream')) return;
+    if (await sendFile(req, res, file, MIME[extname(file)] ?? 'application/octet-stream', version)) return;
     // Single-page app: unknown non-API paths get the shell.
     if (!(await sendFile(req, res, join(opts.publicDir, 'index.html'), MIME['.html']))) send(res, 404, { error: 'Not found' });
   };
@@ -4973,7 +4973,7 @@ export function createApp(opts: AppOptions): Server {
         const html = legal[1] === 'privacy' ? privacyPage(o) : legal[1] === 'terms' ? termsPage(o) : childSafetyPage(o);
         return res.writeHead(200, { 'content-type': MIME['.html'], 'cache-control': 'no-cache' }).end(req.method === 'HEAD' ? undefined : html);
       }
-      return serveStatic(req, res, url.pathname);
+      return serveStatic(req, res, url.pathname, url.searchParams.get('v'));
     }
 
     try {

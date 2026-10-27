@@ -326,6 +326,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .empty-state { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; padding: 16px; }
 .empty-state h2 { margin: 12px 0 0; font-size: 26px; }
 .empty-state p { margin: 0 0 12px; max-width: 340px; }
+.whats-new { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
 .welcome-steps { display: flex; gap: 6px; margin-right: 44px; }
 .welcome-steps i { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-2); }
 .welcome-steps i.on { background: var(--accent); }

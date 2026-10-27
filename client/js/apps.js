@@ -112,11 +112,13 @@ function showUpdateButton(update) {
   btn.classList.remove('hidden');
   btn.onclick = () => {
     modal(`<h2>Update Peiskos?</h2>
+      ${unseenNews.length ? `<h3>What's new</h3>${whatsNewList(unseenNews.slice(0, 8))}` : ''}
       <p class="muted">${update.install
         ? `Version ${escapeHtml(update.version)} is ready. Peiskos closes and opens again in a few seconds. If you're by a fire, you'll need to join it again.`
         : `Version ${escapeHtml(update.version)} is out. Download it and install it over this one.`}</p>
       <div class="modal-row"><span class="spacer"></span><button type="button" class="btn secondary" data-close>Not now</button><button type="button" class="btn" id="update-go">${update.install ? 'Restart and update' : 'Download'}</button></div>`);
     $('#update-go').onclick = () => { closeModal(); updates.install(); };
+    if (unseenNews.length) store.set('whatsNewSeen', String(newsTotal)); // shown here, so not again after the restart
   };
 }
 if (updates) {
@@ -892,12 +894,16 @@ function welcomeIfNew() {
   if (store.get('welcome') !== '1') return;
   store.set('welcome', null);
   // An invite opened on the way in goes first; the welcome waits until it's dealt with.
-  const start = () => welcomeStep(0);
-  if ($('#modal').classList.contains('hidden')) return start();
+  whenNoModal(() => welcomeStep(0));
+}
+
+/** Runs fn now if no modal is open, or once the open one closes. */
+function whenNoModal(fn) {
+  if ($('#modal').classList.contains('hidden')) return fn();
   const watch = new MutationObserver(() => {
     if (!$('#modal').classList.contains('hidden')) return;
     watch.disconnect();
-    setTimeout(start, 250);
+    setTimeout(() => whenNoModal(fn), 250);
   });
   watch.observe($('#modal'), { attributes: true, attributeFilter: ['class'] });
 }
@@ -960,4 +966,37 @@ function welcomeStep(n) {
     onModalClose = () => stopMicTest();
   }
   $('#welcome-skip').onclick = () => welcomeStep(n + 1);
+}
+
+// ---------------------------------------------------------------- what's new
+
+// whats-new.json says what changed, in words for friends, newest first; lines are only ever added.
+// It comes from the server, which updates first, so the desktop app's update button can say what
+// the new version brings. Each device remembers how many lines it has shown.
+async function whatsNewLines() {
+  try {
+    const r = await fetch(`${state.serverUrl.replace(/\/$/, '')}/whats-new.json`, { cache: 'no-cache' });
+    return r.ok ? ((await r.json()).entries ?? []).flatMap((e) => e.items) : [];
+  } catch { return []; }
+}
+const whatsNewList = (lines) => `<ul class="whats-new">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
+let unseenNews = [];
+let newsTotal = 0;
+
+/** After an update, the lines this device hasn't shown yet, once. A new account starts with none. */
+async function showWhatsNew(newAccount) {
+  const lines = await whatsNewLines();
+  if (!lines.length) return;
+  newsTotal = lines.length;
+  const seen = Number(store.get('whatsNewSeen'));
+  // A device that's never shown any (a new account, or before this existed) starts from now.
+  if (newAccount || !Number.isFinite(seen) || store.get('whatsNewSeen') == null) return store.set('whatsNewSeen', String(lines.length));
+  unseenNews = lines.slice(0, Math.max(0, lines.length - seen));
+  if (!unseenNews.length || updates?.get()) return; // with a desktop update waiting, its button says it
+  whenNoModal(() => {
+    modal(`<h2>What's new</h2>${whatsNewList(unseenNews.slice(0, 8))}
+      <div class="modal-row"><button type="button" class="btn" data-close>Got it</button></div>`, 'whats-new-modal');
+    store.set('whatsNewSeen', String(lines.length));
+    unseenNews = [];
+  });
 }

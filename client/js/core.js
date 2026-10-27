@@ -522,7 +522,9 @@ async function enterApp() {
   startPush();
   openLinkedMessage();
   afterEnter();
+  const newAccount = store.get('welcome') === '1';
   welcomeIfNew();
+  showWhatsNew(newAccount);
 }
 
 async function loadServers() {
