@@ -411,6 +411,11 @@ label.check input { width: auto; }
 .member-head .icon-btn { font-size: 22px; width: 40px; height: 40px; }
 
 /* ---------- phones: one screen at a time ---------- */
+.more-btn { display: none; }
+@media (max-width: 760px) {
+  .chat-header .more-btn { display: grid; }
+  .chat-header #pins-btn, .chat-header #notify-btn, .chat-header #thread-btn { display: none; }
+}
 @media (max-width: 760px) {
   .auth { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; background: linear-gradient(to bottom, var(--scene-sky), var(--bg) 230px); }
   .auth-scene { inset: 0 0 auto; height: 230px; -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); mask-image: linear-gradient(to bottom, #000 62%, transparent); }
@@ -1472,6 +1477,16 @@ button.seat-face { cursor: pointer; }
 .account-pane .profile-banner { margin: 0; border-radius: 14px 14px 0 0; }
 .profile-preview { border: 1px solid var(--line); border-radius: 15px; padding: 0 14px 14px; }
 .profile-preview .profile-banner { margin: 0 -14px; }
+.profile-preview .editable { position: relative; cursor: pointer; }
+.profile-preview .profile-banner.editable { border-radius: 14px 14px 0 0; }
+.profile-preview .profile-avatar.editable { overflow: visible; }
+.edit-badge { position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--text-strong); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); cursor: pointer; }
+.profile-avatar .edit-badge { right: -4px; bottom: -2px; width: 28px; height: 28px; }
+.edit-badge svg { width: 16px; height: 16px; fill: currentColor; }
+.editable:hover .edit-badge, .edit-badge:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.profile-preview.uploading { opacity: .6; pointer-events: none; }
+.picture-hint { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.picture-hint .link-btn { font-size: 13px; }
 .profile-avatar.avatar.xl { width: 84px; height: 84px; border-radius: 50%; margin-top: -42px; margin-left: 4px; box-shadow: 0 0 0 5px var(--surface); font-size: 32px; }
 .profile-names { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; min-width: 0; }
 .profile-names h2 { overflow: hidden; text-overflow: ellipsis; }
@@ -1601,15 +1616,15 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 /* ---- fun extras: seasons, fire decorations, marshmallows, birthdays, message of the day, year in review ---- */
 
 /* A little mark by the name for the time of year. */
-.season-mark { margin-left: 6px; font-size: 15px; }
-[data-season="winter"] .season-mark::after { content: '❄️'; }
-[data-season="spring"] .season-mark::after { content: '🌸'; }
-[data-season="summer"] .season-mark::after { content: '☀️'; }
-[data-season="autumn"] .season-mark::after { content: '🍂'; }
-[data-holiday="halloween"] .season-mark::after { content: '🎃'; }
-[data-holiday="yule"] .season-mark::after { content: '🎄'; }
-[data-holiday="newyear"] .season-mark::after { content: '🎆'; }
-[data-holiday="midsummer"] .season-mark::after { content: '🌼'; }
+.season-mark { display: none; width: 17px; height: 17px; margin-left: 6px; flex: none; background: var(--accent); -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
+[data-season="winter"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cline x1='12.0' y1='12.0' x2='21.5' y2='12.0' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='16.8' y2='20.2' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='7.3' y2='20.2' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='2.5' y2='12.0' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='7.2' y2='3.8' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='16.8' y2='3.8' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M16.9 9.9 L18.0 12.0 L16.9 14.1' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.3 15.2 L15.0 17.2 L12.6 17.3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M11.4 17.3 L9.0 17.2 L7.7 15.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M7.1 14.1 L6.0 12.0 L7.1 9.9' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M7.7 8.8 L9.0 6.8 L11.4 6.7' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M12.6 6.7 L15.0 6.8 L16.3 8.8' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+[data-season="spring"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.6' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Ccircle cx='12.0' cy='6.5' r='4.2'/%3E%3Ccircle cx='17.2' cy='10.3' r='4.2'/%3E%3Ccircle cx='15.2' cy='16.4' r='4.2'/%3E%3Ccircle cx='8.8' cy='16.4' r='4.2'/%3E%3Ccircle cx='6.8' cy='10.3' r='4.2'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/g%3E%3C/svg%3E"); }
+[data-season="summer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5'/%3E%3Cline x1='19.6' y1='12.0' x2='22.4' y2='12.0' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.4' y1='17.4' x2='19.4' y2='19.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='19.6' x2='12.0' y2='22.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.6' y1='17.4' x2='4.6' y2='19.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='4.4' y1='12.0' x2='1.6' y2='12.0' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.6' y1='6.6' x2='4.6' y2='4.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='4.4' x2='12.0' y2='1.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.4' y1='6.6' x2='19.4' y2='4.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-season="autumn"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 19C4 11 9 5 19 4c1 9-4 15-12 15.5z'/%3E%3Cpath d='M4 21 12 12' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-holiday="halloween"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cellipse cx='8.5' cy='14' rx='5.5' ry='7'/%3E%3Cellipse cx='15.5' cy='14' rx='5.5' ry='7'/%3E%3Cellipse cx='12' cy='14' rx='4.5' ry='7.3'/%3E%3Cpath d='M11 7.5c0-2 .5-3.5 2.5-4.8' stroke='%23000' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-holiday="yule"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 18 10h-3l5 7H4l5-7H6z'/%3E%3Crect x='10.5' y='17' width='3' height='4.5' rx='1'/%3E%3C/svg%3E"); }
+[data-holiday="newyear"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cline x1='15.5' y1='12.0' x2='22.0' y2='12.0' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='14.8' y1='14.1' x2='20.1' y2='17.9' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='13.1' y1='15.3' x2='15.1' y2='21.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='10.9' y1='15.3' x2='8.9' y2='21.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='9.2' y1='14.1' x2='3.9' y2='17.9' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='8.5' y1='12.0' x2='2.0' y2='12.0' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='9.2' y1='9.9' x2='3.9' y2='6.1' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='10.9' y1='8.7' x2='8.9' y2='2.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='13.1' y1='8.7' x2='15.1' y2='2.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='14.8' y1='9.9' x2='20.1' y2='6.1' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
+[data-holiday="midsummer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.8' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2845 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2890 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28135 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28180 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28225 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28270 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28315 12 12%29'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
 
 /* Whatever is falling or floating around the fire. */
 .season-layer { position: absolute; inset: -4% -2%; overflow: hidden; pointer-events: none; border-radius: 40%; }

@@ -585,7 +585,7 @@ function renderMembers() {
   };
   $('#member-list').replaceChildren(
     ...section('Around the fire', members.filter((m) => m.online)),
-    ...section('Out in the woods', members.filter((m) => !m.online)),
+    ...section('Offline', members.filter((m) => !m.online)),
   );
   renderChannelSub();
 }

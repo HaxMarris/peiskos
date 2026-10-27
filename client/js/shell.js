@@ -9,10 +9,12 @@ function escapeHtml(s) {
 }
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
-function formatTime(d) {
+/** "Today at 9:41 PM", or just "9:41 PM" with `short`, under a date line that already says the day. */
+function formatTime(d, { short = false } = {}) {
   const today = new Date();
   const yesterday = new Date(Date.now() - 864e5);
   const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  if (short) return t;
   if (d.toDateString() === today.toDateString()) return `Today at ${t}`;
   if (d.toDateString() === yesterday.toDateString()) return `Yesterday at ${t}`;
   return d.toLocaleDateString() + ' ' + t;
@@ -60,8 +62,6 @@ function applyUser(u) {
     $('#me-name').textContent = state.me.displayName || state.me.username;
     setAvatar($('#me-avatar'), state.me.username, u.avatar);
     setAvatar($('#tab-avatar'), state.me.username, u.avatar);
-    const preview = $('#account-avatar');
-    if (preview) setAvatar(preview, state.me.username, u.avatar);
     $('#avatar-remove')?.classList.toggle('hidden', !u.avatar);
   }
   renderMembers();
@@ -85,16 +85,12 @@ function alertError(err) { notice(err?.message || String(err)); }
 function currentTheme() {
   return document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
 }
-function renderThemeToggle() {
-  $('#theme-toggle').textContent = currentTheme() === 'dark' ? 'Switch to light' : 'Switch to dark';
+/** 'light', 'dark', or 'system' to follow the device. Chosen in Your account › Settings. */
+function setThemeMode(mode) {
+  if (mode === 'system') delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = mode;
+  store.set('theme', mode === 'system' ? null : mode);
 }
-$('#theme-toggle').onclick = () => {
-  const next = currentTheme() === 'dark' ? 'light' : 'dark';
-  document.documentElement.dataset.theme = next;
-  store.set('theme', next);
-  renderThemeToggle();
-};
-renderThemeToggle();
 
 const memberPane = $('#member-pane');
 if (store.get('membersHidden') === '1') memberPane.classList.add('collapsed');
@@ -151,7 +147,6 @@ $('#me-menu').onclick = (e) => { if (e.target.closest('button')) closeMeMenu(); 
 $('#account-btn').onclick = () => openAccount();
 for (const b of document.querySelectorAll('#me-menu [data-status]')) b.onclick = () => setMyStatus(b.dataset.status);
 $('#custom-status-btn').onclick = () => openCustomStatus();
-$('#inbox-menu-btn').onclick = () => openInbox();
 $('#inbox-btn').onclick = () => openInbox();
 $('#saved-btn').onclick = () => openSaved();
 $('#scheduled-btn').onclick = () => openScheduledList();
@@ -238,7 +233,7 @@ function openPerson(s, m) {
   const inVoice = s && state.voice && s.channels.some((c) => c.id === state.voice.channelId && c.voiceUsers?.includes(m.id));
   const sharing = inVoice ? state.sharing.get(m.id) : null;
   const top = s ? shownRole(s, m) : null;
-  const status = sharing?.screen ? 'Sharing their screen' : inVoice ? 'By the fire with you' : m.online ? STATUS_LABELS[statusOf(m)] : 'Out in the woods';
+  const status = sharing?.screen ? 'Sharing their screen' : inVoice ? 'By the fire with you' : m.online ? STATUS_LABELS[statusOf(m)] : 'Offline';
   modal(`<div class="profile-card" id="profile-card"></div>
     <div class="person-meta">
       ${m.deleted ? '' : `<span class="person-status${sharing?.screen ? ' live' : ''}"><span class="status-dot ${statusOf(m)}"></span>${escapeHtml(status)}</span>`}

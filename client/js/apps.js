@@ -99,7 +99,6 @@ async function installApp() {
   $('#install-btn').classList.add('hidden');
 }
 $('#install-btn').onclick = installApp;
-$('#shortcuts-btn').onclick = () => openShortcuts();
 
 // A newer desktop app: a green button in the top bar, as in Discord, that restarts into it once
 // you confirm. (An unsigned Mac build can't install it itself, so the button opens the download.)

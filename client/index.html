@@ -236,6 +236,9 @@
         </button>
         <button class="icon-btn hidden" id="thread-btn" title="Thread settings" aria-label="Thread settings"></button>
         <button class="icon-btn hidden" id="notify-btn" title="Notifications" aria-label="Notifications" aria-haspopup="menu"></button>
+        <button class="icon-btn more-btn" id="chat-more" title="More" aria-label="More" aria-haspopup="menu">
+          <svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/></svg>
+        </button>
         <button class="icon-btn" id="members-toggle" title="Show who's here" aria-label="Show who's here">
           <svg viewBox="0 0 24 24"><path d="M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm-6 9c0-3.3 2.7-6 6-6s6 2.7 6 6H3Zm13.5-9a3 3 0 1 0 0-6M17 14c2.5.4 4 2.6 4 6h-3"/></svg>
         </button>
@@ -471,7 +474,7 @@
     </nav>
   </div>
 
-  <!-- Your menu: account, light/dark, log out -->
+  <!-- Your menu: status, account, log out -->
   <div id="me-menu" class="me-menu hidden" role="menu">
     <div class="me-head">
       <span id="me-name" class="me-name"></span>
@@ -483,15 +486,12 @@
       <button role="menuitemradio" data-status="dnd"><span class="status-dot dnd"></span><span>Do not disturb<small>No sounds or alerts</small></span></button>
     </div>
     <button role="menuitem" id="custom-status-btn">Set a custom status</button>
-    <button role="menuitem" id="inbox-menu-btn">Mentions and replies</button>
     <button role="menuitem" id="account-btn">Your account</button>
     <button role="menuitem" id="saved-btn">Saved messages</button>
     <button role="menuitem" id="scheduled-btn">Scheduled messages</button>
     <button role="menuitem" id="servers-btn" class="hidden">Switch server</button>
     <button role="menuitem" id="install-btn" class="hidden">Install the app</button>
-    <button role="menuitem" id="shortcuts-btn">Keyboard shortcuts</button>
     <button role="menuitem" id="admin-btn" class="hidden">Server admin</button>
-    <button role="menuitem" id="theme-toggle">Switch to dark</button>
     <button role="menuitem" id="logout" class="danger-item">Log out</button>
   </div>
 

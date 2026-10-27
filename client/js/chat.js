@@ -24,7 +24,8 @@ function renderMessages({ stick = false } = {}) {
       else if (p) start.append(messageCard(p, null, { onOpen: () => jumpTo(ch.parentId, p.id) }));
     } else start.innerHTML = isDm(server)
       ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
-      : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2><div class="muted">${ch.topic ? escapeHtml(ch.topic) : 'Pull up a stump and say hello.'}</div>`;
+      : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
+    start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
     frag.append(start);
   }
   let prev = null;
@@ -56,7 +57,9 @@ function addMessageNodes(parent, m, prev, body) {
     const d = document.createElement('div');
     d.className = 'day-divider';
     const label = document.createElement('span');
-    label.textContent = new Date(m.createdAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    const day = new Date(m.createdAt);
+    const year = day.getFullYear() === new Date().getFullYear() ? undefined : 'numeric';
+    label.textContent = day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year });
     d.append(label);
     parent.append(d);
     newGroup = true;
@@ -92,7 +95,7 @@ function addMessageNodes(parent, m, prev, body) {
     const time = new Date(m.createdAt);
     const color = roleColor(state.servers.get(state.serverId), m.authorId);
     body.innerHTML = `<div class="head"><span class="author${color ? ` named" style="--name:${escapeHtml(color)}"` : '"'}>${escapeHtml(authorName(m))}</span>${m.authorBot ? '<span class="bot-tag">BOT</span>' : ''}
-        <span class="time" title="${escapeHtml(time.toLocaleString())}">${escapeHtml(formatTime(time))}</span></div>`;
+        <span class="time" title="${escapeHtml(time.toLocaleString())}">${escapeHtml(formatTime(time, { short: true }))}</span></div>`;
     // Their name and picture open their card.
     av.classList.add('opens-card');
     av.onclick = body.querySelector('.author').onclick = () => openPersonById(m.authorId);

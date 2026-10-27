@@ -74,6 +74,19 @@ $('#notify-btn').onclick = () => {
   openNotifyMenu($('#notify-btn'), where.s, isDm(where.s) ? null : settingsRoom(where.s, where.c));
 };
 
+// On phones the header keeps search and people; pins, alerts and thread settings fold into "⋯".
+$('#chat-more').onclick = () => {
+  const shown = (id) => !$(id).classList.contains('hidden');
+  openMenu($('#chat-more'), [
+    shown('#pins-btn') && { label: 'Pinned messages', run: () => $('#pins-btn').click() },
+    shown('#notify-btn') && { label: 'Notifications', run: () => {
+      const where = roomById(state.channelId);
+      if (where) openNotifyMenu($('#chat-more'), where.s, isDm(where.s) ? null : settingsRoom(where.s, where.c));
+    } },
+    shown('#thread-btn') && { label: 'Thread settings', run: () => $('#thread-btn').click() },
+  ]);
+};
+
 function renderNotifyButton() {
   const where = roomById(state.channelId);
   const btn = $('#notify-btn');
@@ -670,12 +683,6 @@ function renderEvents(s) {
     more.textContent = `${events.length - 4} more`;
     more.onclick = () => openEventList(s.id);
     rows.push(more);
-  }
-  if (!rows.length) {
-    const hint = document.createElement('li');
-    hint.className = 'hint';
-    hint.textContent = 'Nothing planned. Press + to plan a game night.';
-    rows.push(hint);
   }
   $('#event-list').replaceChildren(...rows);
 }

@@ -507,23 +507,12 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
     <div class="tabs" role="tablist">${ACCOUNT_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
     <section data-pane="profile" class="account-pane">
       <div class="profile-preview" id="profile-preview"></div>
-      ${state.maxUploadBytes ? `<div class="account-picture">
-        <span class="avatar xl" id="account-avatar"></span>
-        <div class="buttons">
-          <div>
-            <button type="button" class="btn secondary" id="avatar-pick">Upload picture</button>
-            <button type="button" class="btn secondary" id="avatar-remove">Remove</button>
-          </div>
-          <span class="small muted">PNG, JPEG, GIF or WebP. It's cropped to a square.</span>
-        </div>
-        <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
-      </div>
-      <div class="error" id="avatar-error"></div>
-      <div class="banner-row">
-        <button type="button" class="btn secondary" id="banner-pick">${me.banner ? 'Change banner' : 'Add a banner'}</button>
-        <button type="button" class="btn secondary ${me.banner ? '' : 'hidden'}" id="banner-remove">Remove banner</button>
-        <input type="file" id="banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
-      </div>` : ''}
+      ${state.maxUploadBytes ? `<p class="small muted picture-hint">Click your picture or the banner to change it. PNG, JPEG, GIF or WebP.
+        <button type="button" class="link-btn" id="avatar-remove">Remove picture</button>
+        <button type="button" class="link-btn" id="banner-remove">Remove banner</button></p>
+      <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <input type="file" id="banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <div class="error" id="avatar-error"></div>` : ''}
       <form id="profile-form">
         <label>Display name<input id="profile-name" maxlength="32" placeholder="${escapeHtml(me.username)}" value="${escapeHtml(me.displayName ?? '')}" /></label>
         <span class="small muted">What people see. You still log in as ${escapeHtml(me.username)}, and people @mention you as @${escapeHtml(me.username)}.</span>
@@ -634,6 +623,23 @@ function wireProfileSettings() {
     if (!box) return;
     const accent = $('#profile-accent-off').checked ? null : $('#profile-accent').value;
     box.replaceChildren(profileHeader({ ...me, displayName: $('#profile-name').value.trim() || null, bio: $('#profile-bio').value, accent, birthday: readBirthday() }, null));
+    if (!state.maxUploadBytes) return;
+    // The card is the editor: its picture and banner open the file pickers.
+    const editable = (el, input, label) => {
+      if (!el) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'edit-badge';
+      b.title = b.ariaLabel = label;
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1.5 2H20a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3.5L9 4Zm3 4a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm0 2a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg>';
+      el.classList.add('editable');
+      el.append(b);
+      el.onclick = () => $(input).click();
+    };
+    editable(box.querySelector('.profile-banner'), '#banner-input', state.me.banner ? 'Change banner' : 'Add a banner');
+    editable(box.querySelector('.profile-avatar'), '#avatar-input', state.me.avatar ? 'Change picture' : 'Add a picture');
+    $('#avatar-remove').classList.toggle('hidden', !state.me.avatar);
+    $('#banner-remove').classList.toggle('hidden', !state.me.banner);
   };
   preview();
   for (const id of ['#profile-bday-month', '#profile-bday-day']) $(id).addEventListener('change', preview);
@@ -655,19 +661,15 @@ function wireProfileSettings() {
     } catch (err) { $('#profile-error').textContent = err.message; }
   };
   if (!state.maxUploadBytes) return;
-  setAvatar($('#account-avatar'), me.username, me.avatar);
-  $('#avatar-remove').classList.toggle('hidden', !me.avatar);
-  $('#avatar-pick').onclick = () => $('#avatar-input').click();
   $('#avatar-input').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     $('#avatar-error').textContent = '';
-    $('#avatar-pick').disabled = true;
-    $('#avatar-pick').textContent = 'Uploading…';
+    $('#profile-preview').classList.add('uploading');
     try { applyUser(await uploadPicture('/api/me/avatar', await squarePicture(file))); preview(); }
     catch (err) { $('#avatar-error').textContent = err.message; }
-    finally { $('#avatar-pick').disabled = false; $('#avatar-pick').textContent = 'Upload picture'; }
+    finally { $('#profile-preview').classList.remove('uploading'); }
   };
   $('#avatar-remove').onclick = async () => {
     try { applyUser(await api('/api/me/avatar', { method: 'DELETE' })); preview(); }
@@ -675,20 +677,17 @@ function wireProfileSettings() {
   };
   const bannerDone = (me2) => {
     Object.assign(state.me, me2);
-    $('#banner-pick').textContent = state.me.banner ? 'Change banner' : 'Add a banner';
-    $('#banner-remove').classList.toggle('hidden', !state.me.banner);
     preview();
   };
-  $('#banner-pick').onclick = () => $('#banner-input').click();
   $('#banner-input').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     $('#avatar-error').textContent = '';
-    $('#banner-pick').disabled = true;
+    $('#profile-preview').classList.add('uploading');
     try { bannerDone(await uploadPicture('/api/me/banner', await bannerPicture(file))); }
     catch (err) { $('#avatar-error').textContent = err.message; }
-    finally { $('#banner-pick').disabled = false; }
+    finally { $('#profile-preview').classList.remove('uploading'); }
   };
   $('#banner-remove').onclick = async () => {
     try { bannerDone(await api('/api/me/banner', { method: 'DELETE' })); } catch (err) { $('#avatar-error').textContent = err.message; }
