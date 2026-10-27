@@ -481,13 +481,65 @@ function modal(html, kind = '') {
   const closing = onModalClose;
   onModalClose = null;
   closing?.();
+  // A person's card or another sheet leaves any settings page behind.
+  if (/\bsheet\b/.test(kind)) settingsFrame = null;
+  if (settingsFrame) {
+    html = settingsFrameHtml() + `<div class="settings-pane">${html}</div>`;
+    kind = `${kind} side-tabs`;
+  }
   $('#modal-card').className = 'modal-card' + (kind ? ' ' + kind : '');
   $('#modal-card').innerHTML = `<button type="button" class="icon-btn modal-x" data-close title="Close (Esc)" aria-label="Close">×</button>` + html;
   $('#modal').classList.remove('hidden');
   $('#modal-card').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
-  $('#modal-card').querySelector('input')?.focus();
+  if (settingsFrame) wireSettingsFrame();
+  $('#modal-card').querySelector(settingsFrame ? '.settings-pane input' : 'input')?.focus();
+}
+
+// ---- settings pages: sections down the side, the chosen one beside them. Each section is a page
+// that opens with modal() as before; while the frame is up, modal() puts it inside the frame.
+// Items: { id, label, group, count, run, action, danger }. An `action` item does something (a
+// menu, leaving) without becoming the page shown.
+let settingsFrame = null;
+function openSettingsFrame(title, items, first) {
+  settingsFrame = { title, items: items.filter(Boolean), active: null };
+  if (first && settingsFrame.items.some((i) => i.id === first)) showSettingsSection(first);
+  // Phones start at the list of sections, like a phone's own settings; computers open the first one.
+  else if (isPhone()) showSettingsList();
+  else showSettingsSection(settingsFrame.items.find((i) => !i.action).id);
+}
+function showSettingsList() {
+  settingsFrame.active = null;
+  modal('', 'settings-list');
+}
+function showSettingsSection(id) {
+  const item = settingsFrame?.items.find((i) => i.id === id);
+  if (!item) return;
+  if (!item.action) settingsFrame.active = id;
+  item.run();
+}
+function settingsFrameHtml() {
+  let group = null;
+  const rows = settingsFrame.items.map((i) => {
+    const heading = i.group !== group ? `<span class="nav-group">${escapeHtml(i.group ?? '')}</span>` : '';
+    group = i.group;
+    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}</button>`;
+  });
+  return `<h2 class="frame-title">${escapeHtml(settingsFrame.title)}</h2><nav class="tabs" role="tablist" aria-label="${escapeHtml(settingsFrame.title)}">${rows.join('')}</nav>`;
+}
+function wireSettingsFrame() {
+  for (const b of $('#modal-card').querySelectorAll('[data-section]')) b.onclick = () => showSettingsSection(b.dataset.section);
+  // On phones a section has a way back to the list.
+  if (settingsFrame.active && isPhone()) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'link-btn settings-back';
+    back.textContent = `‹ ${settingsFrame.title}`;
+    back.onclick = showSettingsList;
+    $('#modal-card .settings-pane').prepend(back);
+  }
 }
 function closeModal() {
+  settingsFrame = null;
   $('#modal').classList.add('hidden');
   const closing = onModalClose;
   onModalClose = null;
@@ -626,61 +678,54 @@ $('#empty-join').onsubmit = async (e) => {
   catch (err) { $('#empty-error').textContent = err.message; }
 };
 
-$('#server-menu-btn').onclick = () => {
-  const s = state.servers.get(state.serverId);
+$('#server-menu-btn').onclick = () => openHearthSettings(state.serverId);
+
+// A hearth's settings: what you can change depends on your roles; everyone gets invites,
+// notifications, the rules and the year in review.
+function openHearthSettings(serverId, first) {
+  const s = state.servers.get(serverId);
   if (!s) return;
   const owner = s.ownerId === state.me.id;
   const n = notifyState(s, null);
-  modal(`<h2>${escapeHtml(s.name)}</h2>
-    ${s.description ? `<p class="muted">${escapeHtml(s.description)}</p>` : ''}
-    <div class="settings-buttons">
-      <button class="btn" id="open-invites">Invite people</button>
-      <button class="btn secondary" id="open-notify" aria-haspopup="menu">Notifications: ${n.muted ? 'muted' : { all: 'all messages', mentions: 'only @mentions', none: 'nothing' }[n.level]}</button>
-      ${s.rules ? '<button class="btn secondary" id="open-rules">Rules</button>' : ''}
-      ${can(s, 'burrow') ? '<button class="btn secondary" id="open-edit">Edit hearth</button>' : ''}
-      ${can(s, 'messages') ? `<button class="btn secondary" id="open-reports">Reports${s.openReports ? ` · ${s.openReports}` : ''}</button>` : ''}
-      ${can(s, 'audit') ? '<button class="btn secondary" id="open-audit">Audit log</button>' : ''}
-      ${can(s, 'burrow') ? '<button class="btn secondary" id="open-bots">Bots and webhooks</button>' : ''}
-      ${can(s, 'burrow') ? `<button class="btn secondary" id="open-motd">Message of the day${s.motd?.length ? ` · ${s.motd.length}` : ''}</button>` : ''}
-      <button class="btn secondary" id="open-review">Year in review</button>
-      ${can(s, 'roles') ? `<button class="btn secondary" id="open-roles">Roles${s.roles.length ? ` · ${s.roles.length}` : ''}</button>` : ''}
-      ${can(s, 'emoji') && state.maxUploadBytes ? `<button class="btn secondary" id="open-emoji">Emoji and stickers${s.emoji?.length ? ` · ${s.emoji.length}` : ''}</button>
-        <button class="btn secondary" id="open-sounds">Soundboard${s.sounds?.length ? ` · ${s.sounds.length}` : ''}</button>` : ''}
-    </div>
-    ${can(s, 'ban') ? '<div id="ban-list"></div>' : ''}
-    <div class="modal-row">
-      <button class="btn danger" id="leave-server">${owner ? 'Delete hearth' : 'Leave hearth'}</button>
-      <button class="btn secondary" data-close>Close</button>
-    </div>`);
-  if (can(s, 'ban')) renderBans(s);
-  $('#open-invites').onclick = () => openInvites(s.id);
-  $('#open-notify').onclick = () => openNotifyMenu($('#open-notify'), s, null);
-  $('#open-rules')?.addEventListener('click', () => openRules(s));
-  $('#open-edit')?.addEventListener('click', () => openEditBurrow(s.id));
-  $('#open-roles')?.addEventListener('click', () => openRoles(s.id));
-  $('#open-reports')?.addEventListener('click', () => openReports(s.id));
-  $('#open-audit')?.addEventListener('click', () => openAudit(s.id));
-  $('#open-bots')?.addEventListener('click', () => openBots(s.id));
-  $('#open-motd')?.addEventListener('click', () => openMotd(s.id));
-  $('#open-review').onclick = () => openYearReview(s.id);
-  $('#open-emoji')?.addEventListener('click', () => openEmojiManager(s.id));
-  $('#open-sounds')?.addEventListener('click', () => openSounds(s.id));
-  $('#leave-server').onclick = async () => {
-    const others = (s.members?.length ?? 1) - 1;
-    const sure = owner
-      ? await askConfirm(`${others > 0 ? `All ${others + 1} members lose` : 'You lose'} every room, message and file in it. This can't be undone.`, { title: `Delete ${s.name}?`, ok: 'Delete hearth', danger: true, typeToConfirm: s.name })
-      : await askConfirm(`You can come back with an invite.`, { title: `Leave ${s.name}?`, ok: 'Leave', danger: true });
-    if (!sure) return;
-    try {
-      await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
-      closeModal();
-      state.servers.delete(s.id);
-      state.serverOrder = state.serverOrder.filter((id) => id !== s.id);
-      leaveVoiceIfGone();
-      selectServer(state.serverOrder[0] ?? null);
-    } catch (err) { alertError(err); }
-  };
-};
+  const notifyLabel = n.muted ? 'muted' : { all: 'all messages', mentions: 'only @mentions', none: 'nothing' }[n.level];
+  const emoji = can(s, 'emoji') && state.maxUploadBytes;
+  openSettingsFrame(s.name, [
+    can(s, 'burrow') && { id: 'edit', group: 'Hearth', label: 'Overview', run: () => openEditBurrow(s.id) },
+    can(s, 'burrow') && { id: 'motd', group: 'Hearth', label: 'Message of the day', count: s.motd?.length, run: () => openMotd(s.id) },
+    emoji && { id: 'emoji', group: 'Hearth', label: 'Emoji and stickers', count: s.emoji?.length, run: () => openEmojiManager(s.id) },
+    emoji && { id: 'sounds', group: 'Hearth', label: 'Soundboard', count: s.sounds?.length, run: () => openSounds(s.id) },
+    can(s, 'burrow') && { id: 'bots', group: 'Hearth', label: 'Bots and webhooks', run: () => openBots(s.id) },
+    { id: 'invites', group: 'People', label: 'Invite people', run: () => openInvites(s.id) },
+    can(s, 'roles') && { id: 'roles', group: 'People', label: 'Roles', count: s.roles.length, run: () => openRoles(s.id) },
+    can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', count: s.openReports, run: () => openReports(s.id) },
+    can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', run: () => openAudit(s.id) },
+    can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', run: () => {
+      modal('<h2>Bans</h2><div id="ban-list"><p class="muted">Loading…</p></div>');
+      renderBans(s, true);
+    } },
+    s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
+    { id: 'notify', group: 'You', label: `Notifications: ${notifyLabel}`, action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
+    { id: 'review', group: 'You', label: 'Year in review', run: () => openYearReview(s.id) },
+    { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
+  ], first);
+}
+
+async function leaveHearth(s) {
+  const owner = s.ownerId === state.me.id;
+  const others = (s.members?.length ?? 1) - 1;
+  const sure = owner
+    ? await askConfirm(`${others > 0 ? `All ${others + 1} members lose` : 'You lose'} every room, message and file in it. This can't be undone.`, { title: `Delete ${s.name}?`, ok: 'Delete hearth', danger: true, typeToConfirm: s.name })
+    : await askConfirm(`You can come back with an invite.`, { title: `Leave ${s.name}?`, ok: 'Leave', danger: true });
+  if (!sure) return;
+  try {
+    await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
+    closeModal();
+    state.servers.delete(s.id);
+    state.serverOrder = state.serverOrder.filter((id) => id !== s.id);
+    leaveVoiceIfGone();
+    selectServer(state.serverOrder[0] ?? null);
+  } catch (err) { alertError(err); }
+}
 
 // Changing the burrow's picture, from its settings.
 function wireBurrowPicture(s) {

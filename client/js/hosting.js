@@ -40,8 +40,7 @@ async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
   adminTab = tab;
   modal(`<h2>Server admin</h2>
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
-    <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'admin-modal');
+    <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>`, 'admin-modal side-tabs');
   onModalClose = () => { clearInterval(updatePoll); updatePoll = null; };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => showAdminTab(b.dataset.tab);
   try {

@@ -215,17 +215,17 @@ function openMemberMenu(s, m) {
   $('#member-ban')?.addEventListener('click', async () => (await askConfirm(`Ban ${nameOfPerson(m)} from ${s.name}?`)) && act('remove', { ban: true }));
 }
 
-async function renderBans(s) {
+async function renderBans(s, page = false) {
   const bans = await api(`/api/servers/${s.id}/bans`).catch(() => []);
   const el = $('#ban-list');
   if (!el) return;
-  if (!bans.length) return (el.innerHTML = '');
-  el.innerHTML = `<h3>Banned</h3><ul class="ban-list">${bans
+  if (!bans.length) return (el.innerHTML = page ? '<p class="muted">Nobody is banned. Ban someone from their card in the member list.</p>' : '');
+  el.innerHTML = `${page ? '' : '<h3>Banned</h3>'}<ul class="ban-list">${bans
     .map((b) => `<li><span>${escapeHtml(b.username)}</span><button class="btn secondary" data-unban="${b.id}">Unban</button></li>`)
     .join('')}</ul>`;
   el.querySelectorAll('[data-unban]').forEach((b) => (b.onclick = async () => {
     await api(`/api/servers/${s.id}/bans/${b.dataset.unban}`, { method: 'DELETE' }).catch(alertError);
-    renderBans(s);
+    renderBans(s, page);
   }));
 }
 
@@ -576,8 +576,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
         <div class="error" id="delete-error"></div>
         <div class="modal-row"><button type="submit" class="btn danger">Delete my account</button></div>
       </form>
-    </section>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'account-modal');
+    </section>`, 'account-modal side-tabs');
   const show = (id) => {
     if (!ACCOUNT_TABS.some(([t]) => t === id)) id = 'profile';
     store.set('accountTab', id);
