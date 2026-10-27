@@ -1,4 +1,4 @@
-// Fireside Angler: fish by hand at five waters, collect 115 species and 21 hats, and leave idle
+// Fireside Angler: fish by hand at eleven waters, collect 253 species and 27 hats, and leave idle
 // rods fishing while you're away. Peiskos frames this page and keeps the save (see client/js/fishing.js).
 (() => {
 'use strict';
@@ -144,25 +144,187 @@ const PONDS = [
       F('coelacanth', 'Coelacanth', 120, 200, 7100, 4, ['deep', 'rare'], 5, L('#2f4a6a', '#a8c0d8', '#1f3450', .3, { spots: '#e8f0ff', glow: '#a8d0ff' })),
       F('auroraserpent', 'Aurora Serpent', 400, 1200, 33000, 5, ['ember', 'deep', 'rare'], 5, L('#2a6a5a', '#bff0e0', '#7ff0c8', .08, { shape: 'eel', glow: '#7ff0c8' })),
     ] },
+  { id: 'river', name: 'Misty River', cost: 7500000, idle: .66, blurb: 'Fog on fast water. Big trout hold in the riffles, older things in the deep pools.',
+    sky: ['#b9c4c2', '#e3e6df'], water: ['#6f8a86', '#3c524f'], far: '#8e9c93', near: '#47584a', feature: 'mist',
+    fish: [
+      F('mistdace', 'Mist Dace', 10, 25, 2300, 1, ['small'], 1, L('#b5bfbd', '#f2f3ee', '#93a09d', .26)),
+      F('nase', 'Nase', 25, 50, 2500, 1, ['grazer'], 1, L('#8f9a93', '#e9ece6', '#c46a4a', .28)),
+      F('stoneroller', 'Stoneroller', 8, 18, 2600, 1, ['grazer', 'small'], 1, L('#9a8a6a', '#ece0c4', '#7a6a4a', .27)),
+      F('chubsucker', 'Creek Chubsucker', 15, 30, 2600, 1, ['bottom'], 1, L('#8a7d62', '#e6dcc4', '#6a5e46', .3)),
+      F('mottledsculpin', 'Mottled Sculpin', 6, 14, 2700, 1, ['bottom', 'small'], 1, L('#7a6a52', '#d8cab0', '#5a4a36', .3, { spots: '#4a3a28' })),
+      F('longnosedace', 'Longnose Dace', 6, 15, 2800, 1, ['small'], 1, L('#a0a890', '#efeee0', '#7a8270', .24, { stripes: '#6a7260' })),
+      F('steelhead', 'Steelhead', 50, 100, 4200, 2, ['predator'], 1, L('#7a8a96', '#f2e8ea', '#6a7a86', .28, { stripes: '#e08a9a', spots: '#3a4650' })),
+      F('cutthroat', 'Cutthroat Trout', 30, 70, 4400, 2, ['predator'], 1, L('#8a8a50', '#f0e4c0', '#d8402a', .29, { spots: '#3a3a20' })),
+      F('smallmouth', 'Smallmouth Bass', 25, 55, 4700, 2, ['predator'], 1, L('#7a6a3a', '#e8dca8', '#5a4a2a', .36, { stripes: '#4a3a1a' })),
+      F('walleye', 'Walleye', 35, 80, 4900, 2, ['predator'], 1, L('#a08a40', '#eee6c0', '#6a5a2a', .27)),
+      F('redhorse', 'Golden Redhorse', 30, 60, 5400, 2, ['bottom', 'grazer'], 1, L('#c0a060', '#f4e8c8', '#d0603a', .3)),
+      F('mooneye', 'Mooneye', 25, 45, 5800, 2, ['grazer'], 1, L('#c8d0d4', '#ffffff', '#a0aab0', .34)),
+      F('goldeye', 'Goldeye', 25, 45, 8200, 3, ['grazer'], 1, L('#c8b070', '#fff4d0', '#e0a830', .32, { glow: '#ffe08a' })),
+      F('gar', 'Longnose Gar', 60, 150, 9300, 3, ['predator'], 1, L('#7a8a5a', '#e8e8c8', '#5a6a3a', .14, { spots: '#3a4a2a' })),
+      F('paddlefish', 'Paddlefish', 80, 180, 11000, 3, ['bottom'], 1, L('#6a7a86', '#d8e0e6', '#4a5a66', .2)),
+      F('bluecatfish', 'Blue Catfish', 60, 140, 12000, 3, ['bottom', 'predator'], 5, L('#5a7088', '#d8e0e8', '#3a4a5a', .24, { whiskers: 1 })),
+      F('huchen', 'Danube Salmon', 70, 150, 13000, 3, ['predator'], 5, L('#8a6a6a', '#f0e0dc', '#6a4a4a', .24, { spots: '#3a2a2a' })),
+      F('golddorado', 'Golden Dorado', 60, 110, 16000, 4, ['predator', 'rare'], 6, L('#e0a830', '#fff0c0', '#c4561c', .3, { spots: '#5a3a10' })),
+      F('riverwraith', 'River Wraith', 80, 160, 20000, 4, ['predator', 'rare'], 6, L('rgba(200,210,215,.6)', 'rgba(240,245,245,.8)', 'rgba(160,175,180,.5)', .22, { glow: '#e0eef0' })),
+      F('alligatorgar', 'Alligator Gar', 150, 280, 22000, 4, ['predator', 'rare'], 6, L('#6a6a4a', '#d8d4b0', '#4a4a30', .16, { spots: '#2a2a1a' })),
+      F('miststurgeon', 'Mist Sturgeon', 120, 300, 25000, 4, ['bottom', 'rare'], 6, L('#a0aab0', '#eef2f4', '#7a868c', .2, { whiskers: 1, stripes: '#d0d8dc' })),
+      F('fogkoi', 'Fog Koi', 40, 100, 37000, 5, ['ember', 'rare'], 6, L('#f2efe8', '#ffffff', '#e0703a', .34, { spots: '#e0703a', glow: '#fff4e0', whiskers: 1 })),
+      F('arapaima', 'Arapaima', 200, 400, 120000, 5, ['predator', 'rare'], 6, L('#5a6a4a', '#e8d8b0', '#b8352b', .2, { spots: '#d8603a' })),
+    ] },
+  { id: 'marsh', name: 'Mangrove Marsh', cost: 25000000, idle: .62, blurb: 'Warm brown water between the roots. Some things here bite back.',
+    sky: ['#c7b98a', '#e9dfb8'], water: ['#5a6e48', '#26382a'], far: '#4d5a32', near: '#3a3a22', feature: 'mangrove',
+    fish: [
+      F('killifish', 'Killifish', 4, 10, 8400, 1, ['small'], 1, L('#4a8a9a', '#e0f0f0', '#d8603a', .3, { spots: '#e0a830' })),
+      F('molly', 'Sailfin Molly', 5, 12, 8800, 1, ['small', 'grazer'], 1, L('#8a9aa0', '#eef0ea', '#d0a040', .34, { sail: 1 })),
+      F('mudskipper', 'Mudskipper', 8, 20, 9200, 1, ['small', 'bottom'], 1, L('#7a6a4a', '#d8ccaa', '#5a4a30', .3, { spots: '#3a2a18' })),
+      F('archerfish', 'Archerfish', 10, 25, 9400, 1, ['predator'], 1, L('#c8c8a0', '#f8f8e8', '#4a4a3a', .4, { stripes: '#2a2a20' })),
+      F('mojarra', 'Mojarra', 12, 28, 9600, 1, ['grazer'], 1, L('#c0c4c0', '#f6f6f2', '#9aa09a', .38)),
+      F('mangrovesnapper', 'Mangrove Snapper', 20, 50, 10000, 1, ['predator', 'sea'], 1, L('#8a5a4a', '#f0d8c8', '#a8443a', .34)),
+      F('tilapia', 'Tilapia', 20, 45, 15000, 2, ['grazer'], 1, L('#8a9a8a', '#e8ece0', '#c84a3a', .4, { stripes: '#5a6a5a' })),
+      F('spottedgar', 'Spotted Gar', 40, 90, 16000, 2, ['predator'], 1, L('#8a7a5a', '#e8e0c8', '#6a5a3a', .14, { spots: '#2a2018' })),
+      F('swampeel', 'Swamp Eel', 40, 90, 17000, 2, ['bottom'], 1, L('#5a4a2a', '#c8b080', '#3a2a18', .1, { shape: 'eel', spots: '#2a1a0a' })),
+      F('jack', 'Crevalle Jack', 40, 100, 18000, 2, ['predator', 'sea'], 1, L('#7a8a96', '#f0f0e8', '#e0b040', .4)),
+      F('redfish', 'Red Drum', 50, 100, 19000, 2, ['bottom', 'sea'], 1, L('#c0703a', '#f8e0c8', '#a8502a', .3, { spots: '#1a1008' })),
+      F('snook', 'Snook', 50, 110, 21000, 2, ['predator', 'sea'], 1, L('#a8a890', '#f2f2e6', '#d0b040', .24, { stripes: '#2a2a20' })),
+      F('peacockbass', 'Peacock Bass', 40, 80, 29000, 3, ['predator'], 1, L('#8aa040', '#f0e8a0', '#d84a2a', .34, { stripes: '#2a3a10' })),
+      F('flathead', 'Flathead Catfish', 60, 140, 34000, 3, ['bottom', 'predator'], 1, L('#6a5a3a', '#d8c8a0', '#4a3a20', .24, { whiskers: 1, spots: '#3a2a10' })),
+      F('lungfish', 'Lungfish', 60, 140, 39000, 3, ['bottom'], 5, L('#6a6a5a', '#c8c4b0', '#4a4a3a', .16, { shape: 'eel', spots: '#3a3a2a' })),
+      F('tarpon', 'Tarpon', 100, 200, 43000, 3, ['predator', 'sea'], 5, L('#a8b4bc', '#ffffff', '#7a8a96', .3)),
+      F('bullshark', 'Bull Shark', 150, 300, 47000, 3, ['predator', 'sea'], 6, L('#8a8e90', '#eceeee', '#6a6e70', .22)),
+      F('electriceel', 'Electric Eel', 100, 250, 59000, 4, ['predator', 'rare'], 6, L('#3a3a2a', '#e0a830', '#2a2a1a', .1, { shape: 'eel', glow: '#fff0a0' })),
+      F('goliathgrouper', 'Goliath Grouper', 150, 250, 71000, 4, ['bottom', 'sea', 'rare'], 6, L('#6a5a3a', '#c8b890', '#4a3a20', .42, { spots: '#3a2a10' })),
+      F('bogserpent', 'Bog Serpent', 200, 450, 80000, 4, ['predator', 'rare'], 6, L('#3a5a2a', '#a8c880', '#2a4018', .08, { shape: 'eel', spots: '#c8e080' })),
+      F('sawfish', 'Sawfish', 200, 500, 88000, 4, ['bottom', 'sea', 'rare'], 6, L('#8a8470', '#e8e2d0', '#6a6450', .14)),
+      F('giantstingray', 'Giant Stingray', 150, 300, 130000, 5, ['bottom', 'rare'], 6, L('#7a6a50', '#e8dcc4', '#5a4a30', .3, { shape: 'ray' })),
+      F('mangroveking', 'Mangrove King', 120, 250, 420000, 5, ['predator', 'ember', 'rare'], 6, L('#2a4a2a', '#e0c070', '#c4561c', .3, { spots: '#e0a830', glow: '#ffd080', whiskers: 1 })),
+    ] },
+  { id: 'lagoon', name: 'Coral Lagoon', cost: 90000000, idle: .58, blurb: 'Clear turquoise water over a reef, and a fish in every color.',
+    sky: ['#7fc8e0', '#d8f0f0'], water: ['#3fc0bc', '#1a6a80'], far: '#5aa070', near: '#e3cf98', feature: 'coral',
+    fish: [
+      F('damselfish', 'Blue Damselfish', 5, 10, 25000, 1, ['sea', 'small'], 1, L('#2a6ad8', '#8ab8f0', '#1a4ab0', .42)),
+      F('chromis', 'Green Chromis', 6, 10, 26000, 1, ['sea', 'small'], 1, L('#5ad0a0', '#d0f8e8', '#3aa080', .38)),
+      F('cardinalfish', 'Cardinalfish', 6, 12, 27000, 1, ['sea', 'small'], 1, L('#d8403a', '#f8c0b0', '#b8302a', .36)),
+      F('clownfish', 'Clownfish', 6, 12, 28000, 1, ['sea', 'small'], 1, L('#f0802a', '#fff0e0', '#1a1a1a', .4, { stripes: '#ffffff' })),
+      F('sergeant', 'Sergeant Major', 12, 22, 28000, 1, ['sea'], 1, L('#d8d860', '#f8f8e0', '#a0a040', .44, { stripes: '#1a1a1a' })),
+      F('goatfish', 'Goatfish', 20, 40, 29000, 1, ['sea', 'bottom'], 1, L('#e8c040', '#fff4d0', '#d08a20', .26, { whiskers: 1 })),
+      F('cleanerwrasse', 'Cleaner Wrasse', 6, 14, 44000, 2, ['sea', 'small'], 1, L('#2a2a3a', '#9ad8f0', '#4ab8e0', .24, { stripes: '#9ad8f0' })),
+      F('butterflyfish', 'Butterflyfish', 12, 22, 47000, 2, ['sea', 'small'], 1, L('#f0e040', '#fffbe0', '#1a1a1a', .6, { stripes: '#1a1a1a' })),
+      F('bluetang', 'Blue Tang', 15, 30, 49000, 2, ['sea'], 1, L('#2a5ad8', '#6a9af0', '#f0d020', .5)),
+      F('angelfish', 'Queen Angelfish', 25, 45, 52000, 2, ['sea'], 1, L('#2a7ad8', '#f0e040', '#f0c020', .6, { stripes: '#40a0f0' })),
+      F('triggerfish', 'Triggerfish', 30, 60, 56000, 2, ['sea'], 1, L('#4a4a5a', '#f0e0a0', '#e0a020', .44, { spots: '#ffffff' })),
+      F('parrotfish', 'Parrotfish', 30, 70, 61000, 2, ['sea', 'grazer'], 1, L('#3ab0a0', '#a8f0e0', '#d86aa0', .34, { stripes: '#f0a0c8' })),
+      F('lionfish', 'Lionfish', 20, 40, 86000, 3, ['sea', 'predator'], 1, L('#c8503a', '#f8e8e0', '#e8c0b0', .36, { stripes: '#fff4ee', sail: 1 })),
+      F('bonefish', 'Bonefish', 40, 80, 98000, 3, ['sea', 'bottom'], 1, L('#c8d4d8', '#ffffff', '#a0aeb4', .26)),
+      F('barracuda', 'Great Barracuda', 100, 180, 110000, 3, ['sea', 'predator'], 6, L('#8a9aa6', '#f0f4f6', '#5a6a76', .16, { spots: '#2a3a46' })),
+      F('napoleon', 'Napoleon Wrasse', 100, 200, 130000, 3, ['sea'], 6, L('#3a8a9a', '#a8e0d8', '#2a6a7a', .4, { spots: '#d8f0a0' })),
+      F('moray', 'Green Moray', 100, 250, 140000, 3, ['sea', 'predator'], 6, L('#4a7a3a', '#a8c880', '#3a6a2a', .1, { shape: 'eel' })),
+      F('mandarinfish', 'Mandarinfish', 5, 8, 170000, 4, ['sea', 'rare'], 7, L('#2a6ad0', '#f0802a', '#30c0a0', .34, { stripes: '#f0802a', spots: '#30c0a0' })),
+      F('reefshark', 'Reef Shark', 120, 250, 210000, 4, ['sea', 'predator', 'rare'], 7, L('#9a9a98', '#f2f2f0', '#2a2a28', .22)),
+      F('sailfish', 'Sailfish', 200, 320, 230000, 4, ['sea', 'predator', 'rare'], 7, L('#2a4a8a', '#e0e8f0', '#3a6ad0', .2, { sail: 1, stripes: '#7ab0f0' })),
+      F('mantaray', 'Manta Ray', 300, 600, 260000, 4, ['sea', 'rare'], 7, L('#2a2e3a', '#f0f0f0', '#1a1e2a', .3, { shape: 'ray' })),
+      F('opalmoray', 'Opal Moray', 150, 300, 390000, 5, ['sea', 'rare'], 7, L('#e8d8f0', '#ffffff', '#c0a0e0', .1, { shape: 'eel', glow: '#f0e0ff', spots: '#80e0d0' })),
+      F('reefdragon', 'Reef Dragon', 200, 400, 1200000, 5, ['sea', 'ember', 'rare'], 7, L('#2ab0a0', '#f8e0a0', '#f0802a', .3, { stripes: '#f0c040', glow: '#80f0d0', sail: 1 })),
+    ] },
+  { id: 'harbor', name: 'Sunken Harbor', cost: 325000000, idle: .55, blurb: 'Old masts stick out of the water. Something big lives in the wreck.',
+    sky: ['#6e6a7e', '#c9b6a2'], water: ['#3a5260', '#16242c'], far: '#4a4e56', near: '#3a3028', feature: 'harbor',
+    fish: [
+      F('blenny', 'Shanny Blenny', 6, 14, 89000, 1, ['sea', 'bottom', 'small'], 1, L('#8a7a5a', '#d8ccb0', '#6a5a3a', .28, { spots: '#4a3a20' })),
+      F('sandeel', 'Sand Eel', 10, 20, 93000, 1, ['sea', 'small'], 1, L('#a8b8c0', '#f0f6f8', '#8a9aa4', .1, { shape: 'eel' })),
+      F('pinfish', 'Pinfish', 10, 20, 98000, 1, ['sea', 'small'], 1, L('#b0b8a0', '#f0f2e8', '#d8c040', .38, { stripes: '#8a9a7a' })),
+      F('pouting', 'Pouting', 15, 35, 99000, 1, ['sea', 'bottom'], 1, L('#b88a5a', '#f0dcc0', '#8a6a40', .38, { stripes: '#8a5a30' })),
+      F('scup', 'Scup', 20, 40, 100000, 1, ['sea'], 1, L('#a8a0a0', '#f0e8e8', '#8a8080', .44)),
+      F('tautog', 'Tautog', 30, 60, 110000, 1, ['sea', 'bottom'], 1, L('#3a3a30', '#8a8a7a', '#2a2a20', .36)),
+      F('scorpionfish', 'Scorpionfish', 20, 40, 160000, 2, ['sea', 'bottom'], 1, L('#a84a3a', '#e8b0a0', '#8a3a2a', .36, { spots: '#e0d0c0', sail: 1 })),
+      F('lumpsucker', 'Lumpsucker', 25, 50, 170000, 2, ['sea', 'bottom'], 1, L('#6a7a5a', '#c8d0b0', '#4a5a3a', .6, { spots: '#8a9a6a' })),
+      F('weakfish', 'Weakfish', 30, 70, 180000, 2, ['sea'], 1, L('#8a9a7a', '#f0f0e0', '#c0a040', .28, { spots: '#5a6a4a' })),
+      F('blackseabass', 'Black Sea Bass', 30, 60, 190000, 2, ['sea', 'bottom'], 1, L('#2a2a30', '#6a6a7a', '#3a3a48', .36, { spots: '#8aa0c0' })),
+      F('bluefish', 'Bluefish', 40, 90, 200000, 2, ['sea', 'predator'], 1, L('#3a6a8a', '#e8f0f4', '#2a4a6a', .28)),
+      F('tilefish', 'Tilefish', 50, 100, 220000, 2, ['sea', 'deep'], 1, L('#7a8aa0', '#f0e8d0', '#e0b040', .28, { spots: '#f0d060' })),
+      F('goosefish', 'Goosefish', 60, 120, 310000, 3, ['sea', 'bottom'], 1, L('#6a5a4a', '#c8b8a0', '#4a3a2a', .5, { whiskers: 1 })),
+      F('cobia', 'Cobia', 80, 160, 350000, 3, ['sea', 'predator'], 1, L('#4a3a30', '#e8e0d0', '#2a2018', .22, { stripes: '#e8e0d0' })),
+      F('ratfish', 'Spotted Ratfish', 40, 90, 410000, 3, ['sea', 'deep'], 6, L('#a08a7a', '#f0e8e0', '#7a6a5a', .24, { spots: '#ffffff' })),
+      F('wreckfish', 'Wreckfish', 80, 180, 450000, 3, ['sea', 'deep'], 6, L('#5a5a4a', '#b8b4a0', '#3a3a2a', .36)),
+      F('wolfeel', 'Wolf Eel', 120, 240, 500000, 3, ['sea', 'bottom', 'predator'], 6, L('#8a8a7a', '#d8d4c4', '#6a6a5a', .1, { shape: 'eel', spots: '#3a3a2a' })),
+      F('brassgrouper', 'Brass Grouper', 100, 200, 620000, 4, ['sea', 'deep', 'rare'], 7, L('#b0803a', '#f0d8a0', '#8a5a20', .42, { spots: '#e0a830', glow: '#ffd080' })),
+      F('sunfish', 'Ocean Sunfish', 180, 330, 750000, 4, ['sea', 'rare'], 7, L('#9aa0a8', '#e8ecf0', '#7a808a', .8)),
+      F('mako', 'Mako Shark', 200, 380, 840000, 4, ['sea', 'predator', 'rare'], 7, L('#3a5a8a', '#f0f2f4', '#2a4a7a', .22)),
+      F('swordfish', 'Swordfish', 200, 450, 930000, 4, ['sea', 'predator', 'rare'], 7, L('#4a4a5a', '#d0d0d8', '#3a3a48', .18)),
+      F('goblinshark', 'Goblin Shark', 250, 400, 1400000, 5, ['sea', 'deep', 'rare'], 7, L('#d8a0a0', '#f8e0e0', '#b88080', .18)),
+      F('wrecksovereign', 'Wreck Sovereign', 150, 350, 4400000, 5, ['sea', 'ember', 'rare'], 7, L('#e0a830', '#fff0c0', '#8a5a20', .36, { stripes: '#c4561c', glow: '#ffd080', whiskers: 1 })),
+    ] },
+  { id: 'tarn', name: 'Glacier Tarn', cost: 1200000000, idle: .52, blurb: 'A blue pool at the foot of the ice, cold enough to keep the oldest fish alive.',
+    sky: ['#a8c8e0', '#eef4f8'], water: ['#5a9ab8', '#1e4a64'], far: '#e8f2f8', near: '#c8d8e2', feature: 'glacier',
+    fish: [
+      F('troutperch', 'Trout-perch', 8, 15, 260000, 1, ['cold', 'small'], 1, L('#c0c8b8', '#f6f8f0', '#a0a898', .28, { spots: '#6a7060' })),
+      F('glaciersmelt', 'Glacier Smelt', 8, 18, 270000, 1, ['cold', 'small'], 1, L('#b8d4e4', '#f8fcff', '#98b4c4', .22, { glow: '#d8f0ff' })),
+      F('deepsculpin', 'Deepwater Sculpin', 8, 18, 290000, 1, ['cold', 'deep', 'bottom'], 1, L('#7a8a90', '#d8e0e2', '#5a6a70', .3, { spots: '#3a4a50' })),
+      F('icefish', 'Icefish', 15, 35, 290000, 1, ['cold', 'small'], 1, L('rgba(220,235,245,.7)', 'rgba(255,255,255,.85)', 'rgba(190,215,230,.6)', .22, { glow: '#e8f6ff' })),
+      F('bluecisco', 'Blue Cisco', 15, 35, 300000, 1, ['cold'], 1, L('#6a90b0', '#eef4f8', '#4a7090', .27)),
+      F('kokanee', 'Kokanee', 20, 40, 310000, 1, ['cold'], 1, L('#8aa0b8', '#f2f4f8', '#d8503a', .28)),
+      F('frostgudgeon', 'Frost Gudgeon', 10, 20, 470000, 2, ['cold', 'bottom'], 1, L('#9ab0c0', '#eef4f8', '#7a90a0', .28, { whiskers: 1 })),
+      F('shortjaw', 'Shortjaw Cisco', 20, 40, 500000, 2, ['cold', 'deep'], 1, L('#a0b0c0', '#f4f8fa', '#80909e', .26)),
+      F('goldentrout', 'Golden Trout', 20, 45, 520000, 2, ['cold', 'predator'], 1, L('#d8a040', '#f8e0a0', '#d8402a', .3, { stripes: '#c4561c' })),
+      F('arcticgrayling', 'Arctic Grayling', 25, 55, 550000, 2, ['cold'], 1, L('#7a7aa0', '#e8e6f0', '#a06aa0', .28, { sail: 1, spots: '#2a2a4a' })),
+      F('dollyvarden', 'Dolly Varden', 30, 70, 600000, 2, ['cold', 'predator'], 1, L('#6a8a8a', '#f0e8e0', '#e0603a', .28, { spots: '#f0a0a0' })),
+      F('bulltrout', 'Bull Trout', 40, 90, 650000, 2, ['cold', 'predator'], 1, L('#6a7a6a', '#f0e0d0', '#d8703a', .28, { spots: '#f0c0a0' })),
+      F('bluegrayling', 'Ice-blue Grayling', 30, 60, 910000, 3, ['cold'], 1, L('#5a8ab0', '#e0f0f8', '#3a6a90', .28, { sail: 1, glow: '#a8e0ff' })),
+      F('tarnchar', 'Tarn Char', 40, 90, 1000000, 3, ['cold', 'predator'], 1, L('#3a5a6a', '#f0a070', '#e0603a', .29, { spots: '#e8f4f8' })),
+      F('siberiantaimen', 'Siberian Taimen', 100, 200, 1200000, 3, ['cold', 'predator'], 7, L('#7a5a5a', '#e8d0c8', '#c84a3a', .24, { spots: '#2a1a1a' })),
+      F('beluga', 'Beluga Sturgeon', 200, 450, 1300000, 3, ['cold', 'deep', 'bottom'], 7, L('#8a9aa6', '#eef2f4', '#6a7a86', .2, { whiskers: 1 })),
+      F('greenlandshark', 'Greenland Shark', 250, 500, 1500000, 3, ['cold', 'deep', 'predator'], 7, L('#4a5056', '#9aa0a6', '#3a4046', .2)),
+      F('snowray', 'Snow Ray', 100, 220, 1800000, 4, ['cold', 'rare'], 8, L('#e8f0f6', '#ffffff', '#b8c8d4', .3, { shape: 'ray', glow: '#f0f8ff' })),
+      F('frostpike', 'Frostfang Pike', 120, 220, 2200000, 4, ['cold', 'predator', 'rare'], 8, L('#a8c8e0', '#f6fbff', '#7aa0c0', .2, { spots: '#ffffff', glow: '#c8eaff' })),
+      F('crystalsturgeon', 'Crystal Sturgeon', 200, 400, 2500000, 4, ['cold', 'deep', 'rare'], 8, L('rgba(200,230,250,.7)', 'rgba(255,255,255,.9)', 'rgba(160,200,230,.6)', .2, { whiskers: 1, glow: '#d8f2ff' })),
+      F('icewyrm', 'Ice Wyrm', 300, 700, 2700000, 4, ['cold', 'deep', 'rare'], 8, L('#c8e0f0', '#ffffff', '#8ab8d8', .08, { shape: 'eel', glow: '#d8f2ff' })),
+      F('ancientchar', 'Ancient Char', 80, 160, 4200000, 5, ['cold', 'rare'], 8, L('#2a4a5a', '#f0c080', '#e06030', .3, { spots: '#d8f0ff', glow: '#ffd8a0' })),
+      F('glacierleviathan', 'Glacier Leviathan', 500, 1200, 13000000, 5, ['cold', 'deep', 'rare'], 8, L('#8ab8d8', '#f0f8ff', '#5a8ab0', .24, { stripes: '#d8f0ff', glow: '#c8eaff' })),
+    ] },
+  { id: 'springs', name: 'Ember Springs', cost: 4500000000, idle: .5, blurb: 'Hot water over glowing stones. The fish here were born in the fire.',
+    sky: ['#2a1612', '#7a3220'], water: ['#d8703a', '#5a1a0a'], far: '#2a1a16', near: '#1e1410', feature: 'springs',
+    fish: [
+      F('hearthtetra', 'Hearth Tetra', 4, 9, 940000, 1, ['ember', 'small'], 1, L('#c4561c', '#ffd8a0', '#f2c230', .34, { glow: '#ffc46b', stripes: '#ffe08a' })),
+      F('sparkfin', 'Sparkfin', 5, 12, 990000, 1, ['ember', 'small'], 1, L('#f2c230', '#fff4c8', '#f08a4b', .34, { glow: '#ffe08a' })),
+      F('cinderfish', 'Cinderfish', 6, 14, 1000000, 1, ['ember', 'small'], 1, L('#3a2a24', '#e0703a', '#c4561c', .3, { glow: '#ffb35c', spots: '#ffc46b' })),
+      F('ashgudgeon', 'Ash Gudgeon', 8, 18, 1100000, 1, ['ember', 'bottom'], 1, L('#6a6460', '#c8c0b8', '#4a4440', .28, { whiskers: 1, spots: '#e0703a' })),
+      F('emberdace', 'Ember Dace', 10, 24, 1100000, 1, ['ember'], 1, L('#e0703a', '#ffe0c0', '#c4561c', .26, { glow: '#ffb35c' })),
+      F('charcoalcarp', 'Charcoal Carp', 25, 50, 1100000, 1, ['ember', 'grazer'], 1, L('#2a2420', '#6a5a50', '#c4561c', .38, { glow: '#ff8a4a', spots: '#e0703a' })),
+      F('blazeshiner', 'Blaze Shiner', 10, 25, 1700000, 2, ['ember'], 1, L('#ffb35c', '#fff4d0', '#f08a4b', .34, { glow: '#ffe08a' })),
+      F('pumicepuffer', 'Pumice Puffer', 15, 30, 1800000, 2, ['ember'], 1, L('#a89888', '#e8e0d4', '#8a7a6a', .6, { spots: '#e0703a' })),
+      F('magmaperch', 'Magma Perch', 15, 35, 1900000, 2, ['ember', 'predator'], 1, L('#8a2a12', '#ffb070', '#e0703a', .36, { stripes: '#2a1008', glow: '#ff8a4a' })),
+      F('kilnbream', 'Kiln Bream', 25, 60, 2000000, 2, ['ember', 'grazer'], 1, L('#b0602a', '#f8d8b0', '#8a4018', .5, { glow: '#ff9a5a' })),
+      F('flametrout', 'Flame Trout', 30, 70, 2200000, 2, ['ember', 'predator'], 1, L('#c4561c', '#ffe0b0', '#f08a4b', .28, { spots: '#ffe08a', glow: '#ffb35c' })),
+      F('smokeeel', 'Smoke Eel', 40, 100, 2400000, 2, ['ember', 'bottom'], 1, L('#5a5450', '#a8a098', '#3a3430', .1, { shape: 'eel', glow: '#ffb35c' })),
+      F('firebarb', 'Firebarb', 20, 40, 3300000, 3, ['ember'], 1, L('#e0402a', '#ffd0b0', '#f2c230', .32, { glow: '#ff8a4a', stripes: '#f2c230' })),
+      F('sunkoi', 'Sun Koi', 40, 90, 3800000, 3, ['ember'], 1, L('#ffc46b', '#fffaf0', '#f08a4b', .34, { spots: '#c4561c', glow: '#ffe08a', whiskers: 1 })),
+      F('obsidianpike', 'Obsidian Pike', 80, 160, 4300000, 3, ['ember', 'predator'], 7, L('#1a1614', '#5a4a44', '#c4561c', .2, { spots: '#ff8a4a', glow: '#ff6a2a' })),
+      F('scaldcat', 'Scald Catfish', 80, 180, 4800000, 3, ['ember', 'bottom'], 7, L('#6a2a1a', '#e09060', '#4a1a0a', .24, { whiskers: 1, glow: '#ff8a4a' })),
+      F('lavaray', 'Lava Ray', 80, 180, 5300000, 3, ['ember'], 7, L('#3a1a10', '#ff8a4a', '#c4561c', .3, { shape: 'ray', glow: '#ff6a2a' })),
+      F('salamanderfish', 'Salamander Fish', 40, 80, 6600000, 4, ['ember', 'rare'], 8, L('#1a1a1a', '#f2c230', '#e0402a', .24, { spots: '#f2c230', glow: '#ffd080' })),
+      F('phoenixfin', 'Phoenix Fin', 60, 120, 8000000, 4, ['ember', 'rare'], 8, L('#e0402a', '#ffe0a0', '#f2c230', .3, { sail: 1, glow: '#ffb35c', stripes: '#ffe08a' })),
+      F('forgesturgeon', 'Forge Sturgeon', 200, 450, 8900000, 4, ['ember', 'bottom', 'rare'], 8, L('#4a3a30', '#e0a070', '#c4561c', .2, { whiskers: 1, stripes: '#ff8a4a', glow: '#ff9a5a' })),
+      F('cinderwyrm', 'Cinder Wyrm', 300, 800, 9900000, 4, ['ember', 'rare'], 8, L('#2a1410', '#ff8a4a', '#c4561c', .08, { shape: 'eel', glow: '#ff6a2a', spots: '#ffc46b' })),
+      F('heartflame', 'Heartflame Koi', 80, 160, 15000000, 5, ['ember', 'rare'], 8, L('#fff4d0', '#ffffff', '#e0402a', .36, { spots: '#e0402a', glow: '#ffd080', whiskers: 1 })),
+      F('firedrake', 'Fire Drake', 600, 1500, 47000000, 5, ['ember', 'rare'], 8, L('#8a1a0a', '#ffc46b', '#f2c230', .22, { stripes: '#ffe08a', glow: '#ff8a4a', sail: 1 })),
+    ] },
 ];
 // Keep each water's list in rarity order, then by value, so the collection reads common to legendary.
 PONDS.forEach(p => p.fish.sort((a, b) => a.r - b.r || a.base - b.base));
 const FISH = {};
 PONDS.forEach(p => p.fish.forEach(f => { f.pond = p.id; f.w = RARITY_W[f.r - 1]; f.rf = (f.r - 1) / 4; FISH[f.id] = f; }));
 
-// The map. Real waters plus spots for future ones; the angler walks the path in this order.
+// The map, in the order the angler walks the path: three rows that wind up from Millpond.
 const MAP = [
-  { id: 'mill', x: 12, y: 80 },
-  { id: 'birch', x: 32, y: 74 },
-  { id: 'river', x: 52, y: 82, soon: 'Misty River' },
-  { id: 'fjord', x: 76, y: 76 },
-  { id: 'frozen', x: 86, y: 47 },
-  { id: 'marsh', x: 64, y: 50, soon: 'Mangrove Marsh' },
-  { id: 'aurora', x: 40, y: 46 },
-  { id: 'lagoon', x: 15, y: 40, soon: 'Coral Lagoon' },
-  { id: 'springs', x: 26, y: 14, soon: 'Ember Springs' },
-  { id: 'harbor', x: 55, y: 15, soon: 'Sunken Harbor' },
-  { id: 'tarn', x: 82, y: 16, soon: 'Glacier Tarn' },
+  { id: 'mill', x: 10, y: 84 },
+  { id: 'birch', x: 31, y: 78 },
+  { id: 'fjord', x: 53, y: 85 },
+  { id: 'frozen', x: 80, y: 80 },
+  { id: 'aurora', x: 87, y: 54 },
+  { id: 'river', x: 62, y: 53 },
+  { id: 'marsh', x: 38, y: 48 },
+  { id: 'lagoon', x: 13, y: 46 },
+  { id: 'harbor', x: 19, y: 22 },
+  { id: 'tarn', x: 48, y: 20 },
+  { id: 'springs', x: 78, y: 28 },
 ];
 
 const RODS = [
@@ -171,15 +333,18 @@ const RODS = [
   { id: 'carbon', name: 'Carbon Rod', tier: 3, cost: 12000, luck: .7, size: .3, zone: .05, speed: .85, color: '#2a2a2a', desc: 'Light and stiff. Strong enough for catfish, halibut and taimen.' },
   { id: 'ember', name: 'Ember Rod', tier: 4, cost: 150000, luck: 1.2, size: .5, zone: .07, speed: .78, color: '#c4561c', desc: 'Warm to the touch. Ice Pike, Frost Eels and Oarfish will bite.' },
   { id: 'auroraRod', name: 'Aurora Rod', tier: 5, cost: 750000, luck: 2, size: .8, zone: .09, speed: .7, color: '#7ff0c8', desc: 'Hums faintly at night. Needed for the giants of Aurora Deep.' },
+  { id: 'mistwood', name: 'Mistwood Rod', tier: 6, cost: 30000000, luck: 2.4, size: 1, zone: .1, speed: .64, color: '#9ab0a8', desc: 'Grown in the river fog. Lands Golden Dorado, Arapaima and the giants of the marsh.' },
+  { id: 'coralRod', name: 'Coral Rod', tier: 7, cost: 350000000, luck: 2.8, size: 1.2, zone: .11, speed: .58, color: '#f08aa0', desc: 'Pink and harder than steel. Manta rays, sailfish and the harbor sharks will bite.' },
+  { id: 'hearthRod', name: 'Hearthfire Rod', tier: 8, cost: 4500000000, luck: 3.2, size: 1.4, zone: .12, speed: .52, color: '#ffb35c', desc: 'Still warm from the forge. Needed for the oldest fish of Glacier Tarn and Ember Springs.' },
 ];
 const ROD = Object.fromEntries(RODS.map(r => [r.id, r]));
 
 const UPGRADES = [
-  { id: 'line', name: 'Braided line', desc: 'Slightly bigger fish on every rod, idle ones too.', base: 80, grow: 1.7, max: 20 },
-  { id: 'reel', name: 'Quick reel', desc: 'Bites come 3% faster per level. Idle rods tick faster too, down to each water\'s fastest pace.', base: 120, grow: 1.75, max: 20 },
-  { id: 'luck', name: 'Lucky hooks', desc: 'Rarer fish and more stars.', base: 150, grow: 1.8, max: 20 },
+  { id: 'line', name: 'Braided line', desc: 'Slightly bigger fish on every rod, idle ones too.', base: 80, grow: 1.7, max: 30 },
+  { id: 'reel', name: 'Quick reel', desc: 'Bites come 3% faster per level. Idle rods tick faster too, down to each water\'s fastest pace.', base: 120, grow: 1.75, max: 30 },
+  { id: 'luck', name: 'Lucky hooks', desc: 'Rarer fish and more stars.', base: 150, grow: 1.8, max: 30 },
   { id: 'hook', name: 'Wide hook gap', desc: 'A slightly bigger green zone when you hook by hand.', base: 100, grow: 2.0, max: 10 },
-  { id: 'market', name: 'Fishmonger friend', desc: 'Every fish sells for 4% more per level.', base: 200, grow: 1.75, max: 20 },
+  { id: 'market', name: 'Fishmonger friend', desc: 'Every fish sells for 4% more per level.', base: 200, grow: 1.75, max: 30 },
   { id: 'nets', name: 'Bigger keep nets', desc: 'Each idle rod holds 1 more fish, up to 20.', base: 600, grow: 2.6, max: 10 },
 ];
 
@@ -189,13 +354,12 @@ const BAITS = [
   { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
   { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
   { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
-  { id: 'emberfly', name: 'Ember fly', cost: 120000, pack: 20, desc: 'Ember fish rise to it. Luckiest and biggest bait.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  { id: 'emberfly', name: 'Ember fly', cost: 10000, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  // These three show up once their water is unlocked.
+  { id: 'crayfish', name: 'Crayfish', cost: 3000, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
+  { id: 'squid', name: 'Squid strips', cost: 6000, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
+  { id: 'larvae', name: 'Golden larvae', cost: 12000, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
 ];
-// Fish are worth 4-5x more at each water but bait helps by the same share everywhere, so bait gets
-// pricier once the later waters open (by the furthest one unlocked, so it can't be bought cheap and
-// carried there). Ember fly is only for Aurora Deep and is priced for it already.
-const BAIT_PRICE_MUL = [1, 1, 1, 2.5, 12];
-const baitCost = b => b.id === 'emberfly' ? b.cost : Math.round(b.cost * BAIT_PRICE_MUL[Math.max(...S.ponds.map(pondIdx))]);
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
 
 const HATS = [
@@ -220,6 +384,12 @@ const HATS = [
   { id: 'anchorcap', name: 'Fjord Anchor Beanie', r: 5, area: 'fjord' },
   { id: 'ushanka', name: 'Frost Ushanka', r: 5, area: 'frozen' },
   { id: 'aurorahalo', name: 'Aurora Halo', r: 5, area: 'aurora' },
+  { id: 'heroncap', name: 'Heron Feather Cap', r: 5, area: 'river' },
+  { id: 'pithhelmet', name: 'Pith Helmet', r: 5, area: 'marsh' },
+  { id: 'coralcrown', name: 'Coral Crown', r: 5, area: 'lagoon' },
+  { id: 'divinghelmet', name: 'Brass Diving Helmet', r: 5, area: 'harbor' },
+  { id: 'icecrown', name: 'Glacier Crown', r: 5, area: 'tarn' },
+  { id: 'phoenixcrest', name: 'Phoenix Crest', r: 5, area: 'springs' },
 ];
 const HAT = Object.fromEntries(HATS.map(h => [h.id, h]));
 const SLOT_COSTS = [150, 1200, 8000, 50000, 250000, 1200000];
@@ -283,7 +453,7 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 function fmt(n) {
   n = Math.floor(n);
   if (n < 10000) return n.toLocaleString('en-US');
-  for (const [v, s] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) return (n / v).toFixed(n / v < 100 ? 1 : 0).replace(/\.0$/, '') + s;
+  for (const [v, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) return (n / v).toFixed(n / v < 100 ? 1 : 0).replace(/\.0$/, '') + s;
   return String(n);
 }
 const cm = s => (s < 20 ? s.toFixed(1) : Math.round(s)) + ' cm';
@@ -303,9 +473,12 @@ const rod = () => ROD[S.rod];
 const upCost = u => Math.round(u.base * Math.pow(u.grow, S.up[u.id]));
 const reelF = () => Math.pow(.97, S.up.reel);
 const netCap = () => 10 + S.up.nets;
-// Each water has its own pace: the fastest bite is 3 min at Millpond and 1.5 min slower per water after it.
-// A new holder starts at 10/3 of that floor (10 min at Millpond, 30 min at Aurora Deep).
-const idleFloor = pid => IDLE_FLOOR + pondIdx(pid) * 90000;
+// How hard a water is. The first five step up by one each; the waters after Aurora Deep by half, so
+// the hook bar and idle pace stay playable while the fish keep getting more valuable.
+const pondStep = pid => { const i = pondIdx(pid); return i <= 4 ? i : 4 + (i - 4) * .5; };
+// Each water has its own pace: the fastest bite is 3 min at Millpond and 1.5 min slower per step after it.
+// A new holder starts at 10/3 of that floor (10 min at Millpond, 30 min at Aurora Deep, 40 at Ember Springs).
+const idleFloor = pid => IDLE_FLOOR + pondStep(pid) * 90000;
 const slotInterval = sl => { const fl = idleFloor(sl.pond); return Math.max(fl, fl * 10 / 3 * Math.pow(.85, sl.lvl - 1) * reelF()); };
 const slotLvlCost = (sl, i) => Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8));
 const pondDone = pid => pondOf(pid).fish.every(f => S.coll[f.id]);
@@ -358,6 +531,36 @@ function expectedLand(sl) {
   const l = pool(sl.pond), ws = fishWeights(l, idleOpts(sl)), tot = ws.reduce((a, b) => a + b, 0);
   return l.reduce((a, f, i) => a + ws[i] / tot * landChance(sl, f), 0);
 }
+
+// ---------- bait prices ----------
+// Fish are worth several times more at each water but a bait helps by about the same share
+// everywhere, so its price follows the furthest water you've unlocked (so it can't be bought cheap
+// and carried there). At that water, a typical player there (its rod, upgrades around level 10)
+// earns back about 1.5x a pack's price on average. Most of that comes from the odd rare fish, so
+// roughly half of all packs still lose money. A pack never costs less than the bait's listed cost.
+const REF_TIER = [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8];
+const BAIT_PAYBACK = 1.5;
+function refCatchValue(i, b) {
+  const tier = REF_TIER[i], r = RODS.find(x => x.tier === tier), opts = { luck: r.luck + .5 + b.luck, size: r.size + .3 + b.size, likes: b.likes };
+  const l = PONDS[i].fish.filter(f => (f.rod || 1) <= tier), ws = fishWeights(l, opts), W = ws.reduce((a, c) => a + c, 0);
+  // Expected (.5 + t) with giants at 3x, where t = U^(1/k); and the expected star multiplier.
+  const k = 1 + opts.size, pg = 1 - Math.pow(.98, k), size = .5 + k / (k + 1) + 2 * pg * (.5 + k / (k + 1) * (1 - Math.pow(.98, k + 1)) / pg);
+  const sw = [50, 28, 14, 6, 2].map((x, j) => x * Math.exp(opts.luck * .3 * j)), SW = sw.reduce((a, c) => a + c, 0);
+  return l.reduce((a, f, j) => a + ws[j] / W * f.base, 0) * size * sw.reduce((a, w, j) => a + w / SW * STAR_MUL[j], 0);
+}
+const roundPrice = x => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 1)); return Math.round(x / p) * p; };
+const baitPrices = {};
+/** A pack's price once water i is the furthest you've opened. Never cheaper than at an earlier water. */
+function baitPriceAt(b, i) {
+  const key = b.id + i;
+  if (!(key in baitPrices)) {
+    const fair = (refCatchValue(i, b) - refCatchValue(i, BAIT.worms)) * b.pack / BAIT_PAYBACK;
+    baitPrices[key] = Math.max(i ? baitPriceAt(b, i - 1) : 0, roundPrice(Math.max(b.cost, fair)));
+  }
+  return baitPrices[key];
+}
+const baitCost = b => b.cost ? baitPriceAt(b, Math.max(...S.ponds.map(pondIdx))) : 0;
+const baitShown = b => !b.from || S.ponds.includes(b.from);
 
 // ---------- recording catches ----------
 // Big moments go to the fireside chat as your own message. Idle nets can land a lot at once,
@@ -429,14 +632,14 @@ function checkAreaHat(pid) {
   addRecent({ chest: true, hat: h.id, area: true });
   post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}.`, true);
 }
-const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000];
+const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000, 25000, 60000, 150000, 400000, 1000000];
 function openChest() {
   S.stats.chests++;
   if (S.stats.chests === 1) S.hatsNew = true;
   const pi = pondIdx(S.pond);
   const left = HATS.filter(h => !h.area && !S.hats.includes(h.id));
   if (!left.length) {
-    const coins = Math.round(300 * Math.pow(6, pi));
+    const coins = Math.round(300 * Math.pow(6, Math.min(pi, 4)) * Math.pow(3.6, Math.max(0, pi - 4)));
     S.coins += coins; S.stats.earned += coins;
     addRecent({ chest: true, coins });
     post(`Pulled up a treasure chest full of coins: ${fmt(coins)}.`, true);
@@ -444,7 +647,7 @@ function openChest() {
   }
   const ws = left.map(h => [40, 30, 18, 9, 3][h.r - 1] * (1 + pi * (h.r - 1) * .4));
   const h = pick(left, ws);
-  // Gold comes with the hat, more at each water (the last is for the next water to open).
+  // Gold comes with the hat, more at each water.
   const coins = CHEST_GOLD[Math.min(pi, CHEST_GOLD.length - 1)];
   S.hats.push(h.id); S.coins += coins; S.stats.earned += coins;
   addRecent({ chest: true, hat: h.id, coins });
@@ -592,6 +795,47 @@ function drawHat(c, id, x, y, r, T) {
       c.strokeStyle = `rgba(127,240,200,${.75 + .25 * g})`; c.lineWidth = r * .22;
       c.beginPath(); c.ellipse(x, y - r * 1.45, r * .95, r * .28, 0, 0, 7); c.stroke();
       c.strokeStyle = 'rgba(255,196,107,.8)'; c.lineWidth = r * .08; c.stroke();
+      break; }
+    case 'heroncap':
+      blob(c, '#7f8c86', () => c.arc(x, y - r * .3, r * .98, Math.PI, 0));
+      blob(c, '#66726c', () => c.ellipse(x + r * 1.05, y - r * .32, r * .7, r * .15, 0, 0, 7));
+      // a long grey heron feather tucked in the band
+      blob(c, '#dfe4e2', () => { c.moveTo(x - r * .5, y - r * .7); c.quadraticCurveTo(x - r * 1.3, y - r * 1.8, x - r * 1.1, y - r * 2.5); c.quadraticCurveTo(x - r * .7, y - r * 1.6, x - r * .3, y - r * .75); });
+      c.strokeStyle = '#4a5450'; c.lineWidth = r * .06; c.beginPath(); c.moveTo(x - r * .4, y - r * .72); c.quadraticCurveTo(x - r * 1, y - r * 1.7, x - r * 1.1, y - r * 2.45); c.stroke();
+      break;
+    case 'pithhelmet':
+      blob(c, '#d8c9a0', () => c.ellipse(x, y - r * .35, r * 1.5, r * .3, 0, 0, 7));
+      blob(c, '#e6d8b0', () => c.ellipse(x, y - r * .55, r * 1.05, r * .95, 0, Math.PI, 0));
+      blob(c, '#5a6a3a', () => c.rect(x - r * 1.03, y - r * .7, r * 2.06, r * .2));
+      blob(c, '#c8b88e', () => c.arc(x, y - r * 1.5, r * .12, 0, 7));
+      break;
+    case 'coralcrown':
+      blob(c, '#f2c8b0', () => c.rect(x - r * .95, y - r * .7, r * 1.9, r * .3));
+      c.strokeStyle = '#f07a8a'; c.lineWidth = r * .2; c.lineCap = 'round';
+      [[-.65, -.3], [0, 0], [.65, .3]].forEach(([dx, lean]) => { c.beginPath(); c.moveTo(x + r * dx, y - r * .7); c.lineTo(x + r * (dx + lean * .3), y - r * 1.6); c.moveTo(x + r * (dx + lean * .15), y - r * 1.15); c.lineTo(x + r * (dx + .3), y - r * 1.45); c.moveTo(x + r * (dx + lean * .15), y - r * 1.05); c.lineTo(x + r * (dx - .28), y - r * 1.35); c.stroke(); });
+      blob(c, '#fff4ee', () => c.arc(x, y - r * .55, r * .13, 0, 7));
+      break;
+    case 'divinghelmet':
+      blob(c, '#b8862e', () => c.arc(x, y - r * .3, r * 1.2, Math.PI * .9, Math.PI * 2.1));
+      blob(c, '#d8a84a', () => c.arc(x - r * .2, y - r * .7, r * .6, Math.PI, Math.PI * 1.5));
+      c.fillStyle = 'rgba(160,210,230,.85)'; c.strokeStyle = '#8a6420'; c.lineWidth = r * .14;
+      c.beginPath(); c.arc(x + r * .45, y - r * .5, r * .36, 0, 7); c.fill(); c.stroke();
+      blob(c, '#8a6420', () => c.rect(x - r * 1.25, y - r * .3, r * 2.5, r * .22));
+      break;
+    case 'icecrown':
+      c.shadowColor = '#c8eaff'; c.shadowBlur = r * .5;
+      blob(c, '#dff2ff', () => { c.moveTo(x - r * .95, y - r * .45); [[-.8, 1.4], [-.45, .95], [-.2, 1.9], [.15, 1], [.45, 1.6], [.75, 1], [.95, 1.3]].forEach(([dx, h]) => c.lineTo(x + r * dx, y - r * h)); c.lineTo(x + r * .95, y - r * .45); c.closePath(); });
+      c.shadowBlur = 0;
+      c.strokeStyle = 'rgba(120,180,220,.8)'; c.lineWidth = r * .06; c.beginPath(); c.moveTo(x - r * .2, y - r * .5); c.lineTo(x - r * .2, y - r * 1.7); c.moveTo(x + r * .45, y - r * .5); c.lineTo(x + r * .45, y - r * 1.4); c.stroke();
+      blob(c, '#9fd0f0', () => c.rect(x - r * .97, y - r * .6, r * 1.94, r * .2));
+      break;
+    case 'phoenixcrest': {
+      const fl = Math.sin((T || 0) * 7) * r * .1;
+      c.shadowColor = '#ffb35c'; c.shadowBlur = r * .9;
+      [['#e0402a', 2.3, -.5], ['#f08a4b', 2, -.15], ['#ffc46b', 1.6, .2]].forEach(([col, h, dx]) => blob(c, col, () => { c.moveTo(x + r * (dx + .5), y - r * .55); c.quadraticCurveTo(x + r * (dx - .6), y - r * h * .6, x + r * (dx - 1) + fl, y - r * h); c.quadraticCurveTo(x + r * (dx - .1), y - r * h * .75, x + r * (dx + .9), y - r * .55); }));
+      c.shadowBlur = 0;
+      blob(c, '#8a2a12', () => c.rect(x - r * .95, y - r * .65, r * 1.9, r * .22));
+      blob(c, '#ffe08a', () => c.arc(x, y - r * .54, r * .11, 0, 7));
       break; }
     case 'flamecrown': {
       const fl = Math.sin((T || 0) * 9) * r * .12;
@@ -762,7 +1006,7 @@ function startBite() {
   G.fish = rollFish(S.pond, G.opts);
   // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
   // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
-  const r = rod(), pi = pondIdx(S.pond), rf = G.fish.rf;
+  const r = rod(), pi = pondStep(S.pond), rf = G.fish.rf;
   const w = Math.max(.06, (.2 + r.zone + .0125 * S.up.hook) * (1 - .05 * pi) * (1 - .4 * rf));
   const c = w / 2 + Math.random() * (1 - w);
   G.zone = [c - w / 2, c + w / 2];
@@ -920,13 +1164,12 @@ function drawMap(now) {
   const T = now / 1000, c = ctx;
   c.setTransform(dpr, 0, 0, dpr, 0, 0);
   const g = c.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#c9d0a0'); g.addColorStop(1, '#b7c288'); c.fillStyle = g; c.fillRect(0, 0, W, H);
-  // biomes: snowy north-east, sea in the south-east, dark crater in the middle
-  c.fillStyle = 'rgba(255,255,255,.55)'; c.beginPath(); c.ellipse(W * .9, H * .2, W * .22, H * .35, 0, 0, 7); c.fill();
-  c.fillStyle = '#5f8494'; c.beginPath(); c.moveTo(W, H * .6); c.quadraticCurveTo(W * .82, H * .72, W * .88, H); c.lineTo(W, H); c.fill();
-  c.fillStyle = 'rgba(30,40,60,.25)'; c.beginPath(); c.ellipse(W * .4, H * .44, W * .12, H * .14, 0, 0, 7); c.fill();
-  c.fillStyle = 'rgba(240,138,75,.18)'; c.beginPath(); c.ellipse(W * .27, H * .12, W * .12, H * .12, 0, 0, 7); c.fill();
-  // mountains near the frozen lake and fjord
-  [[.7, .36], [.77, .3], [.94, .3], [.96, .56]].forEach(([mx, my]) => {
+  // ground around each water: snow, sea, a dark crater, mangrove swamp, a reef, an ember glow...
+  const BIOME = { cliffs: ['#5f8494', 1.8], ice: ['rgba(255,255,255,.6)', 2], aurora: ['rgba(30,40,60,.28)', 1.7], mist: ['rgba(240,244,240,.55)', 1.9], mangrove: ['rgba(60,80,40,.35)', 1.9], coral: ['#e8d8a8', 1.9], harbor: ['#55707c', 1.9], glacier: ['rgba(255,255,255,.65)', 2.1], springs: ['rgba(240,138,75,.3)', 1.9] };
+  const Rb = Math.min(W, H) * .075;
+  MAP.forEach(n => { const p = pondOf(n.id), bi = p && BIOME[p.feature]; if (!bi) return; c.fillStyle = bi[0]; c.beginPath(); c.ellipse(n.x / 100 * W, n.y / 100 * H, Rb * bi[1] * 1.15, Rb * bi[1] * .75, 0, 0, 7); c.fill(); });
+  // mountains by the frozen lake and the glacier
+  [[.93, .72], [.69, .74], [.97, .86], [.37, .2], [.6, .17]].forEach(([mx, my]) => {
     c.fillStyle = '#8a8f8a'; c.beginPath(); c.moveTo(W * mx - H * .07, H * my); c.lineTo(W * mx, H * my - H * .1); c.lineTo(W * mx + H * .07, H * my); c.fill();
     c.fillStyle = '#fbf8f0'; c.beginPath(); c.moveTo(W * mx - H * .025, H * my - H * .064); c.lineTo(W * mx, H * my - H * .1); c.lineTo(W * mx + H * .025, H * my - H * .064); c.fill();
   });
@@ -934,7 +1177,6 @@ function drawMap(now) {
   trees.forEach(([tx, ty, k]) => {
     const x = tx * W, y = ty * H;
     if (MAP.some(n => Math.hypot(n.x / 100 * W - x, n.y / 100 * H - y) < H * .13)) return;
-    if (x > W * .82 && y > H * .6) return;
     c.fillStyle = ['#5d7a3e', '#4b6a33', '#6e8a48'][k]; c.beginPath(); c.moveTo(x, y - H * .035); c.lineTo(x - H * .018, y); c.lineTo(x + H * .018, y); c.fill();
   });
   // path
@@ -982,6 +1224,42 @@ function hills(y, amp, col, seed, n) {
   for (let i = 0; i <= 40; i++) { const x = i / 40; ctx.lineTo(x * W, y * H - amp * H * (Math.sin(x * n + seed) * .5 + Math.sin(x * n * 2.3 + seed * 2) * .3 + .5)); }
   ctx.lineTo(W, H); ctx.fill();
 }
+/** A mangrove: a round crown on a short trunk, standing on arched roots. s is the scale. */
+function mangrove(x, y, s, col) {
+  ctx.strokeStyle = col; ctx.lineWidth = Math.max(1.5, 4 * s); ctx.lineCap = 'round';
+  for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(x, y - 30 * s); ctx.quadraticCurveTo(x + i * 9 * s, y - 26 * s, x + i * 12 * s, y); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(x, y - 28 * s); ctx.lineTo(x, y - 50 * s); ctx.stroke();
+  ctx.fillStyle = col; [[0, -62, 22], [-16, -54, 15], [16, -55, 16]].forEach(([dx, dy, r]) => { ctx.beginPath(); ctx.arc(x + dx * s, y + dy * s, r * s, 0, 7); ctx.fill(); });
+}
+/** A leaning palm with fronds that sway a little. */
+function palm(x, y, s, T) {
+  const top = { x: x - 18 * s, y: y - 80 * s }, sway = reduce ? 0 : Math.sin(T * .8) * 2 * s;
+  ctx.strokeStyle = '#8a6a42'; ctx.lineWidth = Math.max(2, 5 * s); ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x - 2 * s, y - 50 * s, top.x, top.y); ctx.stroke();
+  ctx.strokeStyle = '#3f7a3a'; ctx.lineWidth = Math.max(2, 4 * s);
+  [-2.6, -1.9, -1.2, -.5, .2].forEach(a => { ctx.beginPath(); ctx.moveTo(top.x, top.y); ctx.quadraticCurveTo(top.x + Math.cos(a) * 22 * s, top.y + Math.sin(a) * 18 * s - 6 * s, top.x + Math.cos(a) * 34 * s + sway, top.y + Math.sin(a) * 12 * s + 14 * s); ctx.stroke(); });
+}
+/** What sits in or on the water at the later waters: reef, wreck, ice floes, steam, fog. */
+function waterExtras(feature, T, wy) {
+  if (feature === 'coral') {
+    const cols = ['rgba(240,120,150,.4)', 'rgba(250,170,80,.4)', 'rgba(170,110,220,.35)', 'rgba(250,230,120,.35)'];
+    for (let i = 0; i < 16; i++) { ctx.fillStyle = cols[i % 4]; ctx.beginPath(); ctx.ellipse((i * 67 % 100) / 100 * W, H * (.72 + (i * 13 % 7) / 28), W * (.03 + (i % 3) * .015), H * (.02 + (i % 2) * .015), 0, 0, 7); ctx.fill(); }
+  } else if (feature === 'harbor') {
+    // a sunken ship: the hull just breaking the surface and two leaning masts
+    ctx.fillStyle = '#2a2420'; ctx.beginPath(); ctx.moveTo(W * .52, wy + H * .08); ctx.quadraticCurveTo(W * .66, wy + H * .03, W * .82, wy + H * .06); ctx.lineTo(W * .8, wy + H * .09); ctx.lineTo(W * .54, wy + H * .1); ctx.fill();
+    ctx.strokeStyle = '#2a2420'; ctx.lineWidth = 4;
+    [[.6, -.12], [.72, .1]].forEach(([x, lean]) => { const bx = W * x, by = wy + H * .07, tx = bx + lean * H, ty = by - H * .36; ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(tx, ty); ctx.stroke(); ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(bx + (tx - bx) * .7 - W * .04, by + (ty - by) * .7); ctx.lineTo(bx + (tx - bx) * .7 + W * .04, by + (ty - by) * .7 + 4); ctx.stroke(); ctx.lineWidth = 4; });
+  } else if (feature === 'glacier') {
+    for (let i = 0; i < 6; i++) { const x = W * (.35 + (i * 37 % 60) / 100), y = wy + H * (.03 + (i * 11 % 5) / 40), bob = reduce ? 0 : Math.sin(T + i) * 1.5, w = W * (.025 + (i % 3) * .015);
+      ctx.fillStyle = '#f6fbff'; ctx.beginPath(); ctx.moveTo(x - w, y + bob); ctx.lineTo(x - w * .5, y - w * .5 + bob); ctx.lineTo(x + w * .4, y - w * .35 + bob); ctx.lineTo(x + w, y + bob); ctx.fill();
+      ctx.fillStyle = 'rgba(120,170,200,.35)'; ctx.fillRect(x - w, y + bob, w * 2, 2); }
+  } else if (feature === 'springs') {
+    for (let i = 0; i < 10; i++) { const k = ((T * .15 + i / 10) % 1), x = W * ((i * 43 % 100) / 100) + Math.sin(T + i) * 8, y = wy + H * .2 - k * H * .3; ctx.fillStyle = `rgba(255,240,230,${.18 * (1 - k)})`; ctx.beginPath(); ctx.arc(x, y, H * (.02 + k * .04), 0, 7); ctx.fill(); }
+    for (let i = 0; i < 14; i++) { const k = ((T * .25 + i / 14) % 1), x = W * ((i * 61 % 100) / 100) + Math.sin(T * 2 + i) * 10; ctx.fillStyle = `rgba(255,${150 + i % 3 * 30},60,${1 - k})`; ctx.fillRect(x, H * (.9 - k * .8), 2, 2); }
+  } else if (feature === 'mist') {
+    for (let i = 0; i < 5; i++) { const x = ((i * .31 + T * .012 * (i % 2 ? 1 : -1)) % 1.4 + 1.4) % 1.4 - .2; ctx.fillStyle = 'rgba(244,246,242,.3)'; ctx.beginPath(); ctx.ellipse(x * W, wy + H * (-.01 + i * .045), W * .35, H * .035, 0, 0, 7); ctx.fill(); }
+  }
+}
 function drawScene(now) {
   const p = pondOf(S.pond), T = now / 1000, horizon = .46;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -995,12 +1273,41 @@ function drawScene(now) {
       ctx.strokeStyle = b === 1 ? 'rgba(255,170,100,.25)' : 'rgba(110,240,190,.28)'; ctx.lineWidth = H * .05; ctx.stroke();
     }
     ctx.fillStyle = '#f3ead6'; ctx.beginPath(); ctx.arc(W * .8, H * .13, H * .04, 0, 7); ctx.fill();
+  } else if (p.feature === 'springs') {
+    // no sun here, just a red glow behind the hills
+    g = ctx.createRadialGradient(W * .5, H * horizon, 0, W * .5, H * horizon, W * .6); g.addColorStop(0, 'rgba(255,140,60,.5)'); g.addColorStop(1, 'rgba(255,140,60,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H * horizon + 2);
   } else {
-    ctx.fillStyle = 'rgba(255,240,200,.85)'; ctx.beginPath(); ctx.arc(W * .74, H * (horizon - .05), H * .07, 0, 7); ctx.fill();
+    ctx.fillStyle = p.feature === 'mist' ? 'rgba(255,252,244,.7)' : p.feature === 'harbor' ? 'rgba(255,200,150,.85)' : 'rgba(255,240,200,.85)';
+    ctx.beginPath(); ctx.arc(W * .74, H * (horizon - .05), H * .07, 0, 7); ctx.fill();
   }
   if (p.feature === 'cliffs') { hills(horizon + .01, .32, p.far, 1, 4); }
   else if (p.feature === 'ice') { hills(horizon + .01, .1, p.far, 2, 3); }
-  else hills(horizon + .01, .1, p.far, 3, 6);
+  else if (p.feature === 'glacier') { hills(horizon + .01, .4, '#dfeaf2', 2, 5); hills(horizon + .01, .24, '#c6d9e6', 5, 7); }
+  else if (p.feature === 'springs') {
+    hills(horizon + .01, .26, p.far, 1, 5);
+    ctx.strokeStyle = `rgba(255,120,40,${.5 + .2 * Math.sin(T * 2)})`; ctx.lineWidth = 2;
+    for (let i = 0; i < 7; i++) { const x = (i * 29 % 100) / 100 * W; ctx.beginPath(); ctx.moveTo(x, H * (horizon - .02)); ctx.lineTo(x + 6, H * (horizon - .08 - (i % 3) * .03)); ctx.lineTo(x + 2, H * (horizon - .14 - (i % 3) * .03)); ctx.stroke(); }
+  }
+  else if (p.feature === 'coral') {
+    hills(horizon + .005, .02, '#bfe6e8', 1, 3);
+    ctx.fillStyle = '#e8d8a8'; ctx.beginPath(); ctx.ellipse(W * .3, H * horizon, W * .17, H * .03, 0, Math.PI, 0); ctx.fill();
+    ctx.fillStyle = p.far; ctx.beginPath(); ctx.ellipse(W * .3, H * horizon, W * .12, H * .05, 0, Math.PI, 0); ctx.fill();
+    palm(W * .26, H * horizon - H * .02, H * .0016, T); palm(W * .34, H * horizon - H * .03, H * .002, T + 1);
+  }
+  else hills(horizon + .01, p.feature === 'mangrove' ? .05 : .1, p.far, 3, 6);
+  if (p.feature === 'mist') {
+    ctx.fillStyle = '#6f7d73';
+    for (let i = 0; i < 26; i++) { const x = (i * 41 % 100) / 100 * W, h = H * (.06 + (i * 7 % 5) / 60), y = H * (horizon + .01); ctx.beginPath(); ctx.moveTo(x - h * .3, y); ctx.lineTo(x, y - h); ctx.lineTo(x + h * .3, y); ctx.fill(); }
+  }
+  if (p.feature === 'mangrove') for (let i = 0; i < 7; i++) mangrove(W * ((i * 37 % 100) / 100), H * (horizon + .01), H * .0011 * (1 + (i % 3) * .2), '#3e4a2a');
+  if (p.feature === 'harbor') {
+    // the old town across the water: roofs and a lighthouse
+    ctx.fillStyle = '#3c3f48';
+    for (let i = 0; i < 9; i++) { const x = W * (.05 + i * .1), w = W * .07, h = H * (.04 + (i * 7 % 4) * .015), y = H * (horizon + .01); ctx.fillRect(x, y - h, w, h); ctx.beginPath(); ctx.moveTo(x - 2, y - h); ctx.lineTo(x + w / 2, y - h - H * .025); ctx.lineTo(x + w + 2, y - h); ctx.fill(); }
+    ctx.fillStyle = '#e9e2d4'; ctx.fillRect(W * .9, H * (horizon - .16), W * .02, H * .17);
+    ctx.fillStyle = `rgba(255,220,140,${.5 + .5 * Math.max(0, Math.sin(T * 1.5))})`; ctx.beginPath(); ctx.arc(W * .91, H * (horizon - .17), H * .015, 0, 7); ctx.fill();
+  }
   if (p.feature === 'birches') {
     for (let i = 0; i < 16; i++) { const x = (i * 71 % 100) / 100 * W, h = H * (.12 + (i * 13 % 7) / 60); ctx.fillStyle = '#efe9dc'; ctx.fillRect(x, H * horizon - h, 3, h); ctx.fillStyle = '#7f8f5a'; ctx.beginPath(); ctx.ellipse(x + 1.5, H * horizon - h, 8, 12, 0, 0, 7); ctx.fill(); }
   }
@@ -1012,8 +1319,9 @@ function drawScene(now) {
     ctx.fillStyle = '#e9f1f6'; ctx.fillRect(0, wy, W, H - wy);
     ctx.fillStyle = 'rgba(160,190,210,.35)'; for (let i = 0; i < 8; i++) ctx.fillRect(0, wy + (H - wy) * i / 8, W, 1);
   }
-  ctx.strokeStyle = p.feature === 'ice' ? 'rgba(120,150,170,.25)' : 'rgba(255,250,240,.16)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = p.feature === 'ice' ? 'rgba(120,150,170,.25)' : p.feature === 'springs' ? 'rgba(255,220,160,.3)' : 'rgba(255,250,240,.16)'; ctx.lineWidth = 1;
   for (let i = 0; i < 14; i++) { const y = wy + (H - wy) * (i + .5) / 14, off = reduce ? 0 : Math.sin(T * .6 + i) * 20; ctx.beginPath(); ctx.moveTo(((i * 53) % 100) / 100 * W + off, y); ctx.lineTo(((i * 53) % 100) / 100 * W + off + 30 + i * 4, y); ctx.stroke(); }
+  waterExtras(p.feature, T, wy);
   // idle rods planted along the shore for this pond
   const here = S.slots.filter(sl => sl.pond === S.pond);
   here.forEach((sl, i) => {
@@ -1027,7 +1335,11 @@ function drawScene(now) {
   if (p.feature === 'ice') { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(W * .1, H * 1.02, W * .25, H * .14, 0, 0, 7); ctx.fill(); }
   else {
     ctx.fillStyle = p.near; ctx.beginPath(); ctx.moveTo(0, H); ctx.lineTo(0, H * .78); ctx.quadraticCurveTo(W * .12, H * .8, W * .22, H); ctx.fill();
-    if (p.feature === 'reeds' || p.feature === 'birches') {
+    if (p.feature === 'mangrove') mangrove(W * .9, H * .9, H * .0034, '#2e3820');
+    if (p.feature === 'coral') palm(W * .9, H * .97, H * .0045, T);
+    if (p.feature === 'harbor') { ctx.fillStyle = '#4a3a2a'; [.8, .87, .94].forEach((x, i) => ctx.fillRect(W * x, H * (.66 + i * .04), 7, H)); ctx.fillStyle = '#5a4630'; ctx.fillRect(W * .78, H * .66, W * .22, H * .02); }
+    if (p.feature === 'springs') { ctx.fillStyle = '#16100c'; ctx.beginPath(); ctx.moveTo(W * .78, H); ctx.lineTo(W * .82, H * .8); ctx.lineTo(W * .9, H * .76); ctx.lineTo(W, H * .72); ctx.lineTo(W, H); ctx.fill(); ctx.strokeStyle = `rgba(255,120,40,${.6 + .3 * Math.sin(T * 3)})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(W * .84, H); ctx.lineTo(W * .87, H * .85); ctx.lineTo(W * .92, H * .8); ctx.stroke(); }
+    if (p.feature === 'reeds' || p.feature === 'birches' || p.feature === 'mist') {
       for (let i = 0; i < 18; i++) { const x = W * (.82 + i * .012), sway = reduce ? 0 : Math.sin(T * 1.2 + i) * 3; ctx.strokeStyle = i % 3 ? '#556b35' : '#6e8442'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, H); ctx.quadraticCurveTo(x, H * .82, x + sway, H * (.66 + (i % 4) * .03)); ctx.stroke(); if (i % 4 === 0) { ctx.fillStyle = '#5b3a20'; ctx.fillRect(x + sway - 2, H * (.66 + (i % 4) * .03), 4, 12); } }
     }
   }
@@ -1225,8 +1537,9 @@ function renderPane() {
       });
       h += `</div>`;
     } else {
-      h += `<h2>Bait</h2><p class="note">One bait is used per hand cast. Fish that like it bite three times as often.${baitCost(BAIT.glow) > BAIT.glow.cost ? ' Prices go up once Frozen Lake and Aurora Deep open, since the fish there are worth so much more.' : ''}</p><div class="list">`;
+      h += `<h2>Bait</h2><p class="note">One bait is used per hand cast. Fish that like it bite three times as often.${S.ponds.length > 3 ? ' Prices follow the furthest water you\'ve opened, since fish there are worth so much more. On average a pack earns back more than it costs, but plenty of packs lose.' : ''}</p><div class="list">`;
       BAITS.forEach(b => {
+        if (!baitShown(b) && !S.bait[b.id]) return;
         const have = b.id === 'worms' ? '∞' : (S.bait[b.id] || 0), on = S.baitOn === b.id;
         const use = (b.id === 'worms' || have > 0) ? `<button class="buy ghost" style="grid-row:auto" data-act="bait-on" data-id="${b.id}" ${on ? 'disabled' : ''}>${on ? 'On the hook' : 'Use'}</button>` : '';
         const cost = baitCost(b), buy = b.cost ? `<button class="buy" style="grid-row:auto" data-act="bait-buy" data-id="${b.id}" ${S.coins < cost ? 'disabled' : ''}>${b.pack} for ${fmt(cost)}</button>` : '';
