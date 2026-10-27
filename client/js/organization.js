@@ -264,7 +264,7 @@ function openArrange(serverId) {
   card.querySelectorAll('[data-rename]').forEach((b) => (b.onclick = () => openHeadingEditor(s, groups.find((g) => g.id === Number(b.dataset.rename)), () => openArrange(serverId))));
   card.querySelectorAll('[data-gdel]').forEach((b) => (b.onclick = () => run(async () => {
     const g = groups.find((x) => x.id === Number(b.dataset.gdel));
-    if (!confirm(`Delete the ${g.name} heading? Its rooms stay, without a heading.`)) return;
+    if (!(await askConfirm(`Delete the ${g.name} heading? Its rooms stay, without a heading.`))) return;
     state.servers.set(s.id, await api(`/api/groups/${g.id}`, { method: 'DELETE' }));
     renderChannels();
   })));
@@ -503,7 +503,7 @@ function openEditBurrow(serverId) {
   }
   $('#transfer-go')?.addEventListener('click', async () => {
     const to = others.find((m) => m.id === Number($('#transfer-to').value));
-    if (!to || !confirm(`Make ${nameOfPerson(to)} the host of ${s.name}? You can't take this back yourself.`)) return;
+    if (!to || !(await askConfirm(`Make ${nameOfPerson(to)} the host of ${s.name}? You can't take this back yourself.`, { ok: 'Make host' }))) return;
     try { done(await api(`/api/servers/${s.id}/transfer`, { method: 'POST', body: { userId: to.id } })); closeModal(); toast(`${nameOfPerson(to)} is now the host.`); }
     catch (err) { alertError(err); }
   });
@@ -540,7 +540,7 @@ function openInvites(serverId) {
     <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
   copyButton($('#copy-invite'), inviteLink(s.inviteCode));
   $('#new-code')?.addEventListener('click', async () => {
-    if (!confirm('Make a new permanent link? The old link and code stop working.')) return;
+    if (!(await askConfirm('Make a new permanent link? The old link and code stop working.', { ok: 'New link' }))) return;
     try { handleEvent({ type: 'server_updated', server: await api(`/api/servers/${s.id}/invite-code`, { method: 'POST' }) }); openInvites(s.id); }
     catch (err) { $('#modal-error').textContent = err.message; }
   });
@@ -726,7 +726,7 @@ function openEvent(serverId, eventId) {
   });
   $('#ev-edit')?.addEventListener('click', () => openEventEditor(serverId, e));
   $('#ev-delete')?.addEventListener('click', async () => {
-    if (!confirm(`Cancel ${e.title}?`)) return;
+    if (!(await askConfirm(`Cancel ${e.title}?`))) return;
     try { handleEvent({ type: 'server_updated', server: await api(`/api/events/${e.id}`, { method: 'DELETE' }) }); closeModal(); }
     catch (err) { $('#modal-error').textContent = err.message; }
   });
@@ -887,7 +887,7 @@ function openGroupSettings(s) {
     },
   });
   $('#group-leave').onclick = async () => {
-    if (!confirm(`Leave ${dmTitle(s)}? You won't see it any more.`)) return;
+    if (!(await askConfirm(`Leave ${dmTitle(s)}? You won't see it any more.`))) return;
     try {
       await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
       closeModal();

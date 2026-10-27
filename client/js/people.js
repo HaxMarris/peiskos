@@ -147,7 +147,7 @@ function openRoomSettings(c) {
   wirePrivacyFields();
   $('#room-announce')?.addEventListener('change', (e) => $('#room-posters').classList.toggle('hidden', !e.target.checked));
   $('#room-archive')?.addEventListener('click', async () => {
-    if (!c.archived && !confirm(`Archive ${c.name}? It moves to the bottom of the list, keeps everything said in it, and takes no new messages.`)) return;
+    if (!c.archived && !(await askConfirm(`Archive ${c.name}? It moves to the bottom of the list, keeps everything said in it, and takes no new messages.`))) return;
     try {
       handleEvent({ type: 'server_updated', server: await api(`/api/channels/${c.id}`, { method: 'PATCH', body: { archived: !c.archived } }) });
       closeModal();
@@ -171,7 +171,7 @@ function openRoomSettings(c) {
     } catch (err) { $('#modal-error').textContent = err.message; }
   };
   $('#room-delete').onclick = async () => {
-    if (!confirm(`Delete ${c.name} and everything said in it?`)) return;
+    if (!(await askConfirm(`Delete ${c.name} and everything said in it?`))) return;
     try {
       await api(`/api/channels/${c.id}`, { method: 'DELETE' });
       closeModal();
@@ -211,8 +211,8 @@ function openMemberMenu(s, m) {
   $('#member-voice-mute')?.addEventListener('click', () => act('voice-mute', { muted: !m.voiceMuted }));
   $('#member-timeout')?.addEventListener('click', () => act('timeout', { minutes: Number($('#member-timeout-for').value) }));
   $('#member-timeout-end')?.addEventListener('click', () => act('timeout', { minutes: 0 }));
-  $('#member-remove')?.addEventListener('click', () => confirm(`Remove ${nameOfPerson(m)} from ${s.name}?`) && act('remove', { ban: false }));
-  $('#member-ban')?.addEventListener('click', () => confirm(`Ban ${nameOfPerson(m)} from ${s.name}?`) && act('remove', { ban: true }));
+  $('#member-remove')?.addEventListener('click', async () => (await askConfirm(`Remove ${nameOfPerson(m)} from ${s.name}?`)) && act('remove', { ban: false }));
+  $('#member-ban')?.addEventListener('click', async () => (await askConfirm(`Ban ${nameOfPerson(m)} from ${s.name}?`)) && act('remove', { ban: true }));
 }
 
 async function renderBans(s) {
@@ -310,7 +310,7 @@ function openRoleEditor(serverId, roleId) {
     catch (err) { $('#modal-error').textContent = err.message; }
   };
   $('#role-delete')?.addEventListener('click', async () => {
-    if (!confirm(`Delete the ${role.name} role? Everyone who has it loses it.`)) return;
+    if (!(await askConfirm(`Delete the ${role.name} role? Everyone who has it loses it.`))) return;
     try { done(await api(`/api/roles/${roleId}`, { method: 'DELETE' })); }
     catch (err) { $('#modal-error').textContent = err.message; }
   });
@@ -887,7 +887,7 @@ async function renderPasskeyBox(adding = false) {
     <div><button type="button" class="btn secondary" id="passkey-add">Add a passkey</button></div>`;
   $('#passkey-add').onclick = () => renderPasskeyBox(true);
   for (const b of box.querySelectorAll('[data-remove-passkey]')) b.onclick = async () => {
-    if (!confirm('Remove this passkey? You can add it again later.')) return;
+    if (!(await askConfirm('Remove this passkey? You can add it again later.'))) return;
     try { await api(`/api/me/passkeys/${encodeURIComponent(b.dataset.removePasskey)}`, { method: 'DELETE' }); renderPasskeyBox(); } catch (err) { alertError(err); }
   };
 }
@@ -913,7 +913,7 @@ async function loadDevices() {
     try { await api(`/api/me/sessions/${b.dataset.signout}`, { method: 'DELETE' }); loadDevices(); } catch (err) { alertError(err); }
   };
   $('#signout-others')?.addEventListener('click', async () => {
-    if (!confirm('Sign out of Peiskos on every other device?')) return;
+    if (!(await askConfirm('Sign out of Peiskos on every other device?', { ok: 'Sign out' }))) return;
     try { await api('/api/me/sessions', { method: 'DELETE' }); toast('Signed out everywhere else.'); loadDevices(); } catch (err) { alertError(err); }
   });
 }
@@ -935,7 +935,7 @@ async function deleteMyAccount(e) {
   e.preventDefault();
   const deleteMessages = document.querySelector('input[name="delete-messages"]:checked').value === 'delete';
   $('#delete-error').textContent = '';
-  if (!confirm(`Delete your Peiskos account${deleteMessages ? ' and everything you sent' : ''}? This can't be undone.`)) return;
+  if (!(await askConfirm(`Delete your Peiskos account${deleteMessages ? ' and everything you sent' : ''}? This can't be undone.`))) return;
   try {
     await api('/api/me', { method: 'DELETE', body: { password: $('#delete-password').value, code: $('#delete-code')?.value.trim() ?? '', deleteMessages } });
     closeModal();

@@ -1007,6 +1007,11 @@ button.seat-face { cursor: pointer; }
 .toasts { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: min(440px, calc(100vw - 32px)); padding: 10px 8px 10px 14px; background: var(--text-strong); color: var(--bg); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); font-size: 14px; }
 .toast span { flex: 1; }
+.toast.error::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--berry); }
+.modal.ask { z-index: 50; }
+.ask-card { max-width: 400px; }
+.ask-card p { color: var(--muted); }
+.ask-card .btn:disabled { opacity: .45; cursor: not-allowed; }
 .toast .btn { padding: 6px 12px; flex: none; }
 .toast .icon-btn { color: inherit; opacity: .7; font-size: 18px; }
 

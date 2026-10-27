@@ -112,14 +112,14 @@ function addFiles(fileList) {
   if (!state.maxUploadBytes || !state.channelId) return;
   const channelId = state.channelId;
   const limit = uploadLimit(channelId);
-  if (!limit) return alert("Your roles can't share files in this hearth.");
+  if (!limit) return notice("Your roles can't share files in this hearth.");
   for (const file of fileList) {
-    if (state.pending.length >= 10) { alert('You can attach up to 10 files at a time.'); break; }
+    if (state.pending.length >= 10) { notice('You can attach up to 10 files at a time.'); break; }
     const shrinkable = SHRINKABLE_TYPES.test(file.type);
     const video = VIDEO_TYPES.test(file.type);
     // Photos are checked after shrinking, since most get well under the limit. Big videos can be shrunk by hand.
     if (file.size > limit && !shrinkable && !(video && canShrinkVideo())) {
-      alert(`"${file.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
+      notice(`"${file.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
       continue;
     }
     const p = { file, previewUrl: IMAGE_TYPES.test(file.type) ? URL.createObjectURL(file) : null, progress: 0, error: null };
@@ -509,7 +509,7 @@ input.addEventListener('paste', (e) => {
   const total = input.value.length - (input.selectionEnd - input.selectionStart) + text.length;
   if (text.length > LONG_PASTE || total > 4000) {
     if (!state.maxUploadBytes) {
-      if (total > 4000) { e.preventDefault(); alert('That text is too long for one message (at most 4000 characters).'); }
+      if (total > 4000) { e.preventDefault(); notice('That text is too long for one message (at most 4000 characters).'); }
       return;
     }
     e.preventDefault();

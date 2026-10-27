@@ -282,8 +282,8 @@ async function sendComposer() {
   const replyTo = state.replyTo;
   if ((!content && !files.length) || !channelId) return;
   if ((slowWaits.get(channelId) ?? 0) > Date.now()) return renderSlowNote(); // slow mode: what you typed stays put
-  if (files.some((p) => p.error)) return alert('Remove the files that failed to upload first.');
-  if (content.length > 4000) return alert('Messages can be at most 4000 characters. Paste long text and it goes up as a file instead.');
+  if (files.some((p) => p.error)) return notice('Remove the files that failed to upload first.');
+  if (content.length > 4000) return notice('Messages can be at most 4000 characters. Paste long text and it goes up as a file instead.');
   input.value = '';
   haptic();
   autosize();
@@ -480,6 +480,77 @@ function closeModal() {
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+// ---- questions: Peiskos's own yes/no and fill-in dialogs, in a layer above any open modal, so
+// confirming something on the admin page doesn't close it. Each resolves once, however it's answered.
+
+let answerAsk = null;
+function ask({ title, text = '', ok = 'OK', cancel = 'Cancel', danger = false, field = null, typeToConfirm = '', copy = '' }) {
+  answerAsk?.(null);
+  return new Promise((resolve) => {
+    const card = $('#ask-card');
+    card.innerHTML = `<h2 id="ask-title"></h2>${text ? '<p id="ask-text"></p>' : ''}
+      ${field ? '<input id="ask-input" autocomplete="off" />' : ''}
+      ${copy ? '<input id="ask-input" readonly />' : ''}
+      ${typeToConfirm ? '<p class="small" id="ask-match-line">Type <b id="ask-match"></b> to confirm</p><input id="ask-input" autocomplete="off" aria-labelledby="ask-match-line" />' : ''}
+      <div class="modal-row">${cancel ? '<button type="button" class="btn secondary" id="ask-no"></button>' : ''}<button type="button" class="btn${danger ? ' danger' : ''}" id="ask-yes"></button></div>`;
+    $('#ask-title').textContent = title;
+    if (text) $('#ask-text').textContent = text;
+    if (typeToConfirm) $('#ask-match').textContent = typeToConfirm;
+    if (cancel) $('#ask-no').textContent = cancel;
+    $('#ask-yes').textContent = ok;
+    const input = $('#ask-input');
+    if (field) { input.value = field.value ?? ''; input.placeholder = field.placeholder ?? ''; if (field.max) input.maxLength = field.max; }
+    if (copy) input.value = copy;
+    const yes = $('#ask-yes');
+    if (typeToConfirm) {
+      const match = () => (yes.disabled = input.value.trim().toLowerCase() !== typeToConfirm.trim().toLowerCase());
+      input.oninput = match;
+      match();
+    }
+    const done = (value) => {
+      answerAsk = null;
+      $('#ask').classList.add('hidden');
+      document.removeEventListener('keydown', onKey, true);
+      resolve(value);
+    };
+    answerAsk = done;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); done(field ? null : false); }
+      else if (e.key === 'Enter' && input && e.target === input && !yes.disabled) { e.preventDefault(); yes.click(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    yes.onclick = () => done(field ? input.value : true);
+    if (cancel) $('#ask-no').onclick = () => done(field ? null : false);
+    $('#ask').onclick = (e) => { if (e.target.id === 'ask') done(field ? null : false); };
+    $('#ask').classList.remove('hidden');
+    if (input) { input.focus(); input.select(); } else yes.focus();
+  });
+}
+
+/** A yes/no question. The first sentence of `text` becomes the title when no title is given. */
+function askConfirm(text, { title, ok, cancel = 'Cancel', danger, typeToConfirm = '' } = {}) {
+  if (!title) {
+    const cut = text.search(/[?.](\s|$)/);
+    [title, text] = cut > 0 ? [text.slice(0, cut + 1), text.slice(cut + 1).trim()] : [text, ''];
+  }
+  // The button says what happens ("Delete", "Sell"), and losing things is red.
+  const verb = title.match(/^(Delete|Remove|Ban|Block|Leave|Archive|Sell|Buy|Update|Cancel)\b/)?.[1];
+  ok ??= verb === 'Cancel' ? 'Yes, cancel it' : verb ?? 'OK';
+  danger ??= /^(Delete|Remove|Ban|Block|Leave)$/.test(verb ?? '');
+  if (verb === 'Cancel' && cancel === 'Cancel') cancel = 'Keep it';
+  return ask({ title, text, ok, cancel, danger, typeToConfirm }).then(Boolean);
+}
+
+/** A one-line text answer, or null if it was cancelled. */
+function askText(title, value = '', { ok = 'Save', placeholder = '', max = 0 } = {}) {
+  return ask({ title, ok, field: { value, placeholder, max } });
+}
+
+/** Something went wrong or can't be done: says so in a toast instead of a pop-up. */
+function notice(text) {
+  toast(text, { kind: 'error', timeout: 7000 });
+}
+
 function openAddServer(focus) {
   modal(`<h2>Find a hearth</h2>
     <form id="create-form">
@@ -573,7 +644,11 @@ $('#server-menu-btn').onclick = () => {
   $('#open-emoji')?.addEventListener('click', () => openEmojiManager(s.id));
   $('#open-sounds')?.addEventListener('click', () => openSounds(s.id));
   $('#leave-server').onclick = async () => {
-    if (owner && !confirm(`Delete "${s.name}" and all its messages for everyone?`)) return;
+    const others = (s.members?.length ?? 1) - 1;
+    const sure = owner
+      ? await askConfirm(`${others > 0 ? `All ${others + 1} members lose` : 'You lose'} every room, message and file in it. This can't be undone.`, { title: `Delete ${s.name}?`, ok: 'Delete hearth', danger: true, typeToConfirm: s.name })
+      : await askConfirm(`You can come back with an invite.`, { title: `Leave ${s.name}?`, ok: 'Leave', danger: true });
+    if (!sure) return;
     try {
       await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
       closeModal();

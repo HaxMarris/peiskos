@@ -309,7 +309,7 @@ async function openFireDecor() {
   };
   for (const b of document.querySelectorAll('#decor-pets [data-pet-buy]')) b.onclick = async () => {
     const p = pets.pets.find((x) => x.id === b.dataset.petBuy);
-    if (!confirm(`Buy ${p.name.toLowerCase()} for ${p.price.toLocaleString()} chips from ${hearth.name}'s casino?`)) return;
+    if (!(await askConfirm(`Buy ${p.name.toLowerCase()} for ${p.price.toLocaleString()} chips from ${hearth.name}'s casino?`))) return;
     try {
       const r = await api(`/api/servers/${hearth.id}/casino/pets/${p.id}`, { method: 'POST', body: {} });
       setPet(r.pet);
@@ -499,7 +499,7 @@ function openMotd(serverId) {
   };
   for (const b of document.querySelectorAll('.motd-list [data-edit]')) b.onclick = async () => {
     const m = list.find((x) => x.id === Number(b.dataset.edit));
-    const text = prompt('Message of the day', m.text);
+    const text = await askText('Edit message of the day', m.text);
     if (text === null) return;
     try { done(await api(`/api/motd/${m.id}`, { method: 'PATCH', body: { text } })); } catch (err) { fail(err); }
   };

@@ -78,7 +78,7 @@ function iconButton(label, title, onclick) {
   return b;
 }
 
-function alertError(err) { alert(err.message || String(err)); }
+function alertError(err) { notice(err?.message || String(err)); }
 
 // ---------------------------------------------------------------- theme & panes
 
@@ -293,7 +293,7 @@ function openPerson(s, m) {
         input.focus();
       });
       if (!blocked) {
-        if (friend === 'friends') add('Remove friend', () => confirm(`Remove ${nameOfPerson(m)} from your friends?`) && friendAction(m.id, 'remove', redraw));
+        if (friend === 'friends') add('Remove friend', async () => (await askConfirm(`Remove ${nameOfPerson(m)} from your friends?`)) && friendAction(m.id, 'remove', redraw));
         else if (friend === 'incoming') add('Accept friend request', () => friendAction(m.id, 'accept', redraw));
         else if (friend === 'outgoing') add('Cancel friend request', () => friendAction(m.id, 'remove', redraw));
         else add('Add friend', () => friendAction(m.id, 'add', redraw));
@@ -416,7 +416,7 @@ async function friendAction(userId, what, after) {
 
 async function toggleBlock(m, after) {
   const blocked = isBlocked(m.id);
-  if (!blocked && !confirm(`Block ${nameOfPerson(m)}? Their messages are folded away, they can't message you or send you friend requests, and you're no longer friends.`)) return;
+  if (!blocked && !(await askConfirm(`Block ${nameOfPerson(m)}? Their messages are folded away, they can't message you or send you friend requests, and you're no longer friends.`))) return;
   try {
     Object.assign(state.me, blocked
       ? await api(`/api/blocks/${m.id}`, { method: 'DELETE' })

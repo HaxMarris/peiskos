@@ -234,13 +234,13 @@ function openEmojiManager(serverId) {
   };
   $('#modal-card').querySelectorAll('[data-rename]').forEach((b) => (b.onclick = async () => {
     const e = s.emoji.find((x) => x.id === Number(b.dataset.rename));
-    const name = prompt('New name', e.name);
+    const name = (await askText(`Rename :${e.name}:`, e.name, { ok: 'Rename', max: 32 }))?.trim();
     if (!name || name === e.name) return;
     try { done(await api(`/api/emoji/${e.id}`, { method: 'PATCH', body: { name } })); } catch (err) { fail(err); }
   }));
   $('#modal-card').querySelectorAll('[data-delete]').forEach((b) => (b.onclick = async () => {
     const e = s.emoji.find((x) => x.id === Number(b.dataset.delete));
-    if (!confirm(`Delete :${e.name}:? Messages that used it show its name instead.`)) return;
+    if (!(await askConfirm(`Delete :${e.name}:? Messages that used it show its name instead.`))) return;
     try { done(await api(`/api/emoji/${e.id}`, { method: 'DELETE' })); } catch (err) { fail(err); }
   }));
 }
@@ -486,7 +486,7 @@ $('#thread-btn').onclick = () => {
     } catch (err) { $('#modal-error').textContent = err.message; }
   };
   $('#thread-delete').onclick = async () => {
-    if (!confirm(`Delete the thread "${t.name}" and everything said in it?`)) return;
+    if (!(await askConfirm(`Delete the thread "${t.name}" and everything said in it?`))) return;
     try {
       await api(`/api/channels/${t.id}`, { method: 'DELETE' });
       closeModal();
@@ -508,7 +508,7 @@ async function startRecording() {
   try {
     const deviceId = await deviceIdFor('audioinput').catch(() => undefined);
     stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(deviceId ? { deviceId: { ideal: deviceId } } : {}) } });
-  } catch (err) { return alert(mediaError(err, 'microphone')); }
+  } catch (err) { return notice(mediaError(err, 'microphone')); }
   if (state.channelId !== channelId) return stream.getTracks().forEach((t) => t.stop());
   const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find((t) => MediaRecorder.isTypeSupported?.(t));
   const rec = new MediaRecorder(stream, mimeType ? { mimeType, audioBitsPerSecond: 48000 } : undefined);
@@ -550,7 +550,7 @@ async function sendVoice(r, seconds) {
   const type = (r.rec.mimeType || r.chunks[0]?.type || 'audio/webm').split(';')[0];
   const ext = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a' }[type] ?? 'webm';
   const file = new File(r.chunks, `voice-message.${ext}`, { type });
-  if (file.size > uploadLimit()) return alert(uploadLimit() ? 'That recording is too big to send.' : "Your roles can't share files in this hearth.");
+  if (file.size > uploadLimit()) return notice(uploadLimit() ? 'That recording is too big to send.' : "Your roles can't share files in this hearth.");
   const replyTo = state.channelId === r.channelId ? state.replyTo : null;
   if (replyTo) setReply(null);
   try {

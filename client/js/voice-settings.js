@@ -180,7 +180,7 @@ async function pickDevice(kind, id, label) {
   try {
     await room.switchActiveDevice(kind, id || 'default', !!id);
   } catch (err) {
-    alert(mediaError(err, DEVICE_NAMES[kind].toLowerCase()));
+    notice(mediaError(err, DEVICE_NAMES[kind].toLowerCase()));
   }
 }
 
@@ -908,7 +908,7 @@ function wireVoiceSettings() {
       $('#vs-picture').textContent = 'Change the picture';
       backgroundChanged();
     } catch {
-      alert("Couldn't open that picture.");
+      notice("Couldn't open that picture.");
     }
   };
   $('#voice-quality').onchange = (e) => { voicePrefs.quality = e.target.value; saveVoicePrefs(); };
