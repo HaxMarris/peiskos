@@ -101,7 +101,7 @@ function createWindow({ hidden = false } = {}) {
   // app page has no web address of its own to tell it.
   win.webContents.session.webRequest.onBeforeSendHeaders({ urls: ['https://www.youtube-nocookie.com/*'] }, (details, callback) => {
     const headers = details.requestHeaders;
-    if (!headers.Referer || headers.Referer.startsWith('file:')) headers.Referer = 'https://github.com/HaxMarris/Burrow';
+    if (!headers.Referer || headers.Referer.startsWith('file:')) headers.Referer = 'https://github.com/HaxMarris/peiskos';
     callback({ requestHeaders: headers });
   });
 

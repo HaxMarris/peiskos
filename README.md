@@ -6,7 +6,7 @@ server on your own machine or a cheap VPS; your friends install the desktop app
 
 *Peiskos* is Norwegian for the cozy feeling of sitting by a crackling fire. It used to be called
 Burrow, and the names nobody sees still say so (the `burrow` service and `burrow-data` volume in
-Docker Compose, the `~/Burrow` folder, the GitHub repository), so existing servers update without
+Docker Compose and the `~/Burrow` folder), so existing servers update without
 moving anything.
 
 ![Peiskos in the light theme](screenshots/desktop-light.png)

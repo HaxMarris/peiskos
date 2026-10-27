@@ -164,10 +164,20 @@ function showDesktopDownloads() {
   const ua = navigator.userAgent;
   const mine = /Windows/.test(ua) ? 'win' : /Mac/.test(ua) && !/iPhone|iPad/.test(ua) && navigator.maxTouchPoints < 2 ? 'mac'
     : /Linux/.test(ua) && !/Android/.test(ua) ? 'linux' : null;
-  for (const a of box.querySelectorAll('a[data-os]')) a.classList.toggle('mine', a.dataset.os === mine);
+  // One clear button for this computer, with the others a click away.
+  const own = box.querySelector(`a[data-os="${mine}"]`);
+  const others = !own || box.classList.contains('show-all');
+  $('#get-mine').classList.toggle('hidden', !own || others);
+  $('#get-desktop-title').classList.toggle('hidden', !!own && !others);
+  box.querySelector('.get-desktop-row').classList.toggle('hidden', !others);
+  $('#get-other-row').classList.toggle('hidden', others);
+  if (own) {
+    $('#get-mine').replaceChildren(own.querySelector('svg').cloneNode(true), `Download for ${own.textContent.trim()}`);
+    $('#get-mine').href = own.href;
+  }
   if (desktopLinksLoaded) return;
   desktopLinksLoaded = true;
-  fetch('https://api.github.com/repos/HaxMarris/Burrow/releases/latest')
+  fetch('https://api.github.com/repos/HaxMarris/peiskos/releases/latest')
     .then((r) => (r.ok ? r.json() : null))
     .then((release) => {
       // Macs: Apple chips (M1 and later) by default, and a separate build for older Intel Macs.
@@ -176,6 +186,7 @@ function showDesktopDownloads() {
       for (const a of box.querySelectorAll('a[data-os]')) {
         const file = find(a.dataset.os);
         if (file) a.href = file.browser_download_url;
+        if (file && a.dataset.os === mine) $('#get-mine').href = file.browser_download_url;
       }
       const intel = find('intel');
       $('#get-intel-mac').classList.toggle('hidden', !intel || mine !== 'mac');
@@ -184,12 +195,18 @@ function showDesktopDownloads() {
     .catch(() => {});
 }
 
+$('#get-other').onclick = (e) => {
+  e.preventDefault();
+  $('#get-desktop').classList.add('show-all');
+  showDesktopDownloads();
+};
+
 // On an Android phone, the Android app instead, once a release has one.
 let androidLinkLoaded = false;
 function showAndroidDownload() {
   if (androidLinkLoaded) return;
   androidLinkLoaded = true;
-  fetch('https://api.github.com/repos/HaxMarris/Burrow/releases/latest')
+  fetch('https://api.github.com/repos/HaxMarris/peiskos/releases/latest')
     .then((r) => (r.ok ? r.json() : null))
     .then((release) => {
       const apk = release?.assets?.find((f) => f.name.endsWith('.apk'));
@@ -201,7 +218,7 @@ function showAndroidDownload() {
 }
 
 async function renderAuthMode() {
-  $('#auth-title').textContent = registering ? 'Dig in' : 'Welcome back';
+  $('#auth-title').textContent = registering ? 'Create your account' : 'Welcome back';
   $('#auth-subtitle').textContent = registering ? 'Pick a username your friends will see.' : '';
   $('#auth-submit').textContent = registering ? 'Create account' : 'Log in';
   $('#auth-toggle').textContent = registering ? 'Already have an account? Log in' : 'Need an account? Register';
@@ -235,13 +252,15 @@ async function renderAuthMode() {
 const legalUrl = (page) => `${state.serverUrl.replace(/\/$/, '')}/${page}`;
 function renderLegalRow() {
   const row = $('#legal-row');
-  row.classList.toggle('hidden', !state.serverUrl);
+  const foot = $('#legal-foot');
+  // Signing up is agreeing, so it's said above the button; logging in only links them, at the bottom.
+  row.classList.toggle('hidden', !state.serverUrl || !registering);
+  foot.classList.toggle('hidden', !state.serverUrl || registering);
   if (!state.serverUrl) return;
   const href = (page) => legalUrl(page).replace(/[&"<>]/g, (c) => `&#${c.charCodeAt(0)};`);
   const link = (page, text) => `<a href="${href(page)}" target="_blank" rel="noopener">${text}</a>`;
-  row.innerHTML = registering
-    ? `By creating an account you agree to the ${link('terms', 'Terms')} and ${link('privacy', 'Privacy policy')}, and confirm you're 13 or older.`
-    : `${link('privacy', 'Privacy policy')} · ${link('terms', 'Terms')}`;
+  if (registering) row.innerHTML = `By creating an account you agree to the ${link('terms', 'Terms')} and ${link('privacy', 'Privacy policy')}, and confirm you're 13 or older.`;
+  else foot.innerHTML = `${link('privacy', 'Privacy policy')} · ${link('terms', 'Terms')}`;
 }
 
 // ---- forgot your password: a code to your confirmed email, then a new password

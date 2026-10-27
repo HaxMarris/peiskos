@@ -7,7 +7,7 @@
 // installed by then goes in the next time the app quits.
 const { app, ipcMain, shell } = require('electron');
 
-const REPO = 'HaxMarris/Burrow';
+const REPO = 'HaxMarris/peiskos';
 const RELEASES_PAGE = `https://github.com/${REPO}/releases/latest`;
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
 

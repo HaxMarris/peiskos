@@ -554,7 +554,7 @@ function notice(text) {
 function openAddServer(focus) {
   modal(`<h2>Find a hearth</h2>
     <form id="create-form">
-      <label>Dig a new one<input id="new-server-name" placeholder="e.g. Friday Night Crew" maxlength="64" required /></label>
+      <label>Start a new hearth<input id="new-server-name" placeholder="e.g. Friday Night Crew" maxlength="64" required /></label>
       <button type="submit" class="btn">Create hearth</button>
     </form>
     <div class="or">or</div>

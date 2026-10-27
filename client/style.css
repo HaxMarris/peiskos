@@ -164,7 +164,9 @@ label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-pic
 .get-desktop-row svg { width: 16px; height: 16px; flex: none; fill: currentColor; }
 /* The apple's weight sits low (leaf on top), so lift it to line up with the word. */
 .get-desktop-row [data-os="mac"] svg { transform: translateY(-1.5px); }
-.auth-card .get-desktop-row .btn.mine { background: var(--accent); color: var(--accent-ink); }
+.auth-card .get-mine { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.get-mine svg { width: 16px; height: 16px; flex: none; fill: currentColor; }
+.legal-foot { margin-top: 4px; }
 
 /* ---------- layout ----------
    A computer shows the top bar (burrows), the burrow's rooms, the chat and who's here.

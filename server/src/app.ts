@@ -2634,7 +2634,7 @@ export function createApp(opts: AppOptions): Server {
     db.prepare("INSERT OR REPLACE INTO app_secrets (name, value) VALUES ('vapid', ?)").run(JSON.stringify(keys));
     return keys;
   })();
-  const pushContact = opts.pushContact || 'https://github.com/HaxMarris/Burrow';
+  const pushContact = opts.pushContact || 'https://github.com/HaxMarris/peiskos';
   // Only the big browsers' push services, so nobody can make the server post to anywhere else.
   const PUSH_HOSTS = ['.googleapis.com', '.mozilla.com', '.push.apple.com', '.notify.windows.com', ...(opts.pushHosts ?? [])];
   const pushHostAllowed = (endpoint: string) => {
