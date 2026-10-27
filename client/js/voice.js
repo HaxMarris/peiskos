@@ -429,6 +429,8 @@ function renderVoiceBar(status) {
   $('#voice-camera').classList.toggle('on', camera);
   $('#voice-camera').title = camera ? 'Turn off camera' : 'Turn on camera';
   $('#voice-screen').classList.toggle('on', screen);
+  // Only while the camera's on, and only where there's a second camera to turn to.
+  $('#fire-flip').parentElement.classList.toggle('hidden', !camera || !canFlipCamera);
   $('#voice-screen').title = screen ? 'Stop sharing your screen' : 'Share your screen';
   for (const id of ['#voice-camera', '#voice-screen', '#voice-watch']) $(id).disabled = !voice.room || !!status;
   // The same buttons under the fire.
@@ -452,6 +454,11 @@ const HEADPHONES_OFF = '<svg viewBox="0 0 24 24"><path d="M3.3 2 2 3.3l3.5 3.5A8
 const DEAFENED_ICON = HEADPHONES_OFF.replace('<svg', '<svg class="muted-icon" aria-label="Deafened"');
 
 $('#voice-mute').onclick = toggleMute;
+// Phones and tablets can turn the camera around. It starts on the front camera each time.
+const canFlipCamera = matchMedia('(pointer: coarse)').matches;
+let cameraFacing = 'user';
+const FLIP_ICON = '<svg viewBox="0 0 24 24"><path d="M20 5h-3.2L15 3H9L7.2 5H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2Zm-8 13a5 5 0 0 1-5-5H5l2.5-2.5L10 13H8a4 4 0 0 0 5.6 3.7l.8.7c-.7.4-1.5.6-2.4.6Zm4.5-2.5L14 13h2a4 4 0 0 0-5.6-3.7l-.8-.7c.7-.4 1.5-.6 2.4-.6a5 5 0 0 1 5 5h2l-2.5 2.5Z"/></svg>';
+
 $('#voice-deafen').onclick = toggleDeafen;
 $('#voice-settings').onclick = () => openVoiceSettings(); // these two load in later parts
 $('#voice-leave').onclick = () => leaveVoice();
@@ -463,6 +470,8 @@ $('#fire-back').onclick = () => { closeStage(); showView('rooms'); };
 $('#fire-mute').onclick = toggleMute;
 $('#fire-deafen').onclick = toggleDeafen;
 $('#fire-camera').onclick = toggleCamera;
+$('#fire-flip').onclick = () => flipCamera();
+$('#fire-flip').innerHTML = FLIP_ICON;
 $('#fire-screen').onclick = () => chooseShare();
 $('#fire-settings').onclick = () => openVoiceSettings();
 $('#fire-settings').innerHTML = $('#voice-settings').innerHTML;
@@ -530,11 +539,26 @@ function mediaError(err, what) {
   return `Couldn't start your ${what}: ${err?.message || err}`;
 }
 
+async function flipCamera() {
+  const track = state.voice?.room?.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Camera)?.track;
+  if (!track) return;
+  const facing = cameraFacing === 'user' ? 'environment' : 'user';
+  try {
+    await track.restartTrack({ facingMode: facing, resolution: window.LivekitClient.VideoPresets.h720.resolution });
+    cameraFacing = facing;
+  } catch (err) {
+    alert(mediaError(err, 'camera'));
+  }
+  renderVoiceBar();
+  renderStage();
+}
+
 async function toggleCamera() {
   const lp = state.voice?.room?.localParticipant;
   if (!lp) return;
   try {
     const on = !lp.isCameraEnabled;
+    cameraFacing = 'user';
     const background = on && cameraBackground() !== 'off';
     if (background) await loadSegmenter().catch(() => {}); // so the first frame sent is already changed
     await lp.setCameraEnabled(on, { resolution: window.LivekitClient.VideoPresets.h720.resolution, ...(background ? { processor: backgroundProcessor() } : {}) });
@@ -757,7 +781,7 @@ function renderStage() {
       const screen = showing(p, LK.Track.Source.ScreenShare);
       if (screen) wanted.push({ key: `${id}:screen`, id, track: screen.track ?? null, label: me ? 'Your screen' : `${name}'s screen`, icon: SCREEN_ICON, kind: 'screen', audio: !me && !!p.getTrackPublication(LK.Track.Source.ScreenShareAudio) });
       const camera = showing(p, LK.Track.Source.Camera);
-      wanted.push({ key: `${id}:camera`, id, track: camera?.track ?? null, label: me ? `${name} (you)` : name, kind: 'camera', mirror: me, name });
+      wanted.push({ key: `${id}:camera`, id, track: camera?.track ?? null, label: me ? `${name} (you)` : name, kind: 'camera', mirror: me && cameraFacing === 'user', name });
     }
     // Back in the chat, only a stream that's popped out keeps playing.
     if (!onVideo) wanted.splice(0, wanted.length, ...wanted.filter((w) => w.key === popped));

@@ -37,12 +37,14 @@ function streamTools(t) {
   const out = [];
   if (t.kind === 'screen') out.push(button('tool-draw', 'Draw on this screen', PEN_ICON, () => toggleDrawing(t)));
   if (t.kind === 'screen' && t.id !== state.me.id && window.MediaRecorder) out.push(button('tool-clip', 'Keep clips of this stream', CLIP_ICON, () => (clips.has(t.key) ? saveClip(t) : startClips(t))));
+  if (t.kind === 'camera' && t.id === state.me.id && canFlipCamera) out.push(button('tool-flip', 'Flip camera', FLIP_ICON, () => flipCamera()));
   out.push(button('tool-chat', 'Fireside chat over the video', CHAT_ICON, () => toggleStreamChat(t)));
   if (desktopPopout || document.pictureInPictureEnabled) out.push(button('tool-pip', 'Pop out, to keep watching while you chat', PIP_ICON, () => popOut(t)));
   return out;
 }
 function updateStreamTools(t) {
   t.tools.querySelector('.tool-draw')?.classList.toggle('on', drawingOn.has(t.key));
+  t.tools.querySelector('.tool-flip')?.classList.toggle('hidden', !t.track);
   const clip = t.tools.querySelector('.tool-clip');
   if (clip) {
     const on = clips.has(t.key);
