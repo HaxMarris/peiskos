@@ -150,6 +150,7 @@ function showGame() {
 function closeGame() {
   gamePlay = null;
   $('#game-frame').replaceChildren();
+  renderVoicePlaces();
   if (state.stageShow === 'game') {
     state.stageShow = 'fire';
     renderStage();

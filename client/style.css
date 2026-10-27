@@ -202,7 +202,12 @@ ul { list-style: none; margin: 0; padding: 0; }
 .campfire-chip { flex: none; display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 14px 0 10px; border: 0; border-radius: 999px; background: var(--ember-soft); color: var(--ember); font-weight: 800; font-size: 14px; max-width: 260px; }
 #campfire-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .campfire-chip svg { width: 18px; height: 18px; fill: currentColor; flex: none; }
+#game-chip-icon { display: flex; }
+#game-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.game-chip-short { display: none; }
 .campfire-chip:hover { background: color-mix(in srgb, var(--ember-soft) 100%, var(--ember) 12%); }
+.game-chip { background: var(--accent-soft); color: var(--accent-text); }
+.game-chip:hover { background: color-mix(in srgb, var(--accent-soft) 100%, var(--accent) 12%); }
 .me-btn { flex: none; position: relative; border: 0; background: none; padding: 3px; border-radius: 50%; margin-left: 4px; }
 .me-btn:hover { background: var(--hover); }
 .me-btn .avatar { width: 36px; height: 36px; border-radius: 50%; }
@@ -431,6 +436,8 @@ label.check input { width: auto; }
   .switch-name { flex: 1; min-width: 0; text-align: left; font-family: var(--font-head); font-size: 20px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .campfire-chip { height: 44px; padding: 0 14px 0 12px; }
   #campfire-chip-label { display: none; }
+  #game-chip-label { display: none; }
+  .game-chip-short { display: inline; }
   .side-head { display: none; }
   .switch-foot { flex-wrap: wrap; }
   .switch-foot .settings { flex-basis: 100%; }

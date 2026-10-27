@@ -42,6 +42,7 @@ function stopFishing() {
   const play = fishing.play;
   if (!play) return;
   fishing.play = null;
+  renderVoicePlaces();
   fishingClosing.add(play);
   // Off the dock for everyone else at the fire.
   if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fishing', status: null }));

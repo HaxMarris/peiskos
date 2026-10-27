@@ -92,6 +92,7 @@ const state = {
   sharing: new Map(),       // user id -> { camera, screen } in our voice room
   stageOpen: false,         // showing the Campfire (or its video) instead of the chat
   stageShow: 'fire',        // 'fire': everyone around the fire; 'video': the video grid
+  leftGame: null,           // the game ('game', 'casino' or 'fishing') you closed the stage on, for "Back to the game"
   fireside: { channelId: null, messages: [], unread: 0 }, // the voice room's own chat, while you're in it
   firesideOpen: false,      // on narrow screens the fireside chat opens over the fire
   avatars: new Map(),       // user id -> profile picture path (or null), kept current by user_updated events
