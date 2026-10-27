@@ -1084,8 +1084,11 @@ function dockTick(now) {
   dock.caught = null;
 }
 function drawFriends(T, sc, feetY) {
+  const ice = pondOf(S.pond).feature === 'ice';
   friendsHere().forEach((o, i) => {
     const st = o.status, fx = .22 + i * .13, [coat, trim] = coatOf(o.userId);
+    // On the ice everyone fishes through their own hole, in front of them like yours is.
+    if (ice) { ctx.fillStyle = '#3e5a6c'; ctx.beginPath(); ctx.ellipse(W * Math.min(.95, .5 + fx - .09), H * .78, W * .055, H * .022, 0, 0, 7); ctx.fill(); }
     const hd = drawAngler(ctx, W * fx, feetY, sc, HAT[st.hat] ? st.hat : 'bucket', { T: T + i, sit: true, coat, trim });
     const tx = W * (fx + .21), ty = H * (.5 + i * .01), bend = st.phase === 'bite' ? 10 * Math.sin(T * 20) : 0;
     ctx.strokeStyle = (ROD[st.rod] || ROD.willow).color; ctx.lineWidth = Math.max(3, sc * 2.4); ctx.lineCap = 'round';
