@@ -189,8 +189,13 @@ const BAITS = [
   { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
   { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
   { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
-  { id: 'emberfly', name: 'Ember fly', cost: 30000, pack: 20, desc: 'Ember fish rise to it. Luckiest and biggest bait.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  { id: 'emberfly', name: 'Ember fly', cost: 120000, pack: 20, desc: 'Ember fish rise to it. Luckiest and biggest bait.', luck: 1, size: .3, likes: ['ember', 'rare'] },
 ];
+// Fish are worth 4-5x more at each water but bait helps by the same share everywhere, so bait gets
+// pricier once the later waters open (by the furthest one unlocked, so it can't be bought cheap and
+// carried there). Ember fly is only for Aurora Deep and is priced for it already.
+const BAIT_PRICE_MUL = [1, 1, 1, 2.5, 12];
+const baitCost = b => b.id === 'emberfly' ? b.cost : Math.round(b.cost * BAIT_PRICE_MUL[Math.max(...S.ponds.map(pondIdx))]);
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
 
 const HATS = [
@@ -1220,11 +1225,11 @@ function renderPane() {
       });
       h += `</div>`;
     } else {
-      h += `<h2>Bait</h2><p class="note">One bait is used per hand cast. Fish that like it bite three times as often.</p><div class="list">`;
+      h += `<h2>Bait</h2><p class="note">One bait is used per hand cast. Fish that like it bite three times as often.${baitCost(BAIT.glow) > BAIT.glow.cost ? ' Prices go up once Frozen Lake and Aurora Deep open, since the fish there are worth so much more.' : ''}</p><div class="list">`;
       BAITS.forEach(b => {
         const have = b.id === 'worms' ? '∞' : (S.bait[b.id] || 0), on = S.baitOn === b.id;
         const use = (b.id === 'worms' || have > 0) ? `<button class="buy ghost" style="grid-row:auto" data-act="bait-on" data-id="${b.id}" ${on ? 'disabled' : ''}>${on ? 'On the hook' : 'Use'}</button>` : '';
-        const buy = b.cost ? `<button class="buy" style="grid-row:auto" data-act="bait-buy" data-id="${b.id}" ${S.coins < b.cost ? 'disabled' : ''}>${b.pack} for ${fmt(b.cost)}</button>` : '';
+        const cost = baitCost(b), buy = b.cost ? `<button class="buy" style="grid-row:auto" data-act="bait-buy" data-id="${b.id}" ${S.coins < cost ? 'disabled' : ''}>${b.pack} for ${fmt(cost)}</button>` : '';
         h += `<div class="item${on ? ' current' : ''}"><div class="name">${b.name} <small style="color:var(--muted);font-weight:600">${have === '∞' ? '' : 'have ' + have}</small></div><div style="grid-row:1/span 2;grid-column:2;display:flex;flex-direction:column;gap:6px">${buy}${use}</div><div class="desc">${b.desc}</div></div>`;
       });
       h += `</div>`;
@@ -1325,7 +1330,7 @@ document.addEventListener('click', e => {
   const a = t.dataset.act, id = t.dataset.id, i = +t.dataset.i;
   if (a === 'rod') { const r = ROD[id]; if (!S.rods.includes(id)) { if (S.coins < r.cost) return; S.coins -= r.cost; S.rods.push(id); } S.rod = id; }
   else if (a === 'up') { const u = UPGRADES.find(x => x.id === id), c = upCost(u); if (S.coins < c || S.up[id] >= u.max) return; S.coins -= c; S.up[id]++; }
-  else if (a === 'bait-buy') { const b = BAIT[id]; if (S.coins < b.cost) return; S.coins -= b.cost; S.bait[id] = (S.bait[id] || 0) + b.pack; if (S.baitOn === 'worms') S.baitOn = id; }
+  else if (a === 'bait-buy') { const b = BAIT[id], cost = baitCost(b); if (!cost || S.coins < cost) return; S.coins -= cost; S.bait[id] = (S.bait[id] || 0) + b.pack; if (S.baitOn === 'worms') S.baitOn = id; }
   else if (a === 'bait-on') S.baitOn = id;
   else if (a === 'hat') { if (S.hats.includes(id)) S.hat = id; }
   else if (a === 'unlock') { const p = pondOf(id); if (S.coins < p.cost) return; S.coins -= p.cost; S.ponds.push(id); closeModal(); save(); renderAll(); return walkTo(id); }
