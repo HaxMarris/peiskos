@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import type { Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 
-/** A save is the game's whole state as JSON; 115 fish, 21 hats and six nets of 20 fit in far less. */
+/** A save is the game's whole state as JSON; 253 fish, 27 hats and six nets of 20 fit in far less. */
 export const MAX_SAVE_BYTES = 256 * 1024;
 
 /** The leaderboard's day runs midnight to midnight, Eastern time. */

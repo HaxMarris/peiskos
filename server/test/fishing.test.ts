@@ -74,7 +74,7 @@ test('the fishing save is per person per hearth, and an older device cannot over
 
 test('the game\'s fish are all read from its file', () => {
   const species = loadSpecies();
-  assert.equal(species.size, 115);
+  assert.equal(species.size, 253);
   assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5 });
 });
 
