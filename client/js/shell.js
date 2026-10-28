@@ -170,13 +170,36 @@ function renderVoicePlaces() {
   const ch = voice && [...state.servers.values()].flatMap((s) => s.channels).find((c) => c.id === voice.channelId);
   $('#campfire-chip').classList.toggle('hidden', !ch);
   $('#voice-pill').classList.toggle('hidden', !ch || state.stageOpen);
+  const game = ch && gameToReturnTo();
+  $('#game-chip').classList.toggle('hidden', !game || state.stageOpen);
   if (!ch) return;
   const here = ch.voiceUsers?.length || 1;
   $('#campfire-chip-label').textContent = `${ch.name} · `;
   $('#campfire-chip-count').textContent = here;
   $('#campfire-chip').title = `You're in ${ch.name}. Open it.`;
   const live = [...state.sharing].find(([id, sh]) => id !== state.me.id && sh.screen);
-  $('#voice-pill-label').textContent = `In ${ch.name}` + (live ? ` · ${nameOf(live[0])} is live` : ` · ${here} here`);
+  if (game) {
+    $('#game-chip-label').textContent = `Back to ${game.title}`;
+    $('#game-chip').title = `Back to ${game.title}`;
+  }
+  $('#voice-pill-label').textContent = game ? `Back to ${game.title}`
+    : `In ${ch.name}` + (live ? ` · ${nameOf(live[0])} is live` : ` · ${here} here`);
+}
+// The game you left the fire's stage on, if it's still going.
+function gameToReturnTo() {
+  if (!state.voice) return null;
+  if (state.leftGame === 'game' && gamePlay) return { title: FIRE_GAMES[gamePlay.name]?.title ?? 'the game', open: showGame };
+  if (state.leftGame === 'casino' && casino.channelId !== null) return { title: 'the casino', open: () => openCasino() };
+  if (state.leftGame === 'fishing' && fishing.play) return { title: 'Fireside Angler', open: openFishing };
+  return null;
+}
+function backToGame() {
+  const game = gameToReturnTo();
+  if (!game) return goToVoice();
+  const s = [...state.servers.values()].find((x) => x.channels.some((c) => c.id === state.voice.channelId));
+  if (s && s.id !== state.serverId) selectServer(s.id);
+  showView('chat');
+  game.open();
 }
 function goToVoice() {
   if (!state.voice) return;
@@ -187,7 +210,9 @@ function goToVoice() {
   openStage();
 }
 $('#campfire-chip').onclick = goToVoice;
-$('#voice-pill').onclick = goToVoice;
+$('#voice-pill').onclick = () => (gameToReturnTo() ? backToGame() : goToVoice());
+$('#game-chip').onclick = backToGame;
+$('#game-chip-icon').innerHTML = GAME_ICON;
 
 // The top of someone's card: banner (or their colour), picture, names and about me.
 // `s` is the burrow you opened it from, for their nickname and role colour there.

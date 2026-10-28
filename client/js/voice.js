@@ -664,6 +664,7 @@ function openStage() {
 function closeStage() {
   if (!state.stageOpen) return;
   state.stageOpen = false;
+  state.leftGame = ['game', 'casino', 'fishing'].includes(state.stageShow) ? state.stageShow : null;
   focusKey = null;
   state.firesideOpen = false;
   $('#stage').classList.add('hidden');

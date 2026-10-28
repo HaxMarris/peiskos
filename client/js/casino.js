@@ -78,6 +78,7 @@ function stopCasino() {
   closeCasino();
   if (casino.channelId !== null) sendCasino(null);
   casino.channelId = null;
+  renderVoicePlaces();
   casino.table = null;
   casino.tableRoom = null;
   battles.list = [];
