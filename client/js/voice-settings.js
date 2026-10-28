@@ -747,7 +747,9 @@ function voiceSettings() {
         <span class="small muted">Changes how you sound to everyone. Test it with "Hear yourself".</span></label>
       <label class="check"><input type="checkbox" id="vs-music" ${voicePrefs.music ? 'checked' : ''} /> Music mode</label>
       <span class="small muted">For playing music or an instrument: stereo at 128 kbps, with noise isolation, the voice changer and echo removal off. Use headphones.</span>
-      ${canPickOutput ? '<label>Speakers or headset<select id="vs-audiooutput"></select></label>' : `<span class="small muted">${outputNote}</span>`}
+      ${isPhoneApp ? '<button type="button" class="link-btn" id="vs-pick-output">Choose where sound plays</button>'
+        : canPickOutput ? '<label>Speakers or headset<select id="vs-audiooutput"></select></label>'
+        : `<span class="small muted">${outputNote}</span>`}
       <label>Everyone's volume <span class="range-value" id="vs-out-val">${pct(voicePrefs.outputVolume)}%</span>
         <input type="range" id="vs-out" min="0" max="200" step="5" value="${pct(voicePrefs.outputVolume)}" /></label>
       <button type="button" class="link-btn" id="vs-chime">Play a test sound</button>
@@ -833,6 +835,7 @@ function wireVoiceSettings() {
     if (micTest) startMicTest();
   };
   $('#vs-chime').onclick = () => playSound('join', true);
+  if ($('#vs-pick-output')) $('#vs-pick-output').onclick = () => pickOutput();
   $('#vs-board').onchange = (e) => { voicePrefs.soundboard = e.target.checked; saveVoicePrefs(); };
   for (const r of document.querySelectorAll('#modal-card [name="vs-mode"]')) r.onchange = () => {
     voicePrefs.mode = r.value;

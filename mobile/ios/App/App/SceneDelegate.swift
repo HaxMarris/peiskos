@@ -15,6 +15,13 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        // The call's Live Activity opens peiskos://output (pick where sound plays) and, before
+        // iOS 17, peiskos://mute.
+        for context in URLContexts where context.url.scheme == "peiskos" {
+            if let action = context.url.host, ["output", "mute"].contains(action) {
+                NotificationCenter.default.post(name: .peiskosCallAction, object: action)
+            }
+        }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

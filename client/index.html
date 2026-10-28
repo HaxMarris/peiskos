@@ -202,6 +202,7 @@
             <svg viewBox="0 0 24 24"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.9V21h2v-3.1a7 7 0 0 0 6-6.9h-2Z"/></svg>
           </button>
           <button class="icon-btn" id="voice-deafen" title="Deafen (hear nobody, and mute)"></button>
+          <button class="icon-btn hidden" id="voice-output" title="Choose where sound plays" aria-label="Choose where sound plays"></button>
           <button class="icon-btn" id="voice-camera" title="Turn on camera">
             <svg viewBox="0 0 24 24"><path d="M4 6h11a2 2 0 0 1 2 2v1.5l4-2.5v10l-4-2.5V16a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2Z"/></svg>
           </button>
@@ -389,15 +390,23 @@
               <span class="badge hidden" id="fire-chat-bar-badge"></span>
             </button>
             <div class="fire-controls">
-              <span class="fc"><button class="fire-btn" id="fire-mute"></button><span>Mute</span></span>
-              <span class="fc"><button class="fire-btn" id="fire-deafen"></button><span>Deafen</span></span>
-              <span class="fc"><button class="fire-btn" id="fire-camera"></button><span>Camera</span></span>
-              <span class="fc share"><button class="fire-btn" id="fire-screen"></button><span>Share</span></span>
-              <span class="fc board"><button class="fire-btn" id="fire-board" title="Soundboard" aria-label="Soundboard"></button><span>Sounds</span></span>
-              <span class="fc"><button class="fire-btn" id="fire-listen" title="Listen together" aria-label="Listen together"></button><span>Listen</span></span>
-              <span class="fc"><button class="fire-btn" id="fire-game" title="Play a game together" aria-label="Play a game together"></button><span>Games</span></span>
-              <span class="fc"><button class="fire-btn" id="fire-settings" title="Microphone, speakers and camera" aria-label="Voice and video settings"></button><span>Settings</span></span>
-              <span class="fc"><button class="fire-btn leave" id="fire-leave" title="Leave the fire" aria-label="Leave the fire"></button><span>Leave</span></span>
+              <button class="fire-tray-handle" id="fire-tray-handle" aria-label="More buttons" aria-expanded="false"></button>
+              <div class="fire-row">
+                <span class="fc"><button class="fire-btn" id="fire-mute"></button><span>Mute</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-deafen"></button><span>Deafen</span></span>
+                <span class="fc hidden"><button class="fire-btn" id="fire-output" title="Choose where sound plays" aria-label="Choose where sound plays"></button><span>Output</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-camera"></button><span>Camera</span></span>
+                <span class="fc leave"><button class="fire-btn leave" id="fire-leave" title="Leave the fire" aria-label="Leave the fire"></button><span>Leave</span></span>
+              </div>
+              <!-- On a phone these wait in the tray you drag up. -->
+              <div class="fire-extras" id="fire-extras">
+                <span class="fc share"><button class="fire-btn" id="fire-screen"></button><span>Share</span></span>
+                <span class="fc board"><button class="fire-btn" id="fire-board" title="Soundboard" aria-label="Soundboard"></button><span>Sounds</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-listen" title="Listen together" aria-label="Listen together"></button><span>Listen</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-game" title="Play a game together" aria-label="Play a game together"></button><span>Games</span></span>
+                <span class="fc hidden"><button class="fire-btn" id="fire-flip" title="Flip camera" aria-label="Flip camera"></button><span>Flip</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-settings" title="Microphone, speakers and camera" aria-label="Voice and video settings"></button><span>Settings</span></span>
+              </div>
             </div>
           </section>
           <aside class="fire-chat" id="fire-chat" aria-label="Fireside chat">
