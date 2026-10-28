@@ -18,7 +18,8 @@ async function copyText(text, button) {
     await navigator.clipboard.writeText(text);
     if (button) { const was = button.textContent; button.textContent = 'Copied'; setTimeout(() => (button.textContent = was), 1500); }
   } catch {
-    prompt('Copy this:', text);
+    // The clipboard can be refused (an older desktop app, a browser setting): show it, selected, to copy by hand.
+    await ask({ title: 'Copy this', copy: text, ok: 'Done', cancel: '' });
   }
 }
 
@@ -39,8 +40,7 @@ async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
   adminTab = tab;
   modal(`<h2>Server admin</h2>
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
-    <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'admin-modal');
+    <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>`, 'admin-modal side-tabs');
   onModalClose = () => { clearInterval(updatePoll); updatePoll = null; };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => showAdminTab(b.dataset.tab);
   try {
@@ -106,7 +106,7 @@ function adminOverview(pane) {
   };
   const go = $('#admin-update');
   if (go) go.onclick = async () => {
-    if (!confirm('Update Peiskos now? It goes away for a minute or two while it rebuilds.')) return;
+    if (!(await askConfirm('Update Peiskos now? It goes away for a minute or two while it rebuilds.'))) return;
     try {
       adminData.updater = (await api('/api/admin/update', { method: 'POST' })).updater;
       adminData.updater.updating = true;
@@ -154,7 +154,7 @@ function adminPeople(pane) {
           toast(`Reset link for ${r.username} copied. Send it to them; it works once, for the next hour.`, { timeout: 8000 });
         } else if (b.dataset.act === 'delete') {
           confirmDeleteAccount(u);
-        } else if (confirm(`Log ${u.username} out on all their devices?`)) {
+        } else if ((await askConfirm(`Log ${u.username} out on all their devices?`, { ok: 'Log out' }))) {
           await api(`/api/admin/users/${id}/sign-out`, { method: 'POST' });
           toast(`${u.username} is logged out everywhere.`);
         }
@@ -248,7 +248,7 @@ function adminBackups(pane) {
   for (const li of pane.querySelectorAll('.backup-list li[data-name]')) {
     li.querySelector('button').onclick = async () => {
       const day = li.dataset.name.slice(7, 17);
-      if (!confirm(`Put Peiskos back to ${day}? Everything since then (messages, accounts, hearths) is undone for everyone. Peiskos restarts, and is back in under a minute.`)) return;
+      if (!(await askConfirm(`Put Peiskos back to ${day}? Everything since then (messages, accounts, hearths) is undone for everyone. Peiskos restarts, and is back in under a minute.`, { ok: 'Restore', danger: true }))) return;
       try {
         await api('/api/admin/backups/restore', { method: 'POST', body: { name: li.dataset.name } });
         pane.innerHTML = '<p><b>Restoring…</b> Peiskos is restarting. This page reloads when it\'s back.</p>';
@@ -274,8 +274,8 @@ async function adminReports(pane) {
     const status = r.resolvedAt ? ` · ${r.outcome === 'deleted' ? 'deleted' : 'dismissed'} by ${r.resolvedBy ?? 'someone'}` : r.gone ? ' · the message has since been deleted' : '';
     const note = `${r.label} · reported by ${r.reporter ?? 'a deleted account'} · ${r.place}${r.reason ? `\n"${r.reason}"` : ''}${status}`;
     const m = { id: r.messageId, channelId: r.channelId, author: `${r.author ?? 'Someone'}${r.authorUsername ? ` (@${r.authorUsername})` : ''}`, authorId: r.authorId, authorAvatar: r.authorAvatar, content: r.content, createdAt: r.createdAt, attachments: r.attachments };
-    const resolve = (deleteMessage) => (b) => {
-      if (deleteMessage && !confirm('Delete this message and its files for everyone? This can\'t be undone.')) return;
+    const resolve = (deleteMessage) => async (b) => {
+      if (deleteMessage && !(await askConfirm('Delete this message and its files for everyone? This can\'t be undone.'))) return;
       b.disabled = true;
       api(`/api/admin/reports/${r.id}/resolve`, { method: 'POST', body: { deleteMessage } })
         .then(() => { if (!r.resolvedAt) state.me.adminReports = Math.max(0, (state.me.adminReports ?? 1) - 1); syncAdminButton(); adminReports(pane); })
@@ -349,7 +349,7 @@ async function openBots(serverId) {
       li.innerHTML = `<span><span><b>${escapeHtml(w.name)}</b><span class="bot-tag">BOT</span></span><span class="small muted">posts in #${escapeHtml(room?.name ?? '?')}</span></span>`;
       li.append(Object.assign(document.createElement('button'), {
         type: 'button', className: 'btn secondary tiny-btn', textContent: 'Delete',
-        onclick: async () => { if (confirm(`Delete the ${w.name} webhook? Anything using its address stops working.`)) try { render(await api(`/api/webhooks/${w.id}`, { method: 'DELETE' })); } catch (err) { alertError(err); } },
+        onclick: async () => { if ((await askConfirm(`Delete the ${w.name} webhook? Anything using its address stops working.`))) try { render(await api(`/api/webhooks/${w.id}`, { method: 'DELETE' })); } catch (err) { alertError(err); } },
       }));
       return li;
     }));
@@ -361,13 +361,13 @@ async function openBots(serverId) {
         Object.assign(document.createElement('button'), {
           type: 'button', className: 'btn secondary tiny-btn', textContent: 'New token',
           onclick: async () => {
-            if (!confirm(`Make a new token for ${b.name}? The old one stops working.`)) return;
+            if (!(await askConfirm(`Make a new token for ${b.name}? The old one stops working.`, { ok: 'New token' }))) return;
             try { showSecret(`${b.name}'s new token`, (await api(`/api/servers/${serverId}/bots/${b.id}/token`, { method: 'POST' })).token, 'Shown only now. Keep it secret: it lets a program post as this bot.'); } catch (err) { alertError(err); }
           },
         }),
         Object.assign(document.createElement('button'), {
           type: 'button', className: 'btn secondary tiny-btn', textContent: 'Remove',
-          onclick: async () => { if (confirm(`Remove ${b.name}? Its messages stay.`)) try { render(await api(`/api/servers/${serverId}/bots/${b.id}`, { method: 'DELETE' })); } catch (err) { alertError(err); } },
+          onclick: async () => { if ((await askConfirm(`Remove ${b.name}? Its messages stay.`))) try { render(await api(`/api/servers/${serverId}/bots/${b.id}`, { method: 'DELETE' })); } catch (err) { alertError(err); } },
         }),
       );
       return li;

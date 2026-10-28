@@ -138,8 +138,8 @@ svg { display: block; }
 .icon-btn:hover { color: var(--text-strong); background: var(--hover); }
 .small-btn { font-size: 18px; line-height: 1; padding: 2px 8px; }
 label { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 700; color: var(--muted); }
-label input, .modal-card input, .modal-card textarea, .gif-picker input { background: var(--surface); border: 1.5px solid var(--field-line); border-radius: 10px; padding: 10px 12px; font-size: 15px; font-weight: 400; outline: none; transition: border-color .15s; }
-label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-picker input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+label input, .modal-card input, .modal-card textarea, .gif-picker input, .empty-join input { background: var(--surface); border: 1.5px solid var(--field-line); border-radius: 10px; padding: 10px 12px; font-size: 15px; font-weight: 400; outline: none; transition: border-color .15s; }
+label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-picker input:focus, .empty-join input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 
 /* ---------- auth ---------- */
 /* One scene behind the whole page: the forest fades into the form side instead of stopping at an edge. */
@@ -164,7 +164,9 @@ label input:focus, .modal-card input:focus, .modal-card textarea:focus, .gif-pic
 .get-desktop-row svg { width: 16px; height: 16px; flex: none; fill: currentColor; }
 /* The apple's weight sits low (leaf on top), so lift it to line up with the word. */
 .get-desktop-row [data-os="mac"] svg { transform: translateY(-1.5px); }
-.auth-card .get-desktop-row .btn.mine { background: var(--accent); color: var(--accent-ink); }
+.auth-card .get-mine { margin: 0; display: flex; align-items: center; justify-content: center; gap: 8px; text-decoration: none; }
+.get-mine svg { width: 16px; height: 16px; flex: none; fill: currentColor; }
+.legal-foot { margin-top: 4px; }
 
 /* ---------- layout ----------
    A computer shows the top bar (burrows), the burrow's rooms, the chat and who's here.
@@ -329,6 +331,24 @@ ul { list-style: none; margin: 0; padding: 0; }
 .empty-state { position: absolute; inset: 0; background: var(--bg); display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 8px; padding: 16px; }
 .empty-state h2 { margin: 12px 0 0; font-size: 26px; }
 .empty-state p { margin: 0 0 12px; max-width: 340px; }
+.whats-new { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.welcome-steps { display: flex; gap: 6px; margin-right: 44px; }
+.welcome-steps i { flex: 1; height: 4px; border-radius: 4px; background: var(--surface-2); }
+.welcome-steps i.on { background: var(--accent); }
+.welcome-me { display: flex; align-items: center; gap: 18px; }
+.welcome-me label { flex: 1; min-width: 0; }
+.welcome-avatar { position: relative; flex: none; padding: 0; border: 0; background: none; border-radius: 50%; cursor: pointer; }
+.welcome-avatar:disabled { cursor: default; }
+.welcome-avatar .avatar.xl { width: 72px; height: 72px; border-radius: 50%; font-size: 28px; }
+.welcome-avatar-add { position: absolute; right: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: var(--accent); color: var(--accent-ink); font-weight: 800; box-shadow: 0 0 0 3px var(--surface); }
+.welcome-avatar.uploading { opacity: .5; pointer-events: none; }
+.vs-test-row { display: flex; align-items: center; gap: 12px; }
+.empty-join { display: flex; gap: 8px; width: min(380px, 100%); }
+.empty-join input { flex: 1; min-width: 0; }
+.empty-state .or { width: min(380px, 100%); }
+.empty-state .error:empty { display: none; }
+.app.no-hearth .sidebar, .app.no-hearth .member-pane, .app.no-hearth .chat-header, .app.no-hearth .composer-wrap { display: none !important; }
+.app.no-hearth .chat { display: flex !important; grid-column: 1 / -1; }
 
 /* ---------- members ---------- */
 .member-pane { width: 240px; border-left: 1px solid var(--line); overflow-y: auto; padding: 18px 14px; }
@@ -414,6 +434,11 @@ label.check input { width: auto; }
 .member-head .icon-btn { font-size: 22px; width: 40px; height: 40px; }
 
 /* ---------- phones: one screen at a time ---------- */
+.more-btn { display: none; }
+@media (max-width: 760px) {
+  .chat-header .more-btn { display: grid; }
+  .chat-header #pins-btn, .chat-header #notify-btn, .chat-header #thread-btn { display: none; }
+}
 @media (max-width: 760px) {
   .auth { grid-template-columns: 1fr; grid-template-rows: 180px 1fr; background: linear-gradient(to bottom, var(--scene-sky), var(--bg) 230px); }
   .auth-scene { inset: 0 0 auto; height: 230px; -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent); mask-image: linear-gradient(to bottom, #000 62%, transparent); }
@@ -507,6 +532,13 @@ label.check input { width: auto; }
 .sheet-item + .sheet-item { border-top: 1px solid var(--line); }
 
 /* Loading older messages, at the top of the list. */
+.skeleton-row { display: flex; gap: 14px; padding: 10px 28px 10px 32px; }
+.skeleton-avatar { flex: none; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); }
+.skeleton-lines { flex: 1; display: flex; flex-direction: column; gap: 9px; padding-top: 4px; }
+.skeleton-lines span { height: 11px; border-radius: 6px; background: var(--surface-2); }
+.skeleton-lines span:first-child { height: 12px; }
+@media (prefers-reduced-motion: no-preference) { .skeleton-avatar, .skeleton-lines span { animation: skeleton-pulse 1.4s ease-in-out infinite; } }
+@keyframes skeleton-pulse { 50% { opacity: .5; } }
 .older-spinner { width: 22px; height: 22px; margin: 10px auto; border-radius: 50%; border: 2.5px solid var(--line); border-top-color: var(--accent); animation: spin-older .8s linear infinite; }
 @keyframes spin-older { to { transform: rotate(360deg); } }
 
@@ -1014,6 +1046,11 @@ button.seat-face { cursor: pointer; }
 .toasts { position: fixed; right: calc(16px + env(safe-area-inset-right)); bottom: calc(16px + env(safe-area-inset-bottom)); z-index: 60; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; pointer-events: none; }
 .toast { pointer-events: auto; display: flex; align-items: center; gap: 10px; max-width: min(440px, calc(100vw - 32px)); padding: 10px 8px 10px 14px; background: var(--text-strong); color: var(--bg); border-radius: 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, .25); font-size: 14px; }
 .toast span { flex: 1; }
+.toast.error::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--berry); }
+.modal.ask { z-index: 50; }
+.ask-card { max-width: 400px; }
+.ask-card p { color: var(--muted); }
+.ask-card .btn:disabled { opacity: .45; cursor: not-allowed; }
 .toast .btn { padding: 6px 12px; flex: none; }
 .toast .icon-btn { color: inherit; opacity: .7; font-size: 18px; }
 
@@ -1472,6 +1509,16 @@ button.seat-face { cursor: pointer; }
 .account-pane .profile-banner { margin: 0; border-radius: 14px 14px 0 0; }
 .profile-preview { border: 1px solid var(--line); border-radius: 15px; padding: 0 14px 14px; }
 .profile-preview .profile-banner { margin: 0 -14px; }
+.profile-preview .editable { position: relative; cursor: pointer; }
+.profile-preview .profile-banner.editable { border-radius: 14px 14px 0 0; }
+.profile-preview .profile-avatar.editable { overflow: visible; }
+.edit-badge { position: absolute; right: 8px; bottom: 8px; width: 30px; height: 30px; border: 0; border-radius: 50%; display: grid; place-items: center; background: var(--surface); color: var(--text-strong); box-shadow: 0 1px 4px rgba(0, 0, 0, .25); cursor: pointer; }
+.profile-avatar .edit-badge { right: -4px; bottom: -2px; width: 28px; height: 28px; }
+.edit-badge svg { width: 16px; height: 16px; fill: currentColor; }
+.editable:hover .edit-badge, .edit-badge:focus-visible { background: var(--accent); color: var(--accent-ink); }
+.profile-preview.uploading { opacity: .6; pointer-events: none; }
+.picture-hint { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; }
+.picture-hint .link-btn { font-size: 13px; }
 .profile-avatar.avatar.xl { width: 84px; height: 84px; border-radius: 50%; margin-top: -42px; margin-left: 4px; box-shadow: 0 0 0 5px var(--surface); font-size: 32px; }
 .profile-names { display: flex; flex-direction: column; gap: 1px; margin-top: 8px; min-width: 0; }
 .profile-names h2 { overflow: hidden; text-overflow: ellipsis; }
@@ -1601,15 +1648,15 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 /* ---- fun extras: seasons, fire decorations, marshmallows, birthdays, message of the day, year in review ---- */
 
 /* A little mark by the name for the time of year. */
-.season-mark { margin-left: 6px; font-size: 15px; }
-[data-season="winter"] .season-mark::after { content: '❄️'; }
-[data-season="spring"] .season-mark::after { content: '🌸'; }
-[data-season="summer"] .season-mark::after { content: '☀️'; }
-[data-season="autumn"] .season-mark::after { content: '🍂'; }
-[data-holiday="halloween"] .season-mark::after { content: '🎃'; }
-[data-holiday="yule"] .season-mark::after { content: '🎄'; }
-[data-holiday="newyear"] .season-mark::after { content: '🎆'; }
-[data-holiday="midsummer"] .season-mark::after { content: '🌼'; }
+.season-mark { display: none; width: 17px; height: 17px; margin-left: 6px; flex: none; background: var(--accent); -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
+[data-season="winter"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cline x1='12.0' y1='12.0' x2='21.5' y2='12.0' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='16.8' y2='20.2' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='7.3' y2='20.2' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='2.5' y2='12.0' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='7.2' y2='3.8' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='12.0' x2='16.8' y2='3.8' stroke='%23000' stroke-width='2.2' stroke-linecap='round'/%3E%3Cpath d='M16.9 9.9 L18.0 12.0 L16.9 14.1' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M16.3 15.2 L15.0 17.2 L12.6 17.3' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M11.4 17.3 L9.0 17.2 L7.7 15.2' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M7.1 14.1 L6.0 12.0 L7.1 9.9' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M7.7 8.8 L9.0 6.8 L11.4 6.7' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3Cpath d='M12.6 6.7 L15.0 6.8 L16.3 8.8' fill='none' stroke='%23000' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+[data-season="spring"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.6' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Ccircle cx='12.0' cy='6.5' r='4.2'/%3E%3Ccircle cx='17.2' cy='10.3' r='4.2'/%3E%3Ccircle cx='15.2' cy='16.4' r='4.2'/%3E%3Ccircle cx='8.8' cy='16.4' r='4.2'/%3E%3Ccircle cx='6.8' cy='10.3' r='4.2'/%3E%3Ccircle cx='12' cy='12' r='4'/%3E%3C/g%3E%3C/svg%3E"); }
+[data-season="summer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='5'/%3E%3Cline x1='19.6' y1='12.0' x2='22.4' y2='12.0' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.4' y1='17.4' x2='19.4' y2='19.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='19.6' x2='12.0' y2='22.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.6' y1='17.4' x2='4.6' y2='19.4' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='4.4' y1='12.0' x2='1.6' y2='12.0' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='6.6' y1='6.6' x2='4.6' y2='4.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='12.0' y1='4.4' x2='12.0' y2='1.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3Cline x1='17.4' y1='6.6' x2='19.4' y2='4.6' stroke='%23000' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-season="autumn"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M5 19C4 11 9 5 19 4c1 9-4 15-12 15.5z'/%3E%3Cpath d='M4 21 12 12' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-holiday="halloween"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cellipse cx='8.5' cy='14' rx='5.5' ry='7'/%3E%3Cellipse cx='15.5' cy='14' rx='5.5' ry='7'/%3E%3Cellipse cx='12' cy='14' rx='4.5' ry='7.3'/%3E%3Cpath d='M11 7.5c0-2 .5-3.5 2.5-4.8' stroke='%23000' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E"); }
+[data-holiday="yule"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 2 18 10h-3l5 7H4l5-7H6z'/%3E%3Crect x='10.5' y='17' width='3' height='4.5' rx='1'/%3E%3C/svg%3E"); }
+[data-holiday="newyear"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cline x1='15.5' y1='12.0' x2='22.0' y2='12.0' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='14.8' y1='14.1' x2='20.1' y2='17.9' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='13.1' y1='15.3' x2='15.1' y2='21.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='10.9' y1='15.3' x2='8.9' y2='21.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='9.2' y1='14.1' x2='3.9' y2='17.9' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='8.5' y1='12.0' x2='2.0' y2='12.0' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='9.2' y1='9.9' x2='3.9' y2='6.1' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='10.9' y1='8.7' x2='8.9' y2='2.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='13.1' y1='8.7' x2='15.1' y2='2.5' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Cline x1='14.8' y1='9.9' x2='20.1' y2='6.1' stroke='%23000' stroke-width='1.9' stroke-linecap='round'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
+[data-holiday="midsummer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.8' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2845 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2890 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28135 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28180 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28225 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28270 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28315 12 12%29'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
 
 /* Whatever is falling or floating around the fire. */
 .season-layer { position: absolute; inset: -4% -2%; overflow: hidden; pointer-events: none; border-radius: 40%; }
@@ -1846,3 +1893,40 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 #channel-list li.friends-row { min-height: 54px; border: 1px solid var(--line); margin-bottom: 6px; }
 #channel-list li.friends-row .group-avatar { width: 40px; height: 40px; border-radius: 50%; }
 #channel-list li.friends-row .group-avatar svg { width: 18px; height: 18px; }
+
+/* ---- settings pages (a hearth's settings, Your account, Server admin): sections down the side on
+   wider screens, a scrolling row of tabs on phones. The × stays the one way to close. */
+.side-tabs .nav-group { display: none; }
+.side-tabs .tabs .count { margin-left: 6px; font-size: 12px; color: var(--muted); }
+.side-tabs .tabs .danger-item { color: var(--berry); }
+.side-tabs .settings-pane { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.side-tabs .settings-pane > h2 { font-size: 20px; }
+.side-tabs .settings-pane .modal-row > .btn[data-close] { display: none; }
+@media (min-width: 761px) {
+  .modal-card.side-tabs { max-width: 900px; width: min(900px, calc(100vw - 32px)); height: min(720px, calc(100vh - 32px)); display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); column-gap: 28px; row-gap: 14px; padding: 0; overflow: hidden; }
+  .side-tabs > .modal-x { position: absolute; top: 14px; right: 14px; margin: 0; }
+  .modal-card.side-tabs { position: relative; }
+  .side-tabs > h2 { grid-column: 1; grid-row: 1; padding: 24px 0 0 22px; font-size: 21px; overflow-wrap: anywhere; }
+  .side-tabs > .tabs { grid-column: 1; grid-row: 2; flex-direction: column; align-items: stretch; gap: 2px; padding: 0 12px 20px; background: none; border-radius: 0; overflow-y: auto; }
+  .side-tabs > .tabs button { flex: none; text-align: left; padding: 8px 12px; display: flex; align-items: center; }
+  .side-tabs > .tabs button .count { margin-left: auto; }
+  .side-tabs > .tabs button[aria-selected="true"] { background: var(--accent-soft); color: var(--accent-text); box-shadow: none; }
+  .side-tabs .nav-group { display: block; padding: 14px 12px 4px; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .side-tabs .nav-group:first-child { padding-top: 4px; }
+  /* Everything that isn't the title or the list is the page: one scrolling column on the right. */
+  .side-tabs > :not(h2):not(.tabs):not(.modal-x) { grid-column: 2; grid-row: 1 / -1; overflow-y: auto; padding: 26px 56px 26px 0; }
+  .side-tabs > [hidden] { display: none; }
+}
+@media (max-width: 760px) {
+  .side-tabs .frame-title { font-size: 22px; }
+  .side-tabs > .tabs .nav-group { display: none; }
+  /* A hearth's settings on a phone: the list of sections, then one section with a way back. */
+  .side-tabs:has(.settings-back) > .tabs, .side-tabs:has(.settings-back) > .frame-title { display: none; }
+  .side-tabs.settings-list > .tabs { display: flex; flex-direction: column; align-items: stretch; gap: 0; padding: 0; background: none; overflow: visible; }
+  .side-tabs.settings-list > .tabs .nav-group { display: block; padding: 14px 4px 4px; font-size: 11px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
+  .side-tabs.settings-list > .tabs button { text-align: left; padding: 12px 4px; border-radius: 0; border-bottom: 1px solid var(--line); display: flex; color: var(--text-strong); font-size: 16px; }
+  .side-tabs.settings-list > .tabs button .count { margin-left: auto; }
+  .side-tabs.settings-list > .tabs .danger-item { color: var(--berry); border-bottom: 0; margin-top: 8px; }
+  .side-tabs.settings-list .settings-pane { display: none; }
+  .settings-back { align-self: flex-start; font-size: 15px; margin-bottom: 2px; }
+}

@@ -1284,7 +1284,7 @@ async function onCasesClick(e) {
     const items = shownItems().filter((i) => !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);
     const locked = casino.inventory.filter((i) => i.locked).length;
-    if (!confirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?${locked ? ` Your ${locked} locked ${locked === 1 ? 'skin stays' : 'skins stay'}.` : ''}`)) return;
+    if (!(await askConfirm(`Sell ${items.length === casino.inventory.length ? 'all ' : ''}${items.length} items for ${chipsText(total)} chips?${locked ? ` Your ${locked} locked ${locked === 1 ? 'skin stays' : 'skins stay'}.` : ''}`))) return;
     if (await sellItems(items.map((i) => i.id))) renderCases();
     return;
   }
@@ -1309,7 +1309,7 @@ async function onCasesClick(e) {
   if (t.closest('[data-sell-picked]')) {
     const items = casino.inventory.filter((i) => invPicked.has(i.id) && !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);
-    if (!items.length || !confirm(`Sell ${items.length} item${items.length === 1 ? '' : 's'} for ${chipsText(total)} chips?`)) return;
+    if (!items.length || !(await askConfirm(`Sell ${items.length} item${items.length === 1 ? '' : 's'} for ${chipsText(total)} chips?`))) return;
     if (await sellItems(items.map((i) => i.id))) { invPicked.clear(); invPicking = false; renderCases(); }
     return;
   }

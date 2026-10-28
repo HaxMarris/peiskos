@@ -26,7 +26,7 @@ function loadLivekit() {
 // muted: start with your mic off (moved to the AFK fire). deafened: keep it on when moved.
 async function joinVoice(channelId, { muted = false, deafened = false, rejoin = false } = {}) {
   if (state.voice?.channelId === channelId) return;
-  if (!state.voiceEnabled) return alert('Voice is not set up on this server yet.');
+  if (!state.voiceEnabled) return notice('Voice is not set up on this server yet.');
   if (!rejoin) cancelRejoin();
   leaveVoice(true);
   const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted };
@@ -170,7 +170,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     // Still offline: keep trying quietly rather than showing an error each time.
     if (rejoin && state.rejoin) return scheduleRejoin(state.rejoin);
     const denied = err?.name === 'NotAllowedError' || /permission/i.test(err?.message ?? '');
-    alert(denied ? 'Peiskos needs microphone access for voice. Allow it in your system settings and try again.'
+    notice(denied ? 'Peiskos needs microphone access for voice. Allow it in your system settings and try again.'
                  : `Couldn't join voice: ${err?.message || err}`);
   }
 }
@@ -515,7 +515,7 @@ async function toggleCamera() {
     await lp.setCameraEnabled(on, { resolution: window.LivekitClient.VideoPresets.h720.resolution, ...(background ? { processor: backgroundProcessor() } : {}) });
     if (lp.isCameraEnabled && !state.stageOpen) goToVoice(); // so you can see yourself
   } catch (err) {
-    alert(mediaError(err, 'camera'));
+    notice(mediaError(err, 'camera'));
   }
   renderVoiceBar();
   renderStage();
@@ -585,7 +585,7 @@ async function toggleScreen(surface) {
   } catch (err) {
     // Closing the picker without choosing anything is not an error.
     const cancelled = err?.name === 'NotAllowedError' && !/system/i.test(err.message ?? '');
-    if (!cancelled && err?.name !== 'AbortError') alert(mediaError(err, 'screen'));
+    if (!cancelled && err?.name !== 'AbortError') notice(mediaError(err, 'screen'));
   } finally {
     if (audioContext && voice.appAudio?.context !== audioContext) audioContext.close().catch(() => {});
   }

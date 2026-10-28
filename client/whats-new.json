@@ -1,0 +1,15 @@
+{
+  "about": "What changed, in words for friends, newest first. Add a line to the top entry as things merge; start a new entry (the next id) after a release. Each release's notes start with the entries it adds, and the app shows people the ones they haven't seen.",
+  "entries": [
+    {
+      "id": 1,
+      "items": [
+        "Confirmations and errors are Peiskos's own now, instead of your browser's pop-ups. Deleting a hearth asks you to type its name.",
+        "A hearth's settings, Your account and Server admin are one page each, with sections down the side. On phones, a hearth's settings start as a list.",
+        "New friends get a short welcome: a picture and name, alerts, and a mic check. Every step can be skipped.",
+        "Rooms show placeholders while they load, and messages show just the time under the date line.",
+        "Light, dark or match your device is in Your account › Settings."
+      ]
+    }
+  ]
+}

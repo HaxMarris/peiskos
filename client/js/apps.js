@@ -99,7 +99,6 @@ async function installApp() {
   $('#install-btn').classList.add('hidden');
 }
 $('#install-btn').onclick = installApp;
-$('#shortcuts-btn').onclick = () => openShortcuts();
 
 // A newer desktop app: a green button in the top bar, as in Discord, that restarts into it once
 // you confirm. (An unsigned Mac build can't install it itself, so the button opens the download.)
@@ -113,11 +112,13 @@ function showUpdateButton(update) {
   btn.classList.remove('hidden');
   btn.onclick = () => {
     modal(`<h2>Update Peiskos?</h2>
+      ${unseenNews.length ? `<h3>What's new</h3>${whatsNewList(unseenNews.slice(0, 8))}` : ''}
       <p class="muted">${update.install
         ? `Version ${escapeHtml(update.version)} is ready. Peiskos closes and opens again in a few seconds. If you're by a fire, you'll need to join it again.`
         : `Version ${escapeHtml(update.version)} is out. Download it and install it over this one.`}</p>
       <div class="modal-row"><span class="spacer"></span><button type="button" class="btn secondary" data-close>Not now</button><button type="button" class="btn" id="update-go">${update.install ? 'Restart and update' : 'Download'}</button></div>`);
     $('#update-go').onclick = () => { closeModal(); updates.install(); };
+    if (unseenNews.length) store.set('whatsNewSeen', String(newsTotal)); // shown here, so not again after the restart
   };
 }
 if (updates) {
@@ -883,4 +884,119 @@ function afterEnter() {
     openDms();
     showView('rooms');
   }
+}
+
+// ---------------------------------------------------------------- the first time in
+
+// Right after signing up: a picture and name, alerts, and a mic check. Every step can be skipped,
+// and it shows once, on the device the account was made on.
+function welcomeIfNew() {
+  if (store.get('welcome') !== '1') return;
+  store.set('welcome', null);
+  // An invite opened on the way in goes first; the welcome waits until it's dealt with.
+  whenNoModal(() => welcomeStep(0));
+}
+
+/** Runs fn now if no modal is open, or once the open one closes. */
+function whenNoModal(fn) {
+  if ($('#modal').classList.contains('hidden')) return fn();
+  const watch = new MutationObserver(() => {
+    if (!$('#modal').classList.contains('hidden')) return;
+    watch.disconnect();
+    setTimeout(() => whenNoModal(fn), 250);
+  });
+  watch.observe($('#modal'), { attributes: true, attributeFilter: ['class'] });
+}
+
+const WELCOME_STEPS = 3;
+function welcomeStep(n) {
+  stopMicTest();
+  if (n >= WELCOME_STEPS) return closeModal();
+  const bar = `<div class="welcome-steps" aria-label="Step ${n + 1} of ${WELCOME_STEPS}">${Array.from({ length: WELCOME_STEPS }, (_, i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+  const row = (next) => `<div class="modal-row"><button type="button" class="btn secondary" id="welcome-skip">Skip</button><button type="button" class="btn" id="welcome-next">${next}</button></div>`;
+  const me = state.me;
+  if (n === 0) {
+    modal(`${bar}<h2>How should friends see you?</h2>
+      <div class="welcome-me">
+        <button type="button" class="welcome-avatar" id="welcome-avatar" ${state.maxUploadBytes ? '' : 'disabled'} aria-label="Choose a picture"><span class="avatar xl" id="welcome-avatar-pic"></span>${state.maxUploadBytes ? '<span class="welcome-avatar-add">+</span>' : ''}</button>
+        <label>Display name<input id="welcome-name" maxlength="32" placeholder="${escapeHtml(me.username)}" value="${escapeHtml(me.displayName ?? '')}" /></label>
+      </div>
+      <input type="file" id="welcome-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <div class="error" id="welcome-error"></div>
+      ${row('Next')}`, 'welcome-modal');
+    setAvatar($('#welcome-avatar-pic'), me.username, me.avatar);
+    $('#welcome-avatar').onclick = () => $('#welcome-file').click();
+    $('#welcome-file').onchange = async (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file) return;
+      $('#welcome-error').textContent = '';
+      $('#welcome-avatar').classList.add('uploading');
+      try {
+        applyUser(await uploadPicture('/api/me/avatar', await squarePicture(file)));
+        setAvatar($('#welcome-avatar-pic'), state.me.username, state.me.avatar);
+      } catch (err) { $('#welcome-error').textContent = err.message; }
+      finally { $('#welcome-avatar')?.classList.remove('uploading'); }
+    };
+    $('#welcome-next').onclick = async () => {
+      const name = $('#welcome-name').value.trim();
+      if (name !== (me.displayName ?? '')) {
+        try { applyUser({ ...state.me, ...(await api('/api/me', { method: 'PATCH', body: { displayName: name } })) }); }
+        catch (err) { return ($('#welcome-error').textContent = err.message); }
+      }
+      welcomeStep(1);
+    };
+  } else if (n === 1) {
+    modal(`${bar}<h2>Get alerts</h2>
+      <p class="muted">When someone messages you, mentions you or calls, even with Peiskos closed. Your browser asks next.</p>
+      <div class="error" id="welcome-error"></div>
+      ${row('Turn on alerts')}`, 'welcome-modal');
+    $('#welcome-next').onclick = async () => {
+      try { await turnOnPush(true); welcomeStep(2); }
+      catch (err) { $('#welcome-error').textContent = err.message; $('#welcome-next').textContent = 'Try again'; }
+    };
+  } else {
+    modal(`${bar}<h2>Check your microphone</h2>
+      <p class="muted">Say something. The bar moves when Peiskos hears you.</p>
+      <div class="vs-test-row"><div class="level-meter"><span id="vs-level"></span></div><button type="button" class="btn secondary" id="vs-test">Test</button></div>
+      <p class="small muted" id="vs-test-status"></p>
+      ${row('Done')}`, 'welcome-modal');
+    $('#vs-test').onclick = () => (micTest ? stopMicTest() : startMicTest());
+    if (navigator.mediaDevices?.getUserMedia) startMicTest();
+    onModalClose = () => stopMicTest();
+  }
+  $('#welcome-skip').onclick = () => welcomeStep(n + 1);
+}
+
+// ---------------------------------------------------------------- what's new
+
+// whats-new.json says what changed, in words for friends, newest first; lines are only ever added.
+// It comes from the server, which updates first, so the desktop app's update button can say what
+// the new version brings. Each device remembers how many lines it has shown.
+async function whatsNewLines() {
+  try {
+    const r = await fetch(`${state.serverUrl.replace(/\/$/, '')}/whats-new.json`, { cache: 'no-cache' });
+    return r.ok ? ((await r.json()).entries ?? []).flatMap((e) => e.items) : [];
+  } catch { return []; }
+}
+const whatsNewList = (lines) => `<ul class="whats-new">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
+let unseenNews = [];
+let newsTotal = 0;
+
+/** After an update, the lines this device hasn't shown yet, once. A new account starts with none. */
+async function showWhatsNew(newAccount) {
+  const lines = await whatsNewLines();
+  if (!lines.length) return;
+  newsTotal = lines.length;
+  const seen = Number(store.get('whatsNewSeen'));
+  // A device that's never shown any (a new account, or before this existed) starts from now.
+  if (newAccount || !Number.isFinite(seen) || store.get('whatsNewSeen') == null) return store.set('whatsNewSeen', String(lines.length));
+  unseenNews = lines.slice(0, Math.max(0, lines.length - seen));
+  if (!unseenNews.length || updates?.get()) return; // with a desktop update waiting, its button says it
+  whenNoModal(() => {
+    modal(`<h2>What's new</h2>${whatsNewList(unseenNews.slice(0, 8))}
+      <div class="modal-row"><button type="button" class="btn" data-close>Got it</button></div>`, 'whats-new-modal');
+    store.set('whatsNewSeen', String(lines.length));
+    unseenNews = [];
+  });
 }

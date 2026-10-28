@@ -180,7 +180,7 @@ async function pickDevice(kind, id, label) {
   try {
     await room.switchActiveDevice(kind, id || 'default', !!id);
   } catch (err) {
-    alert(mediaError(err, DEVICE_NAMES[kind].toLowerCase()));
+    notice(mediaError(err, DEVICE_NAMES[kind].toLowerCase()));
   }
 }
 
@@ -908,7 +908,7 @@ function wireVoiceSettings() {
       $('#vs-picture').textContent = 'Change the picture';
       backgroundChanged();
     } catch {
-      alert("Couldn't open that picture.");
+      notice("Couldn't open that picture.");
     }
   };
   $('#voice-quality').onchange = (e) => { voicePrefs.quality = e.target.value; saveVoicePrefs(); };
@@ -947,7 +947,11 @@ function themeSettings() {
     const c = p.color ?? OWN_EMBER;
     return `<button type="button" class="swatch" data-preset="${i}" title="${p.name}" style="background: hsl(${c.h} ${c.s}% 42%)"></button>`;
   };
-  return `<h3>Theme color</h3>
+  const mode = store.get('theme') || 'system';
+  const opt = (id, label) => `<button type="button" role="radio" data-theme-mode="${id}" aria-selected="${mode === id}" aria-checked="${mode === id}">${label}</button>`;
+  return `<h3>Light or dark</h3>
+    <div class="tabs theme-mode" role="radiogroup" aria-label="Light or dark">${opt('light', 'Light')}${opt('dark', 'Dark')}${opt('system', 'Match this device')}</div>
+    <h3>Theme color</h3>
     <div class="theme-picker">
       <div class="wheel" id="theme-wheel" tabindex="0" role="slider" aria-label="Theme color"><span class="wheel-dot" id="theme-dot"></span></div>
       <div class="theme-side">
@@ -997,6 +1001,13 @@ function wireThemeSettings() {
   };
   $('#modal-card').querySelectorAll('[data-preset]').forEach((b) => (b.onclick = () => use(THEME_PRESETS[b.dataset.preset].color, true)));
   $('#theme-reset').onclick = () => use(null, true);
+  $('#modal-card').querySelectorAll('[data-theme-mode]').forEach((b) => (b.onclick = () => {
+    setThemeMode(b.dataset.themeMode);
+    for (const x of $('#modal-card').querySelectorAll('[data-theme-mode]')) {
+      x.setAttribute('aria-selected', x === b);
+      x.setAttribute('aria-checked', x === b);
+    }
+  }));
   show();
 }
 

@@ -702,7 +702,7 @@ function openSounds(serverId) {
       try { done(await api(`/api/sounds/${id}`, { method: 'PATCH', body: { name: li.querySelector('.sound-name').value, emoji: li.querySelector('.sound-emoji').value } })); } catch (err) { alertError(err); }
     };
     li.querySelector('[data-act="delete"]').onclick = async () => {
-      if (!confirm(`Delete ${sound.name}?`)) return;
+      if (!(await askConfirm(`Delete ${sound.name}?`))) return;
       try { done(await api(`/api/sounds/${id}`, { method: 'DELETE' })); } catch (err) { alertError(err); }
     };
   }

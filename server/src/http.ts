@@ -44,6 +44,7 @@ export const MIME: Record<string, string> = {
   '.woff2': 'font/woff2',
   '.wasm': 'application/wasm',
   '.webmanifest': 'application/manifest+json',
+  '.json': 'application/json',
 };
 
 /** Compares secrets without leaking how much of them matched through timing. */

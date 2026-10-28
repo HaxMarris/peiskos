@@ -147,7 +147,7 @@ function openRoomSettings(c) {
   wirePrivacyFields();
   $('#room-announce')?.addEventListener('change', (e) => $('#room-posters').classList.toggle('hidden', !e.target.checked));
   $('#room-archive')?.addEventListener('click', async () => {
-    if (!c.archived && !confirm(`Archive ${c.name}? It moves to the bottom of the list, keeps everything said in it, and takes no new messages.`)) return;
+    if (!c.archived && !(await askConfirm(`Archive ${c.name}? It moves to the bottom of the list, keeps everything said in it, and takes no new messages.`))) return;
     try {
       handleEvent({ type: 'server_updated', server: await api(`/api/channels/${c.id}`, { method: 'PATCH', body: { archived: !c.archived } }) });
       closeModal();
@@ -171,7 +171,7 @@ function openRoomSettings(c) {
     } catch (err) { $('#modal-error').textContent = err.message; }
   };
   $('#room-delete').onclick = async () => {
-    if (!confirm(`Delete ${c.name} and everything said in it?`)) return;
+    if (!(await askConfirm(`Delete ${c.name} and everything said in it?`))) return;
     try {
       await api(`/api/channels/${c.id}`, { method: 'DELETE' });
       closeModal();
@@ -211,21 +211,21 @@ function openMemberMenu(s, m) {
   $('#member-voice-mute')?.addEventListener('click', () => act('voice-mute', { muted: !m.voiceMuted }));
   $('#member-timeout')?.addEventListener('click', () => act('timeout', { minutes: Number($('#member-timeout-for').value) }));
   $('#member-timeout-end')?.addEventListener('click', () => act('timeout', { minutes: 0 }));
-  $('#member-remove')?.addEventListener('click', () => confirm(`Remove ${nameOfPerson(m)} from ${s.name}?`) && act('remove', { ban: false }));
-  $('#member-ban')?.addEventListener('click', () => confirm(`Ban ${nameOfPerson(m)} from ${s.name}?`) && act('remove', { ban: true }));
+  $('#member-remove')?.addEventListener('click', async () => (await askConfirm(`Remove ${nameOfPerson(m)} from ${s.name}?`)) && act('remove', { ban: false }));
+  $('#member-ban')?.addEventListener('click', async () => (await askConfirm(`Ban ${nameOfPerson(m)} from ${s.name}?`)) && act('remove', { ban: true }));
 }
 
-async function renderBans(s) {
+async function renderBans(s, page = false) {
   const bans = await api(`/api/servers/${s.id}/bans`).catch(() => []);
   const el = $('#ban-list');
   if (!el) return;
-  if (!bans.length) return (el.innerHTML = '');
-  el.innerHTML = `<h3>Banned</h3><ul class="ban-list">${bans
+  if (!bans.length) return (el.innerHTML = page ? '<p class="muted">Nobody is banned. Ban someone from their card in the member list.</p>' : '');
+  el.innerHTML = `${page ? '' : '<h3>Banned</h3>'}<ul class="ban-list">${bans
     .map((b) => `<li><span>${escapeHtml(b.username)}</span><button class="btn secondary" data-unban="${b.id}">Unban</button></li>`)
     .join('')}</ul>`;
   el.querySelectorAll('[data-unban]').forEach((b) => (b.onclick = async () => {
     await api(`/api/servers/${s.id}/bans/${b.dataset.unban}`, { method: 'DELETE' }).catch(alertError);
-    renderBans(s);
+    renderBans(s, page);
   }));
 }
 
@@ -310,7 +310,7 @@ function openRoleEditor(serverId, roleId) {
     catch (err) { $('#modal-error').textContent = err.message; }
   };
   $('#role-delete')?.addEventListener('click', async () => {
-    if (!confirm(`Delete the ${role.name} role? Everyone who has it loses it.`)) return;
+    if (!(await askConfirm(`Delete the ${role.name} role? Everyone who has it loses it.`))) return;
     try { done(await api(`/api/roles/${roleId}`, { method: 'DELETE' })); }
     catch (err) { $('#modal-error').textContent = err.message; }
   });
@@ -507,23 +507,12 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
     <div class="tabs" role="tablist">${ACCOUNT_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
     <section data-pane="profile" class="account-pane">
       <div class="profile-preview" id="profile-preview"></div>
-      ${state.maxUploadBytes ? `<div class="account-picture">
-        <span class="avatar xl" id="account-avatar"></span>
-        <div class="buttons">
-          <div>
-            <button type="button" class="btn secondary" id="avatar-pick">Upload picture</button>
-            <button type="button" class="btn secondary" id="avatar-remove">Remove</button>
-          </div>
-          <span class="small muted">PNG, JPEG, GIF or WebP. It's cropped to a square.</span>
-        </div>
-        <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
-      </div>
-      <div class="error" id="avatar-error"></div>
-      <div class="banner-row">
-        <button type="button" class="btn secondary" id="banner-pick">${me.banner ? 'Change banner' : 'Add a banner'}</button>
-        <button type="button" class="btn secondary ${me.banner ? '' : 'hidden'}" id="banner-remove">Remove banner</button>
-        <input type="file" id="banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
-      </div>` : ''}
+      ${state.maxUploadBytes ? `<p class="small muted picture-hint">Click your picture or the banner to change it. PNG, JPEG, GIF or WebP.
+        <button type="button" class="link-btn" id="avatar-remove">Remove picture</button>
+        <button type="button" class="link-btn" id="banner-remove">Remove banner</button></p>
+      <input type="file" id="avatar-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <input type="file" id="banner-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+      <div class="error" id="avatar-error"></div>` : ''}
       <form id="profile-form">
         <label>Display name<input id="profile-name" maxlength="32" placeholder="${escapeHtml(me.username)}" value="${escapeHtml(me.displayName ?? '')}" /></label>
         <span class="small muted">What people see. You still log in as ${escapeHtml(me.username)}, and people @mention you as @${escapeHtml(me.username)}.</span>
@@ -587,8 +576,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
         <div class="error" id="delete-error"></div>
         <div class="modal-row"><button type="submit" class="btn danger">Delete my account</button></div>
       </form>
-    </section>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'account-modal');
+    </section>`, 'account-modal side-tabs');
   const show = (id) => {
     if (!ACCOUNT_TABS.some(([t]) => t === id)) id = 'profile';
     store.set('accountTab', id);
@@ -634,6 +622,23 @@ function wireProfileSettings() {
     if (!box) return;
     const accent = $('#profile-accent-off').checked ? null : $('#profile-accent').value;
     box.replaceChildren(profileHeader({ ...me, displayName: $('#profile-name').value.trim() || null, bio: $('#profile-bio').value, accent, birthday: readBirthday() }, null));
+    if (!state.maxUploadBytes) return;
+    // The card is the editor: its picture and banner open the file pickers.
+    const editable = (el, input, label) => {
+      if (!el) return;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'edit-badge';
+      b.title = b.ariaLabel = label;
+      b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4h6l1.5 2H20a1 1 0 0 1 1 1v11a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h3.5L9 4Zm3 4a4.5 4.5 0 1 0 0 9 4.5 4.5 0 0 0 0-9Zm0 2a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Z"/></svg>';
+      el.classList.add('editable');
+      el.append(b);
+      el.onclick = () => $(input).click();
+    };
+    editable(box.querySelector('.profile-banner'), '#banner-input', state.me.banner ? 'Change banner' : 'Add a banner');
+    editable(box.querySelector('.profile-avatar'), '#avatar-input', state.me.avatar ? 'Change picture' : 'Add a picture');
+    $('#avatar-remove').classList.toggle('hidden', !state.me.avatar);
+    $('#banner-remove').classList.toggle('hidden', !state.me.banner);
   };
   preview();
   for (const id of ['#profile-bday-month', '#profile-bday-day']) $(id).addEventListener('change', preview);
@@ -655,19 +660,15 @@ function wireProfileSettings() {
     } catch (err) { $('#profile-error').textContent = err.message; }
   };
   if (!state.maxUploadBytes) return;
-  setAvatar($('#account-avatar'), me.username, me.avatar);
-  $('#avatar-remove').classList.toggle('hidden', !me.avatar);
-  $('#avatar-pick').onclick = () => $('#avatar-input').click();
   $('#avatar-input').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     $('#avatar-error').textContent = '';
-    $('#avatar-pick').disabled = true;
-    $('#avatar-pick').textContent = 'Uploading…';
+    $('#profile-preview').classList.add('uploading');
     try { applyUser(await uploadPicture('/api/me/avatar', await squarePicture(file))); preview(); }
     catch (err) { $('#avatar-error').textContent = err.message; }
-    finally { $('#avatar-pick').disabled = false; $('#avatar-pick').textContent = 'Upload picture'; }
+    finally { $('#profile-preview').classList.remove('uploading'); }
   };
   $('#avatar-remove').onclick = async () => {
     try { applyUser(await api('/api/me/avatar', { method: 'DELETE' })); preview(); }
@@ -675,20 +676,17 @@ function wireProfileSettings() {
   };
   const bannerDone = (me2) => {
     Object.assign(state.me, me2);
-    $('#banner-pick').textContent = state.me.banner ? 'Change banner' : 'Add a banner';
-    $('#banner-remove').classList.toggle('hidden', !state.me.banner);
     preview();
   };
-  $('#banner-pick').onclick = () => $('#banner-input').click();
   $('#banner-input').onchange = async (e) => {
     const file = e.target.files[0];
     e.target.value = '';
     if (!file) return;
     $('#avatar-error').textContent = '';
-    $('#banner-pick').disabled = true;
+    $('#profile-preview').classList.add('uploading');
     try { bannerDone(await uploadPicture('/api/me/banner', await bannerPicture(file))); }
     catch (err) { $('#avatar-error').textContent = err.message; }
-    finally { $('#banner-pick').disabled = false; }
+    finally { $('#profile-preview').classList.remove('uploading'); }
   };
   $('#banner-remove').onclick = async () => {
     try { bannerDone(await api('/api/me/banner', { method: 'DELETE' })); } catch (err) { $('#avatar-error').textContent = err.message; }
@@ -887,7 +885,7 @@ async function renderPasskeyBox(adding = false) {
     <div><button type="button" class="btn secondary" id="passkey-add">Add a passkey</button></div>`;
   $('#passkey-add').onclick = () => renderPasskeyBox(true);
   for (const b of box.querySelectorAll('[data-remove-passkey]')) b.onclick = async () => {
-    if (!confirm('Remove this passkey? You can add it again later.')) return;
+    if (!(await askConfirm('Remove this passkey? You can add it again later.'))) return;
     try { await api(`/api/me/passkeys/${encodeURIComponent(b.dataset.removePasskey)}`, { method: 'DELETE' }); renderPasskeyBox(); } catch (err) { alertError(err); }
   };
 }
@@ -913,7 +911,7 @@ async function loadDevices() {
     try { await api(`/api/me/sessions/${b.dataset.signout}`, { method: 'DELETE' }); loadDevices(); } catch (err) { alertError(err); }
   };
   $('#signout-others')?.addEventListener('click', async () => {
-    if (!confirm('Sign out of Peiskos on every other device?')) return;
+    if (!(await askConfirm('Sign out of Peiskos on every other device?', { ok: 'Sign out' }))) return;
     try { await api('/api/me/sessions', { method: 'DELETE' }); toast('Signed out everywhere else.'); loadDevices(); } catch (err) { alertError(err); }
   });
 }
@@ -935,7 +933,7 @@ async function deleteMyAccount(e) {
   e.preventDefault();
   const deleteMessages = document.querySelector('input[name="delete-messages"]:checked').value === 'delete';
   $('#delete-error').textContent = '';
-  if (!confirm(`Delete your Peiskos account${deleteMessages ? ' and everything you sent' : ''}? This can't be undone.`)) return;
+  if (!(await askConfirm(`Delete your Peiskos account${deleteMessages ? ' and everything you sent' : ''}? This can't be undone.`))) return;
   try {
     await api('/api/me', { method: 'DELETE', body: { password: $('#delete-password').value, code: $('#delete-code')?.value.trim() ?? '', deleteMessages } });
     closeModal();

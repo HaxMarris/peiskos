@@ -5,7 +5,7 @@
   "private": true,
   "description": "Desktop app for Peiskos, a self-hosted place to chat, talk and hang out with friends",
   "author": "Peiskos",
-  "homepage": "https://github.com/HaxMarris/Burrow",
+  "homepage": "https://github.com/HaxMarris/peiskos",
   "main": "main.js",
   "scripts": {
     "copy-client": "node scripts/copy-client.js",

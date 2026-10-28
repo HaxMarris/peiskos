@@ -24,7 +24,8 @@ function renderMessages({ stick = false } = {}) {
       else if (p) start.append(messageCard(p, null, { onOpen: () => jumpTo(ch.parentId, p.id) }));
     } else start.innerHTML = isDm(server)
       ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
-      : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2><div class="muted">${ch.topic ? escapeHtml(ch.topic) : 'Pull up a stump and say hello.'}</div>`;
+      : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
+    start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
     frag.append(start);
   }
   let prev = null;
@@ -39,6 +40,19 @@ function renderMessages({ stick = false } = {}) {
   if (stick || (nearBottom && state.reachedEnd)) messagesEl.scrollTop = messagesEl.scrollHeight;
   else messagesEl.scrollTop = scrollTop;
   renderSeen();
+}
+
+// While a room's messages load: a few grey rows shaped like messages.
+function showMessagePlaceholders() {
+  const widths = [[22, 64], [18, 42], [26, 80, 36], [20, 55], [24, 70]];
+  messagesEl.setAttribute('aria-busy', 'true');
+  messagesEl.replaceChildren(...widths.map((lines) => {
+    const row = document.createElement('div');
+    row.className = 'skeleton-row';
+    row.setAttribute('aria-hidden', 'true');
+    row.innerHTML = `<span class="skeleton-avatar"></span><span class="skeleton-lines">${lines.map((w) => `<span style="width:${w}%"></span>`).join('')}</span>`;
+    return row;
+  }));
 }
 
 // The last author group's message column, so a new message can join it without a redraw.
@@ -56,7 +70,9 @@ function addMessageNodes(parent, m, prev, body) {
     const d = document.createElement('div');
     d.className = 'day-divider';
     const label = document.createElement('span');
-    label.textContent = new Date(m.createdAt).toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+    const day = new Date(m.createdAt);
+    const year = day.getFullYear() === new Date().getFullYear() ? undefined : 'numeric';
+    label.textContent = day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year });
     d.append(label);
     parent.append(d);
     newGroup = true;
@@ -92,7 +108,7 @@ function addMessageNodes(parent, m, prev, body) {
     const time = new Date(m.createdAt);
     const color = roleColor(state.servers.get(state.serverId), m.authorId);
     body.innerHTML = `<div class="head"><span class="author${color ? ` named" style="--name:${escapeHtml(color)}"` : '"'}>${escapeHtml(authorName(m))}</span>${m.authorBot ? '<span class="bot-tag">BOT</span>' : ''}
-        <span class="time" title="${escapeHtml(time.toLocaleString())}">${escapeHtml(formatTime(time))}</span></div>`;
+        <span class="time" title="${escapeHtml(time.toLocaleString())}">${escapeHtml(formatTime(time, { short: true }))}</span></div>`;
     // Their name and picture open their card.
     av.classList.add('opens-card');
     av.onclick = body.querySelector('.author').onclick = () => openPersonById(m.authorId);
@@ -282,8 +298,8 @@ async function sendComposer() {
   const replyTo = state.replyTo;
   if ((!content && !files.length) || !channelId) return;
   if ((slowWaits.get(channelId) ?? 0) > Date.now()) return renderSlowNote(); // slow mode: what you typed stays put
-  if (files.some((p) => p.error)) return alert('Remove the files that failed to upload first.');
-  if (content.length > 4000) return alert('Messages can be at most 4000 characters. Paste long text and it goes up as a file instead.');
+  if (files.some((p) => p.error)) return notice('Remove the files that failed to upload first.');
+  if (content.length > 4000) return notice('Messages can be at most 4000 characters. Paste long text and it goes up as a file instead.');
   input.value = '';
   haptic();
   autosize();
@@ -465,13 +481,65 @@ function modal(html, kind = '') {
   const closing = onModalClose;
   onModalClose = null;
   closing?.();
+  // A person's card or another sheet leaves any settings page behind.
+  if (/\bsheet\b/.test(kind)) settingsFrame = null;
+  if (settingsFrame) {
+    html = settingsFrameHtml() + `<div class="settings-pane">${html}</div>`;
+    kind = `${kind} side-tabs`;
+  }
   $('#modal-card').className = 'modal-card' + (kind ? ' ' + kind : '');
   $('#modal-card').innerHTML = `<button type="button" class="icon-btn modal-x" data-close title="Close (Esc)" aria-label="Close">×</button>` + html;
   $('#modal').classList.remove('hidden');
   $('#modal-card').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
-  $('#modal-card').querySelector('input')?.focus();
+  if (settingsFrame) wireSettingsFrame();
+  $('#modal-card').querySelector(settingsFrame ? '.settings-pane input' : 'input')?.focus();
+}
+
+// ---- settings pages: sections down the side, the chosen one beside them. Each section is a page
+// that opens with modal() as before; while the frame is up, modal() puts it inside the frame.
+// Items: { id, label, group, count, run, action, danger }. An `action` item does something (a
+// menu, leaving) without becoming the page shown.
+let settingsFrame = null;
+function openSettingsFrame(title, items, first) {
+  settingsFrame = { title, items: items.filter(Boolean), active: null };
+  if (first && settingsFrame.items.some((i) => i.id === first)) showSettingsSection(first);
+  // Phones start at the list of sections, like a phone's own settings; computers open the first one.
+  else if (isPhone()) showSettingsList();
+  else showSettingsSection(settingsFrame.items.find((i) => !i.action).id);
+}
+function showSettingsList() {
+  settingsFrame.active = null;
+  modal('', 'settings-list');
+}
+function showSettingsSection(id) {
+  const item = settingsFrame?.items.find((i) => i.id === id);
+  if (!item) return;
+  if (!item.action) settingsFrame.active = id;
+  item.run();
+}
+function settingsFrameHtml() {
+  let group = null;
+  const rows = settingsFrame.items.map((i) => {
+    const heading = i.group !== group ? `<span class="nav-group">${escapeHtml(i.group ?? '')}</span>` : '';
+    group = i.group;
+    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}</button>`;
+  });
+  return `<h2 class="frame-title">${escapeHtml(settingsFrame.title)}</h2><nav class="tabs" role="tablist" aria-label="${escapeHtml(settingsFrame.title)}">${rows.join('')}</nav>`;
+}
+function wireSettingsFrame() {
+  for (const b of $('#modal-card').querySelectorAll('[data-section]')) b.onclick = () => showSettingsSection(b.dataset.section);
+  // On phones a section has a way back to the list.
+  if (settingsFrame.active && isPhone()) {
+    const back = document.createElement('button');
+    back.type = 'button';
+    back.className = 'link-btn settings-back';
+    back.textContent = `‹ ${settingsFrame.title}`;
+    back.onclick = showSettingsList;
+    $('#modal-card .settings-pane').prepend(back);
+  }
 }
 function closeModal() {
+  settingsFrame = null;
   $('#modal').classList.add('hidden');
   const closing = onModalClose;
   onModalClose = null;
@@ -480,10 +548,81 @@ function closeModal() {
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
+// ---- questions: Peiskos's own yes/no and fill-in dialogs, in a layer above any open modal, so
+// confirming something on the admin page doesn't close it. Each resolves once, however it's answered.
+
+let answerAsk = null;
+function ask({ title, text = '', ok = 'OK', cancel = 'Cancel', danger = false, field = null, typeToConfirm = '', copy = '' }) {
+  answerAsk?.(null);
+  return new Promise((resolve) => {
+    const card = $('#ask-card');
+    card.innerHTML = `<h2 id="ask-title"></h2>${text ? '<p id="ask-text"></p>' : ''}
+      ${field ? '<input id="ask-input" autocomplete="off" />' : ''}
+      ${copy ? '<input id="ask-input" readonly />' : ''}
+      ${typeToConfirm ? '<p class="small" id="ask-match-line">Type <b id="ask-match"></b> to confirm</p><input id="ask-input" autocomplete="off" aria-labelledby="ask-match-line" />' : ''}
+      <div class="modal-row">${cancel ? '<button type="button" class="btn secondary" id="ask-no"></button>' : ''}<button type="button" class="btn${danger ? ' danger' : ''}" id="ask-yes"></button></div>`;
+    $('#ask-title').textContent = title;
+    if (text) $('#ask-text').textContent = text;
+    if (typeToConfirm) $('#ask-match').textContent = typeToConfirm;
+    if (cancel) $('#ask-no').textContent = cancel;
+    $('#ask-yes').textContent = ok;
+    const input = $('#ask-input');
+    if (field) { input.value = field.value ?? ''; input.placeholder = field.placeholder ?? ''; if (field.max) input.maxLength = field.max; }
+    if (copy) input.value = copy;
+    const yes = $('#ask-yes');
+    if (typeToConfirm) {
+      const match = () => (yes.disabled = input.value.trim().toLowerCase() !== typeToConfirm.trim().toLowerCase());
+      input.oninput = match;
+      match();
+    }
+    const done = (value) => {
+      answerAsk = null;
+      $('#ask').classList.add('hidden');
+      document.removeEventListener('keydown', onKey, true);
+      resolve(value);
+    };
+    answerAsk = done;
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.stopImmediatePropagation(); done(field ? null : false); }
+      else if (e.key === 'Enter' && input && e.target === input && !yes.disabled) { e.preventDefault(); yes.click(); }
+    };
+    document.addEventListener('keydown', onKey, true);
+    yes.onclick = () => done(field ? input.value : true);
+    if (cancel) $('#ask-no').onclick = () => done(field ? null : false);
+    $('#ask').onclick = (e) => { if (e.target.id === 'ask') done(field ? null : false); };
+    $('#ask').classList.remove('hidden');
+    if (input) { input.focus(); input.select(); } else yes.focus();
+  });
+}
+
+/** A yes/no question. The first sentence of `text` becomes the title when no title is given. */
+function askConfirm(text, { title, ok, cancel = 'Cancel', danger, typeToConfirm = '' } = {}) {
+  if (!title) {
+    const cut = text.search(/[?.](\s|$)/);
+    [title, text] = cut > 0 ? [text.slice(0, cut + 1), text.slice(cut + 1).trim()] : [text, ''];
+  }
+  // The button says what happens ("Delete", "Sell"), and losing things is red.
+  const verb = title.match(/^(Delete|Remove|Ban|Block|Leave|Archive|Sell|Buy|Update|Cancel)\b/)?.[1];
+  ok ??= verb === 'Cancel' ? 'Yes, cancel it' : verb ?? 'OK';
+  danger ??= /^(Delete|Remove|Ban|Block|Leave)$/.test(verb ?? '');
+  if (verb === 'Cancel' && cancel === 'Cancel') cancel = 'Keep it';
+  return ask({ title, text, ok, cancel, danger, typeToConfirm }).then(Boolean);
+}
+
+/** A one-line text answer, or null if it was cancelled. */
+function askText(title, value = '', { ok = 'Save', placeholder = '', max = 0 } = {}) {
+  return ask({ title, ok, field: { value, placeholder, max } });
+}
+
+/** Something went wrong or can't be done: says so in a toast instead of a pop-up. */
+function notice(text) {
+  toast(text, { kind: 'error', timeout: 7000 });
+}
+
 function openAddServer(focus) {
   modal(`<h2>Find a hearth</h2>
     <form id="create-form">
-      <label>Dig a new one<input id="new-server-name" placeholder="e.g. Friday Night Crew" maxlength="64" required /></label>
+      <label>Start a new hearth<input id="new-server-name" placeholder="e.g. Friday Night Crew" maxlength="64" required /></label>
       <button type="submit" class="btn">Create hearth</button>
     </form>
     <div class="or">or</div>
@@ -531,59 +670,62 @@ function addServer(s) {
   selectServer(s.id);
 }
 
-$('#empty-add').onclick = () => openAddServer();
+$('#empty-add').onclick = () => openAddServer('create');
+$('#empty-join').onsubmit = async (e) => {
+  e.preventDefault();
+  $('#empty-error').textContent = '';
+  try { addServer(await api('/api/join', { method: 'POST', body: { inviteCode: $('#empty-invite').value } })); }
+  catch (err) { $('#empty-error').textContent = err.message; }
+};
 
-$('#server-menu-btn').onclick = () => {
-  const s = state.servers.get(state.serverId);
+$('#server-menu-btn').onclick = () => openHearthSettings(state.serverId);
+
+// A hearth's settings: what you can change depends on your roles; everyone gets invites,
+// notifications, the rules and the year in review.
+function openHearthSettings(serverId, first) {
+  const s = state.servers.get(serverId);
   if (!s) return;
   const owner = s.ownerId === state.me.id;
   const n = notifyState(s, null);
-  modal(`<h2>${escapeHtml(s.name)}</h2>
-    ${s.description ? `<p class="muted">${escapeHtml(s.description)}</p>` : ''}
-    <div class="settings-buttons">
-      <button class="btn" id="open-invites">Invite people</button>
-      <button class="btn secondary" id="open-notify" aria-haspopup="menu">Notifications: ${n.muted ? 'muted' : { all: 'all messages', mentions: 'only @mentions', none: 'nothing' }[n.level]}</button>
-      ${s.rules ? '<button class="btn secondary" id="open-rules">Rules</button>' : ''}
-      ${can(s, 'burrow') ? '<button class="btn secondary" id="open-edit">Edit hearth</button>' : ''}
-      ${can(s, 'messages') ? `<button class="btn secondary" id="open-reports">Reports${s.openReports ? ` · ${s.openReports}` : ''}</button>` : ''}
-      ${can(s, 'audit') ? '<button class="btn secondary" id="open-audit">Audit log</button>' : ''}
-      ${can(s, 'burrow') ? '<button class="btn secondary" id="open-bots">Bots and webhooks</button>' : ''}
-      ${can(s, 'burrow') ? `<button class="btn secondary" id="open-motd">Message of the day${s.motd?.length ? ` · ${s.motd.length}` : ''}</button>` : ''}
-      <button class="btn secondary" id="open-review">Year in review</button>
-      ${can(s, 'roles') ? `<button class="btn secondary" id="open-roles">Roles${s.roles.length ? ` · ${s.roles.length}` : ''}</button>` : ''}
-      ${can(s, 'emoji') && state.maxUploadBytes ? `<button class="btn secondary" id="open-emoji">Emoji and stickers${s.emoji?.length ? ` · ${s.emoji.length}` : ''}</button>
-        <button class="btn secondary" id="open-sounds">Soundboard${s.sounds?.length ? ` · ${s.sounds.length}` : ''}</button>` : ''}
-    </div>
-    ${can(s, 'ban') ? '<div id="ban-list"></div>' : ''}
-    <div class="modal-row">
-      <button class="btn danger" id="leave-server">${owner ? 'Delete hearth' : 'Leave hearth'}</button>
-      <button class="btn secondary" data-close>Close</button>
-    </div>`);
-  if (can(s, 'ban')) renderBans(s);
-  $('#open-invites').onclick = () => openInvites(s.id);
-  $('#open-notify').onclick = () => openNotifyMenu($('#open-notify'), s, null);
-  $('#open-rules')?.addEventListener('click', () => openRules(s));
-  $('#open-edit')?.addEventListener('click', () => openEditBurrow(s.id));
-  $('#open-roles')?.addEventListener('click', () => openRoles(s.id));
-  $('#open-reports')?.addEventListener('click', () => openReports(s.id));
-  $('#open-audit')?.addEventListener('click', () => openAudit(s.id));
-  $('#open-bots')?.addEventListener('click', () => openBots(s.id));
-  $('#open-motd')?.addEventListener('click', () => openMotd(s.id));
-  $('#open-review').onclick = () => openYearReview(s.id);
-  $('#open-emoji')?.addEventListener('click', () => openEmojiManager(s.id));
-  $('#open-sounds')?.addEventListener('click', () => openSounds(s.id));
-  $('#leave-server').onclick = async () => {
-    if (owner && !confirm(`Delete "${s.name}" and all its messages for everyone?`)) return;
-    try {
-      await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
-      closeModal();
-      state.servers.delete(s.id);
-      state.serverOrder = state.serverOrder.filter((id) => id !== s.id);
-      leaveVoiceIfGone();
-      selectServer(state.serverOrder[0] ?? null);
-    } catch (err) { alertError(err); }
-  };
-};
+  const notifyLabel = n.muted ? 'muted' : { all: 'all messages', mentions: 'only @mentions', none: 'nothing' }[n.level];
+  const emoji = can(s, 'emoji') && state.maxUploadBytes;
+  openSettingsFrame(s.name, [
+    can(s, 'burrow') && { id: 'edit', group: 'Hearth', label: 'Overview', run: () => openEditBurrow(s.id) },
+    can(s, 'burrow') && { id: 'motd', group: 'Hearth', label: 'Message of the day', count: s.motd?.length, run: () => openMotd(s.id) },
+    emoji && { id: 'emoji', group: 'Hearth', label: 'Emoji and stickers', count: s.emoji?.length, run: () => openEmojiManager(s.id) },
+    emoji && { id: 'sounds', group: 'Hearth', label: 'Soundboard', count: s.sounds?.length, run: () => openSounds(s.id) },
+    can(s, 'burrow') && { id: 'bots', group: 'Hearth', label: 'Bots and webhooks', run: () => openBots(s.id) },
+    { id: 'invites', group: 'People', label: 'Invite people', run: () => openInvites(s.id) },
+    can(s, 'roles') && { id: 'roles', group: 'People', label: 'Roles', count: s.roles.length, run: () => openRoles(s.id) },
+    can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', count: s.openReports, run: () => openReports(s.id) },
+    can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', run: () => openAudit(s.id) },
+    can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', run: () => {
+      modal('<h2>Bans</h2><div id="ban-list"><p class="muted">Loading…</p></div>');
+      renderBans(s, true);
+    } },
+    s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
+    { id: 'notify', group: 'You', label: `Notifications: ${notifyLabel}`, action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
+    { id: 'review', group: 'You', label: 'Year in review', run: () => openYearReview(s.id) },
+    { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
+  ], first);
+}
+
+async function leaveHearth(s) {
+  const owner = s.ownerId === state.me.id;
+  const others = (s.members?.length ?? 1) - 1;
+  const sure = owner
+    ? await askConfirm(`${others > 0 ? `All ${others + 1} members lose` : 'You lose'} every room, message and file in it. This can't be undone.`, { title: `Delete ${s.name}?`, ok: 'Delete hearth', danger: true, typeToConfirm: s.name })
+    : await askConfirm(`You can come back with an invite.`, { title: `Leave ${s.name}?`, ok: 'Leave', danger: true });
+  if (!sure) return;
+  try {
+    await api(`/api/servers/${s.id}/leave`, { method: 'POST' });
+    closeModal();
+    state.servers.delete(s.id);
+    state.serverOrder = state.serverOrder.filter((id) => id !== s.id);
+    leaveVoiceIfGone();
+    selectServer(state.serverOrder[0] ?? null);
+  } catch (err) { alertError(err); }
+}
 
 // Changing the burrow's picture, from its settings.
 function wireBurrowPicture(s) {

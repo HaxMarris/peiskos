@@ -184,7 +184,7 @@ function flashMessage(id) {
 async function jumpTo(channelId, messageId) {
   closeModal();
   const where = roomById(channelId);
-  if (!where) return alert("That message is in a room you can't see any more.");
+  if (!where) return notice("That message is in a room you can't see any more.");
   showView('chat');
   if (where.s.id !== state.serverId) {
     if (isDm(where.s)) store.set('lastDm', where.s.id);
@@ -324,9 +324,10 @@ function closeMenu() {
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMenu(); });
 messagesEl.addEventListener('scroll', closeMenu);
 
-function toast(text, { action, onAction, timeout = 5000 } = {}) {
+function toast(text, { action, onAction, timeout = 5000, kind = '' } = {}) {
   const t = document.createElement('div');
-  t.className = 'toast';
+  t.className = 'toast' + (kind ? ' ' + kind : '');
+  if (kind === 'error') t.setAttribute('role', 'alert');
   const span = document.createElement('span');
   span.textContent = text;
   t.append(span);
