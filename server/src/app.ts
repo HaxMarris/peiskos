@@ -2649,7 +2649,7 @@ export function createApp(opts: AppOptions): Server {
   const MAX_PUSH_DEVICES = 10;
 
   route('GET', '/api/push/key', () => ({ key: vapid.publicKey }));
-  route('POST', '/api/push', ({ user, body }) => {
+  route('POST', '/api/push', ({ user, body, session }) => {
     const endpoint = typeof body.endpoint === 'string' ? body.endpoint : '';
     const keys = (body.keys ?? {}) as Json;
     const p256dh = typeof keys.p256dh === 'string' ? keys.p256dh : '';
@@ -2657,9 +2657,9 @@ export function createApp(opts: AppOptions): Server {
     if (endpoint.length > 2000 || !pushHostAllowed(endpoint)) throw new HttpError(400, "That browser's alerts aren't supported");
     if (Buffer.from(p256dh, 'base64url').length !== 65 || Buffer.from(auth, 'base64url').length !== 16) throw new HttpError(400, 'Those alert keys look wrong');
     db.prepare(
-      `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, ?, ?, ?)
-       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at`,
-    ).run(user.id, endpoint, p256dh, auth, now());
+      `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at, session) VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at, session = excluded.session`,
+    ).run(user.id, endpoint, p256dh, auth, now(), session ?? null);
     db.prepare(
       `DELETE FROM push_subs WHERE user_id = ? AND id NOT IN (SELECT id FROM push_subs WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ${MAX_PUSH_DEVICES})`,
     ).run(user.id, user.id);
@@ -2671,25 +2671,25 @@ export function createApp(opts: AppOptions): Server {
   if (opts.apns && !apns?.ready) console.warn("APNS_KEY isn't a key from Apple, so the iPhone app won't get alerts.");
   const fcm = opts.fcm ? createFcm(opts.fcm) : null;
   if (opts.fcm && !fcm?.ready) console.warn("FCM_SERVICE_ACCOUNT isn't a Firebase service account file, so the Android app won't get alerts.");
-  const saveAppToken = (userId: number, endpoint: string) => {
+  const saveAppToken = (userId: number, endpoint: string, session: string | undefined) => {
     db.prepare(
-      `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at) VALUES (?, ?, '', '', ?)
-       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, created_at = excluded.created_at`,
-    ).run(userId, endpoint, now());
+      `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at, session) VALUES (?, ?, '', '', ?, ?)
+       ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, created_at = excluded.created_at, session = excluded.session`,
+    ).run(userId, endpoint, now(), session ?? null);
     db.prepare(
       `DELETE FROM push_subs WHERE user_id = ? AND id NOT IN (SELECT id FROM push_subs WHERE user_id = ? ORDER BY created_at DESC, id DESC LIMIT ${MAX_PUSH_DEVICES})`,
     ).run(userId, userId);
   };
-  route('POST', '/api/push/apns', ({ user, body }) => {
+  route('POST', '/api/push/apns', ({ user, body, session }) => {
     const token = typeof body.token === 'string' ? body.token.toLowerCase() : '';
     if (!/^[0-9a-f]{64,200}$/.test(token)) throw new HttpError(400, "That doesn't look like an iPhone's alert token");
-    saveAppToken(user.id, `apns:${token}`);
+    saveAppToken(user.id, `apns:${token}`, session);
     return { ok: true, sending: !!apns?.ready };
   });
-  route('POST', '/api/push/fcm', ({ user, body }) => {
+  route('POST', '/api/push/fcm', ({ user, body, session }) => {
     const token = typeof body.token === 'string' ? body.token : '';
     if (!/^[\w:-]{32,1000}$/.test(token)) throw new HttpError(400, "That doesn't look like an Android alert token");
-    saveAppToken(user.id, `fcm:${token}`);
+    saveAppToken(user.id, `fcm:${token}`, session);
     return { ok: true, sending: !!fcm?.ready };
   });
   route('DELETE', '/api/push', ({ user, body }) => {

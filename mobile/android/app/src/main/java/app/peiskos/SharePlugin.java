@@ -74,6 +74,12 @@ public class SharePlugin extends Plugin {
     }
 
     private JSObject read(Uri uri) {
+        // Only things another app hands over (content://, from its own provider). Peiskos would
+        // open a file:// path or one of its own providers with its own rights, so another app could
+        // "share" Peiskos's private files (its login among them) into a message.
+        String pkg = getContext().getPackageName();
+        String authority = uri.getAuthority();
+        if (!"content".equals(uri.getScheme()) || authority == null || authority.equals(pkg) || authority.startsWith(pkg + ".")) return null;
         ContentResolver resolver = getContext().getContentResolver();
         String name = "shared";
         try (Cursor cursor = resolver.query(uri, new String[] { OpenableColumns.DISPLAY_NAME }, null, null, null)) {
