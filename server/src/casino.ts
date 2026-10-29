@@ -85,9 +85,11 @@ export function casino(ctx: CasinoContext) {
       .get(userId, h) as Wallet;
   };
   /** When the next free chips come, and how many. */
-  const freeChips = (w: Wallet) => {
+  const freeChips = (w: Wallet, userId: number, h: number) => {
     const daily = w.freeAt + DAILY_MS;
-    if (w.chips + w.atTable + w.inBattle < BROKE_BELOW && !openBlackjack(w)) {
+    // Skins count as chips too, or keeping them instead of selling would make anyone "broke".
+    const skins = (db.prepare('SELECT COALESCE(SUM(value), 0) AS v FROM casino_items WHERE user_id = ? AND server_id = ?').get(userId, h) as { v: number }).v;
+    if (w.chips + w.atTable + w.inBattle + skins < BROKE_BELOW && !openBlackjack(w)) {
       const broke = w.freeAt + BROKE_MS;
       if (broke < daily) return { at: broke, amount: Date.now() >= daily ? DAILY_CHIPS : BROKE_CHIPS };
     }
@@ -95,7 +97,7 @@ export function casino(ctx: CasinoContext) {
   };
   const walletView = (userId: number, h: number) => {
     const w = wallet(userId, h);
-    const free = freeChips(w);
+    const free = freeChips(w, userId, h);
     return { chips: w.chips, atTable: w.atTable, inBattle: w.inBattle, freeAt: free.at <= Date.now() ? 0 : free.at, freeAmount: free.amount };
   };
   const walletChanged = (userId: number, h: number) => ctx.sendTo([userId], { type: 'casino_wallet', serverId: h, wallet: walletView(userId, h) });
@@ -146,7 +148,7 @@ export function casino(ctx: CasinoContext) {
   route('POST', '/api/servers/:id/casino/free', ({ user, params }) => {
     const h = hearth(params[0], user.id);
     const w = wallet(user.id, h);
-    const free = freeChips(w);
+    const free = freeChips(w, user.id, h);
     if (free.at > Date.now()) throw fail(400, 'Your free chips aren\'t ready yet');
     db.prepare('UPDATE casino_wallets SET chips = chips + ?, free_at = ? WHERE user_id = ? AND server_id = ?').run(free.amount, Date.now(), user.id, h);
     walletChanged(user.id, h);
@@ -239,8 +241,7 @@ export function casino(ctx: CasinoContext) {
     if (!box) throw fail(404, 'That case isn\'t here');
     const n = body.count === undefined ? 1 : Number(body.count);
     if (!CASE_COUNTS.includes(n)) throw fail(400, `Open ${CASE_COUNTS.join(', ')} at a time`);
-    const count = (db.prepare('SELECT COUNT(*) AS n FROM casino_items WHERE user_id = ? AND server_id = ?').get(user.id, h) as { n: number }).n;
-    if (count + n > MAX_ITEMS) throw fail(400, count >= MAX_ITEMS ? `Your inventory is full (${MAX_ITEMS} items). Sell some first.` : `That won't fit: your inventory holds ${MAX_ITEMS} items. Sell some first.`);
+    roomFor(user.id, h, n);
     const items = inTransaction(db, () => {
       take(user.id, h, box.price * n);
       return Array.from({ length: n }, () => unbox(user.id, h, box));
@@ -249,6 +250,11 @@ export function casino(ctx: CasinoContext) {
     return { item: items[0], items, wallet: walletView(user.id, h), found: found(user.id, h) };
   });
 
+  /** Says so when n more skins wouldn't fit in someone's inventory. */
+  const roomFor = (userId: number, h: number, n: number) => {
+    const count = (db.prepare('SELECT COUNT(*) AS n FROM casino_items WHERE user_id = ? AND server_id = ?').get(userId, h) as { n: number }).n;
+    if (count + n > MAX_ITEMS) throw fail(400, count >= MAX_ITEMS ? `Your inventory is full (${MAX_ITEMS} items). Sell some first.` : `That won't fit: your inventory holds ${MAX_ITEMS} items. Sell some first.`);
+  };
   /** One skin out of a case, into the inventory and the collection book. */
   const unbox = (userId: number, h: number, box: Box) => {
     const roll = rollCase(box);
@@ -447,6 +453,7 @@ export function casino(ctx: CasinoContext) {
   /** Which of your pets sits by your seat here, or none. */
   route('PUT', '/api/servers/:id/casino/pet', ({ user, params, body }) => {
     const h = hearth(params[0], user.id);
+    play(user);
     const id = typeof body.pet === 'string' ? body.pet : null;
     if (id !== null && !db.prepare('SELECT 1 FROM casino_pets WHERE user_id = ? AND server_id = ? AND pet_id = ?').get(user.id, h, id)) throw fail(400, "That pet isn't yours");
     wallet(user.id, h);
@@ -648,6 +655,7 @@ export function casino(ctx: CasinoContext) {
   };
 
   route('POST', '/api/channels/:id/poker', ({ user, params, body }) => {
+    play(user);
     const channel = fireOf(Number(params[0]), user.id);
     const action = String(body.action);
     if (action === 'sit') {
@@ -739,6 +747,7 @@ export function casino(ctx: CasinoContext) {
   const leaveBattle = (b: Battle, userId: number) => {
     if (b.creator === userId) {
       for (const s of b.seats) if (s?.userId) unhold(s.userId, b.serverId, b.cost);
+      b.seats.fill(null); // so nothing else hands those chips back a second time
       battles.delete(b.id);
     } else {
       const i = b.seats.findIndex((s) => s?.userId === userId);
@@ -760,10 +769,12 @@ export function casino(ctx: CasinoContext) {
       const sideTotal = sides.map((side) => side.reduce((n, i) => n + total(i), 0));
       const best = Math.max(...sideTotal);
       b.winners = sides.filter((_, k) => sideTotal[k] === best).flat();
-      // The winners' people split every skin, the most valuable first to whoever has the least so far.
+      // The winners' people split every skin the people opened, the most valuable first to whoever
+      // has the least so far. What the bots opened stays with the bots: they paid nothing, so handing
+      // it out would make every battle against bots pay more than it costs.
       const takers = b.winners.filter((i) => seats[i].userId !== null);
       if (takers.length) {
-        const pot = seats.flatMap((s) => s.rolls).sort((x, y) => y.value - x.value);
+        const pot = seats.filter((s) => s.userId !== null).flatMap((s) => s.rolls).sort((x, y) => y.value - x.value);
         for (const i of takers) b.won[i] = 0;
         for (const r of pot) {
           const i = takers.reduce((low, j) => (b.won[j] < b.won[low] ? j : low), takers[0]);
@@ -804,6 +815,7 @@ export function casino(ctx: CasinoContext) {
     if (!cases.length || cases.length > BATTLE_MAX_ROUNDS) throw fail(400, `Pick 1 to ${BATTLE_MAX_ROUNDS} cases`);
     if (cases.some((id) => !CASES.some((c) => c.id === id))) throw fail(400, "That case isn't here");
     const cost = cases.reduce((n, id) => n + CASES.find((c) => c.id === id)!.price, 0);
+    roomFor(userId, serverId, cases.length * players);
     hold(userId, serverId, cost);
     const b: Battle = {
       id: ++battleIds, channelId, serverId, mode, cases, cost, creator: userId, startedAt: 0, winners: [], won: {}, createdAt: Date.now(),
@@ -816,6 +828,7 @@ export function casino(ctx: CasinoContext) {
   });
 
   route('POST', '/api/channels/:id/battles/:battle', ({ user, params, body }) => {
+    play(user);
     const channel = fireOf(Number(params[0]), user.id, 'battle');
     const b = battles.get(Number(params[1]));
     if (!b || b.channelId !== channel.id) throw fail(404, 'That battle is over');
@@ -826,9 +839,9 @@ export function casino(ctx: CasinoContext) {
       if (!Number.isInteger(seat) || seat < 0 || seat >= b.seats.length || b.seats[seat]) throw fail(400, 'That seat is taken');
     };
     if (action === 'join') {
-      play(user);
       if (battleOf(user.id)) throw fail(400, "You're already waiting in a battle");
       freeSeat();
+      roomFor(user.id, b.serverId, b.cases.length * b.seats.length);
       hold(user.id, b.serverId, b.cost);
       b.seats[seat] = { userId: user.id, bot: null, rolls: [] };
       walletChanged(user.id, b.serverId);

@@ -10,8 +10,9 @@ import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { clientIp } from '../src/http.ts';
 
+const db = openDb(':memory:');
 const app = createApp({
-  db: openDb(':memory:'),
+  db,
   publicDir: '/nonexistent',
   uploadDir: mkdtempSync(join(tmpdir(), 'peiskos-security-')),
   voice: { apiKey: 'key', apiSecret: 'secret-secret-secret-secret-secret', apiUrl: 'http://127.0.0.1:9' },
@@ -239,4 +240,19 @@ test("an admin name in ADMIN_USERS stays with its account when they change their
     hosted.closeAllConnections();
     hosted.close();
   }
+});
+
+test('logging out, or being signed out, stops that device getting alerts', async () => {
+  const [kim] = await people('kim');
+  const phone = (await call('/api/login', { body: { username: kim.user.username, password: 'password1' } })).data;
+  const laptop = (await call('/api/login', { body: { username: kim.user.username, password: 'password1' } })).data;
+  const devices = () => (db.prepare('SELECT endpoint FROM push_subs WHERE user_id = ?').all(kim.user.id) as { endpoint: string }[]).map((r) => r.endpoint).sort();
+  await call('/api/push/fcm', { body: { token: 'a'.repeat(40) }, token: phone.token });
+  await call('/api/push/apns', { body: { token: 'b'.repeat(64) }, token: laptop.token });
+  assert.deepEqual(devices(), ['apns:' + 'b'.repeat(64), 'fcm:' + 'a'.repeat(40)]);
+  await call('/api/logout', { method: 'POST', token: phone.token });
+  assert.deepEqual(devices(), ['apns:' + 'b'.repeat(64)]);
+  // Changing the password signs the other devices out, and their alerts go with them.
+  await call('/api/me/password', { body: { currentPassword: 'password1', newPassword: 'password2' }, token: kim.token });
+  assert.deepEqual(devices(), []);
 });

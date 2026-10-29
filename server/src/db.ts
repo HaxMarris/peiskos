@@ -204,6 +204,7 @@ export function openDb(file: string): Db {
   addCasino(db);
   addFishing(db);
   addSafetyReports(db);
+  addPushLogins(db);
   hashSessionTokens(db);
   return db;
 }
@@ -892,6 +893,25 @@ function moveCasinoToHearths(db: Db, cols: (table: string) => string[]) {
         FROM casino_found_shared t WHERE home IS NOT NULL`);
     for (const t of ['casino_wallets', 'casino_items', 'casino_found']) db.exec(`DROP TABLE IF EXISTS ${t}_shared`);
   });
+}
+
+/**
+ * Which login turned on each device's alerts, so logging out (or being signed out from another
+ * device, or changing the password) also stops that device's alerts, which show message text.
+ * Devices set up before this have no login on record, so they're dropped once: the app and the
+ * web page sign their device up again each time they open while logged in, now with their login.
+ */
+function addPushLogins(db: Db) {
+  if (!hasColumn(db, 'push_subs', 'session')) {
+    addColumn(db, 'push_subs', 'session', 'TEXT');
+    db.exec('DELETE FROM push_subs');
+  }
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS push_subs_session ON push_subs (session);
+    CREATE TRIGGER IF NOT EXISTS sessions_push_subs AFTER DELETE ON sessions BEGIN
+      DELETE FROM push_subs WHERE session = old.token;
+    END;
+  `);
 }
 
 /** What a login token is kept as: its SHA-256, so a copy of the database (a backup) can't be used to log in. */
