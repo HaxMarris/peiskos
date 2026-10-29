@@ -6,6 +6,12 @@
 // Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
+// Older iPhones and iPads (Safari before 15.4) don't have these two.
+for (const [name, fn] of Object.entries({
+  at(i) { i = Math.trunc(i) || 0; return this[i < 0 ? this.length + i : i]; },
+  findLast(fn) { for (let i = this.length - 1; i >= 0; i--) if (fn(this[i], i, this)) return this[i]; },
+})) if (!Array.prototype[name]) Object.defineProperty(Array.prototype, name, { value: fn, writable: true, configurable: true });
+
 const $ = (sel) => document.querySelector(sel);
 const isDesktop = location.protocol === 'file:';
 // The Android and iPhone apps carry their own copy of this page too, so like the desktop app
@@ -22,6 +28,7 @@ function reportError(error, where) {
   if (errorsSent >= 5 || !base) return;
   const message = String(error?.message ?? error ?? '').slice(0, 500);
   if (!message || /ResizeObserver loop|Script error\.?$/.test(message)) return; // harmless browser noise
+  if (error?.name === 'AbortError') return; // something we stopped on purpose, like a search you typed past
   errorsSent++;
   fetch(base + '/api/errors', {
     method: 'POST',
