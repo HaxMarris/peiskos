@@ -428,6 +428,7 @@ function updateCommands() {
   }));
   commandBox.classList.remove('hidden');
 }
+tapToPick(commandBox, (i) => { if (commandPick) { commandPick.index = i; completeCommand(); } });
 function closeCommands() {
   commandPick = null;
   commandBox.classList.add('hidden');

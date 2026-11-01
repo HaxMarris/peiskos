@@ -383,6 +383,27 @@ function renderMentions() {
   mentionBox.classList.remove('hidden');
 }
 
+// On iPhones a tap moves focus off the message box (and drops the keyboard) before its click
+// arrives, so the list closes on blur and the click lands on nothing. Picking on touchend, with
+// its default cancelled, keeps focus in the box and skips that late click. A finger that scrolled
+// the list doesn't pick.
+function tapToPick(box, pick) {
+  let start = null;
+  box.addEventListener('touchstart', (e) => { start = e.touches.length === 1 ? e.touches[0] : null; }, { passive: true });
+  box.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (start && Math.hypot(t.clientX - start.clientX, t.clientY - start.clientY) > 10) start = null;
+  }, { passive: true });
+  box.addEventListener('touchend', (e) => {
+    const b = e.target.closest('.mention-option');
+    if (!start || !b || !e.cancelable) return;
+    start = null;
+    e.preventDefault();
+    pick([...box.children].indexOf(b));
+  });
+}
+tapToPick(mentionBox, (i) => { if (mention) { mention.index = i; completeMention(); } });
+
 function completeMention() {
   const m = mention.matches[mention.index];
   const after = input.value.slice(input.selectionStart).replace(/^[\w.-]*\s?/, '');
