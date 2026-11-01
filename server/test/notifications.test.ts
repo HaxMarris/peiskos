@@ -88,10 +88,10 @@ after(() => {
   app.close();
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
+async function call(path: string, opts: { method?: string; body?: unknown; token?: string; headers?: Record<string, string> } = {}) {
   const res = await fetch(base + path, {
     method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
+    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}), ...opts.headers },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   });
   return { status: res.status, data: (await res.json()) as any };
@@ -351,17 +351,30 @@ test('email: required at signup, and it counts right away', async () => {
 
 test('email: confirm an address with a code, then reset a forgotten password with it', async () => {
   const [bob, eve] = await people('bob', 'eve');
-  await call('/api/me/email', { method: 'DELETE', token: eve.token }); // like an account from before email was asked for
+  // Adding, changing or removing it takes the password, so a borrowed login can't take the account over.
+  assert.equal((await call('/api/me/email', { method: 'DELETE', token: eve.token })).status, 403);
+  assert.equal((await call('/api/me/email', { method: 'DELETE', body: { password: 'wrong-one' }, token: eve.token })).status, 403);
+  await call('/api/me/email', { method: 'DELETE', body: { password: 'password1' }, token: eve.token }); // like an account from before email was asked for
+  assert.equal((await call('/api/me/email', { body: { email: 'thief@example.com' }, token: bob.token })).status, 403);
+  const changedNotice = () => mails.some((m) => /Subject: Your Peiskos email was changed/.test(m));
+  for (let i = 0; i < 40 && !changedNotice(); i++) await wait(50);
+  await wait(100);
   mails.length = 0;
-  let me = (await call('/api/me/email', { body: { email: 'bob@example.com' }, token: bob.token })).data;
+  let me = (await call('/api/me/email', { body: { email: 'bob@example.com', password: 'password1' }, token: bob.token })).data;
   assert.equal(me.email, 'bob@example.com');
   assert.equal(me.emailVerified, false);
-  assert.equal(mails.length, 1);
-  const code = /code: (\d{6})/.exec(mailText(mails[0]).subject)![1];
+  // The code goes to the new address, and the old one hears that it no longer resets the password.
+  for (let i = 0; i < 40 && !changedNotice(); i++) await wait(50);
+  await wait(100);
+  assert.equal(mails.length, 2);
+  const codeMail = mails.find((m) => /code: \d{6}/.test(mailText(m).subject))!;
+  assert.match(codeMail, /bob@example\.com/);
+  assert.match(mails.find((m) => m !== codeMail)!, /was changed/);
+  const code = /code: (\d{6})/.exec(mailText(codeMail).subject)![1];
   assert.equal((await call('/api/me/email/verify', { body: { code: code === '000000' ? '111111' : '000000' }, token: bob.token })).status, 400);
   me = (await call('/api/me/email/verify', { body: { code }, token: bob.token })).data;
   assert.equal(me.emailVerified, true);
-  assert.equal((await call('/api/me/email', { body: { email: 'not an email' }, token: bob.token })).status, 400);
+  assert.equal((await call('/api/me/email', { body: { email: 'not an email', password: 'password1' }, token: bob.token })).status, 400);
 
   // No confirmed email, or no such person: the same answer, and no email.
   mails.length = 0;
@@ -399,4 +412,18 @@ test('email: confirm an address with a code, then reset a forgotten password wit
   const bad = next === '000000' ? '111111' : '000000';
   for (let i = 0; i < 5; i++) await call('/api/password/reset', { body: { username: bob.user.username, code: bad, newPassword: 'whatever-1' } });
   assert.equal((await call('/api/password/reset', { body: { username: bob.user.username, code: next, newPassword: 'whatever-1' } })).status, 400);
+});
+
+test("strangers asking for someone's reset codes can't use up that person's own asks", async () => {
+  const [kai] = await people('kai');
+  const forgot = (ip: string) => call('/api/password/forgot', { body: { username: kai.user.username }, headers: { 'x-forwarded-for': ip } });
+  // Kai has a login from home.
+  await call('/api/login', { body: { username: kai.user.username, password: 'password1' }, headers: { 'x-forwarded-for': '203.0.113.60' } });
+  for (let i = 0; i < 3; i++) assert.equal((await forgot('198.18.5.1')).status, 200);
+  assert.equal((await forgot('198.18.5.1')).status, 429);
+  for (let i = 0; i < 3; i++) await forgot('198.18.5.2');
+  for (let i = 0; i < 4; i++) await forgot(`198.18.5.${10 + i}`);
+  // Ten from strangers in all: the next stranger waits, but Kai at home doesn't.
+  assert.equal((await forgot('198.18.5.99')).status, 429);
+  assert.equal((await forgot('203.0.113.60')).status, 200);
 });
