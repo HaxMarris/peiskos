@@ -350,15 +350,15 @@ const UPGRADES = [
 
 const BAITS = [
   { id: 'worms', name: 'Garden worms', cost: 0, pack: 0, desc: 'Free and endless. Fish anything.', luck: 0, size: 0, likes: [] },
-  { id: 'bread', name: 'Bread paste', cost: 25, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
-  { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
-  { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
-  { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
-  { id: 'emberfly', name: 'Ember fly', cost: 10000, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
-  // These three show up once their water is unlocked.
-  { id: 'crayfish', name: 'Crayfish', cost: 3000, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
-  { id: 'squid', name: 'Squid strips', cost: 6000, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
-  { id: 'larvae', name: 'Golden larvae', cost: 12000, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
+  { id: 'bread', name: 'Bread paste', cost: 25, gain: .02, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
+  { id: 'minnows', name: 'Live minnows', cost: 150, gain: .06, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
+  { id: 'shrimp', name: 'Shrimp', cost: 500, gain: .18, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
+  { id: 'glow', name: 'Glow grubs', cost: 2500, gain: .35, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
+  // Crayfish, squid and larvae show up once their water is unlocked.
+  { id: 'crayfish', name: 'Crayfish', cost: 3000, gain: .5, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
+  { id: 'squid', name: 'Squid strips', cost: 6000, gain: .75, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
+  { id: 'emberfly', name: 'Ember fly', cost: 10000, gain: 1.3, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  { id: 'larvae', name: 'Golden larvae', cost: 12000, gain: 2, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
 ];
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
 
@@ -455,7 +455,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 function fmt(n) {
   n = Math.floor(n);
   if (n < 10000) return n.toLocaleString('en-US');
-  for (const [v, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) return (n / v).toFixed(n / v < 100 ? 1 : 0).replace(/\.0$/, '') + s;
+  // Round down, so a balance never shows as more than it is (7.46M reads 7.4M, not 7.5M).
+  for (const [v, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) { const d = n / v < 100 ? 10 : 1; return String(Math.floor(n * d / v) / d) + s; }
   return String(n);
 }
 const cm = s => (s < 20 ? s.toFixed(1) : Math.round(s)) + ' cm';
@@ -482,10 +483,16 @@ const pondStep = pid => { const i = pondIdx(pid); return i <= 4 ? i : 4 + (i - 4
 // A new holder starts at 10/3 of that floor (10 min at Millpond, 30 min at Aurora Deep, 40 at Ember Springs).
 const idleFloor = pid => IDLE_FLOOR + pondStep(pid) * 90000;
 const slotInterval = sl => { const fl = idleFloor(sl.pond); return Math.max(fl, fl * 10 / 3 * Math.pow(.85, sl.lvl - 1) * reelF()); };
-const slotLvlCost = (sl, i) => Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8));
+// Levels scale with your furthest water like bait does: fully levelling the first holder costs
+// about 15 minutes of hand fishing there. Early on the flat 120 x 2^level floor applies.
+const slotLvlCost = (sl, i) => Math.max(Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8)),
+  roundPrice(wormValueAt(Math.max(...S.ponds.map(pondIdx))) * 2 * Math.pow(1.6, sl.lvl - 1) * (1 + i * .5)));
 const pondDone = pid => pondOf(pid).fish.every(f => S.coll[f.id]);
-const pondBonus = pid => pondDone(pid) ? 1.05 : 1;
 const pondStarsDone = pid => pondOf(pid).fish.filter(f => (S.coll[f.id] || {}).bestQ === 5).length;
+const pondStarred = pid => pondStarsDone(pid) === pondOf(pid).fish.length;
+// +5% for catching every species in a water, and another +5% once each one has a 5-star catch.
+const pondBonus = pid => 1 + (pondDone(pid) ? .05 : 0) + (pondStarred(pid) ? .05 : 0);
+const bonusTag = pid => pondBonus(pid) > 1 ? `+${Math.round((pondBonus(pid) - 1) * 100)}%` : '';
 const hatsUnlocked = () => S.stats.chests > 0 || S.hats.length > 1;
 // Idle rods: harder fish and harder waters get away more often.
 const LAND_BY_RARITY = [.9, .8, .65, .5, .35];
@@ -540,10 +547,13 @@ function expectedLand(sl) {
 // and carried there). At that water, a typical player there (its rod, upgrades around level 10)
 // earns back about 1.5x a pack's price on average. Most of that comes from the odd rare fish, so
 // roughly half of all packs still lose money. A pack never costs less than the bait's listed cost.
+// Bait prices scale with what a plain worm catch is worth at your furthest water, times how
+// much each bait adds on average (its gain). Every bait shares that scale, so the stronger
+// bait always costs more. A pack earns back about 1.5x on average, and plenty of packs lose.
 const REF_TIER = [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8];
 const BAIT_PAYBACK = 1.5;
-function refCatchValue(i, b) {
-  const tier = REF_TIER[i], r = RODS.find(x => x.tier === tier), opts = { luck: r.luck + .5 + b.luck, size: r.size + .3 + b.size, likes: b.likes };
+function wormCatchValue(i) {
+  const tier = REF_TIER[i], r = RODS.find(x => x.tier === tier), opts = { luck: r.luck + .5, size: r.size + .3, likes: [] };
   const l = PONDS[i].fish.filter(f => (f.rod || 1) <= tier), ws = fishWeights(l, opts), W = ws.reduce((a, c) => a + c, 0);
   // Expected (.5 + t) with giants at 3x, where t = U^(1/k); and the expected star multiplier.
   const k = 1 + opts.size, pg = 1 - Math.pow(.98, k), size = .5 + k / (k + 1) + 2 * pg * (.5 + k / (k + 1) * (1 - Math.pow(.98, k + 1)) / pg);
@@ -551,16 +561,10 @@ function refCatchValue(i, b) {
   return l.reduce((a, f, j) => a + ws[j] / W * f.base, 0) * size * sw.reduce((a, w, j) => a + w / SW * STAR_MUL[j], 0);
 }
 const roundPrice = x => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 1)); return Math.round(x / p) * p; };
-const baitPrices = {};
-/** A pack's price once water i is the furthest you've opened. Never cheaper than at an earlier water. */
-function baitPriceAt(b, i) {
-  const key = b.id + i;
-  if (!(key in baitPrices)) {
-    const fair = (refCatchValue(i, b) - refCatchValue(i, BAIT.worms)) * b.pack / BAIT_PAYBACK;
-    baitPrices[key] = Math.max(i ? baitPriceAt(b, i - 1) : 0, roundPrice(Math.max(b.cost, fair)));
-  }
-  return baitPrices[key];
-}
+const wormValues = [];
+const wormValueAt = i => wormValues[i] ??= wormCatchValue(i);
+/** A pack's price once water i is the furthest you've opened. */
+const baitPriceAt = (b, i) => Math.max(b.cost, roundPrice(wormValueAt(i) * b.gain * b.pack / BAIT_PAYBACK));
 const baitCost = b => b.cost ? baitPriceAt(b, Math.max(...S.ponds.map(pondIdx))) : 0;
 const baitShown = b => !b.from || S.ponds.includes(b.from);
 
@@ -632,7 +636,7 @@ function checkAreaHat(pid) {
   if (!h || S.hats.includes(h.id) || pondStarsDone(pid) < pondOf(pid).fish.length) return;
   S.hats.push(h.id); S.hatsNew = true;
   addRecent({ chest: true, hat: h.id, area: true });
-  post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}.`, true);
+  post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}. Fish from there now sell for 10% more.`, true);
 }
 const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000, 25000, 60000, 150000, 400000, 1000000];
 function openChest() {
@@ -1492,7 +1496,7 @@ function renderTop() {
   const b = BAIT[S.baitOn];
   $('baitChip').textContent = b.id === 'worms' ? b.name : `${b.name} ×${S.bait[b.id] || 0}`;
   const p = pondOf(S.pond);
-  $('pondtag').innerHTML = `<b>${p.name}</b>${pondDone(p.id) ? '<span>+5%</span>' : ''}<span class="mapword">Map</span>`;
+  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}<span class="mapword">Map</span>`;
   $('pondtag').setAttribute('aria-label', `${p.name}. Open the map`);
   document.querySelectorAll('#tabs button').forEach(bt => {
     bt.setAttribute('aria-selected', bt.dataset.tab === S.tab);
@@ -1567,17 +1571,17 @@ function renderPane() {
     h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead, with gold inside too (more at later waters). Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
-      if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars.</p><div class="hat-grid">`;
+      if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars. Fish from there also sell for another 5% more.</p><div class="hat-grid">`;
       h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
     });
     h += `</div>`;
   } else if (S.tab === 'board') {
     h += boardHtml();
   } else if (S.tab === 'coll') {
-    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more.</p>`;
+    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more.</p>`;
     PONDS.forEach(p => {
       const got = p.fish.filter(f => S.coll[f.id]).length;
-      h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${got === p.fish.length ? ' · +5% coins' : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
+      h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${bonusTag(p.id) ? ` · ${bonusTag(p.id)} coins` : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
       p.fish.forEach(f => {
         const e = S.coll[f.id];
         if (e) h += `<div class="fishcard"><canvas data-fish="${f.id}"></canvas><div class="name">${f.name}</div>${rarHtml(f.r)}<div class="meta">${f.min}–${f.max} cm · caught ${e.n}<br>Biggest ${cm(e.best)}<br>Best ${starsHtml(e.bestQ || 1)}</div></div>`;
@@ -1624,7 +1628,7 @@ function awaySummary(ms, r) {
 }
 function unlockModal(id) {
   const p = pondOf(id);
-  modal(`Unlock ${p.name}?`, `<p style="margin:0">${p.blurb} ${p.fish.length} species live here.</p><div class="lines"><div><span>Cost</span><b>${fmt(p.cost)} coins</b></div><div><span>You have</span><b>${fmt(S.coins)}</b></div></div>`,
+  modal(`Unlock ${p.name}?`, `<p style="margin:0">${p.blurb} ${p.fish.length} species live here.</p><div class="lines"><div><span>Cost</span><b>${fmt(p.cost)} coins</b></div><div><span>You have</span><b>${fmt(S.coins)}</b></div>${S.coins < p.cost ? `<div><span>Still need</span><b>${fmt(Math.ceil(p.cost - S.coins))}</b></div>` : ''}</div>`,
     `<button class="buy ghost" data-act="close">Not yet</button><button class="buy" data-act="unlock" data-id="${id}" ${S.coins < p.cost ? 'disabled' : ''}>${S.coins < p.cost ? 'Not enough coins' : 'Unlock and walk there'}</button>`);
 }
 
