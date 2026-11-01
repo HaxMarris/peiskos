@@ -103,11 +103,13 @@ jobs:
           echo "APP_VERSION_CODE=$(( code > 0 ? code : 1 ))" >> "$GITHUB_ENV"
       # Alerts while the app is closed come through Google's Firebase; its google-services.json is
       # kept in a secret (see mobile/README.md). Without it the app builds with those alerts off.
+      # Pull request builds get neither it nor the signing key: they run that branch's own build
+      # scripts, so they're test builds, and only releases are built with Peiskos's real key.
       - name: Firebase
         shell: bash
         working-directory: mobile/android
         env:
-          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          GOOGLE_SERVICES_JSON: ${{ github.event_name != 'pull_request' && secrets.GOOGLE_SERVICES_JSON || '' }}
         run: |
           if [ -n "$GOOGLE_SERVICES_JSON" ]; then
             printf '%s' "$GOOGLE_SERVICES_JSON" > app/google-services.json
@@ -119,10 +121,10 @@ jobs:
         shell: bash
         working-directory: mobile/android
         env:
-          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEYSTORE: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE || '' }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEYSTORE_PASSWORD || '' }}
+          ANDROID_KEY_ALIAS: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_ALIAS || '' }}
+          ANDROID_KEY_PASSWORD: ${{ github.event_name != 'pull_request' && secrets.ANDROID_KEY_PASSWORD || '' }}
         run: |
           mkdir -p ../dist
           if [ -n "$ANDROID_KEYSTORE" ]; then

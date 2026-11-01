@@ -551,7 +551,7 @@ test('case battles at the fire', async (t) => {
   // Both put what they opened in their collection books, win or lose.
   assert.equal(mw.found.length > 0 && sw.found.length > 0, true);
 
-  // 2v2 with bots on the other team: Max and Sam split it all, or the bots win and it's gone.
+  // 2v2 with bots on the other team: Max and Sam split what they opened, or the bots win.
   const b2 = (await call(fire, { body: { mode: '2v2', cases: ['ember'] }, token: max.token })).data.battle;
   assert.equal(b2.seats.length, 4);
   assert.equal((await call(`${fire}/${b2.id}`, { body: { action: 'bot', seat: 2 }, token: sam.token })).status, 403);
@@ -562,13 +562,21 @@ test('case battles at the fire', async (t) => {
   await wait(50);
   const b2done = socks[0].events.filter((e) => e.type === 'case_battles').at(-1).battles.find((b: any) => b.id === b2.id);
   const gained = (await wallet(max)).inventory.length - before[0] + (await wallet(sam)).inventory.length - before[1];
-  // When the bots win, Max and Sam each keep what they opened themselves.
-  assert.equal(gained, b2done.winners.includes(0) ? 4 : 2);
+  // Win or lose, Max and Sam only get what people opened: the bots' pulls stay with the bots
+  // (or a battle against bots would pay out more than it costs). When the bots win, each keeps their own.
+  assert.equal(gained, 2);
   assert.equal(b2done.kept, !b2done.winners.includes(0));
+
+  // Alone against three bots, Max only ever gets the one skin he paid for, win or lose.
+  const solo = (await call(fire, { body: { mode: 'ffa', players: 4, cases: ['ember'] }, token: max.token })).data.battle;
+  const had = (await wallet(max)).inventory.length;
+  for (const seat of [1, 2, 3]) await call(`${fire}/${solo.id}`, { body: { action: 'bot', seat }, token: max.token });
+  await wait(50);
+  assert.equal((await wallet(max)).inventory.length - had, 1);
 
   // Everything opened today, in the battles too, is on the day's top pulls, best first.
   const pulls = (await call(`/api/servers/${hearth.id}/casino/pulls?since=${Date.now() - 3600_000}`, { token: ella.token })).data;
-  assert.equal(pulls.length, 6); // the bots' pulls don't count
+  assert.equal(pulls.length, 7); // the bots' pulls don't count
   assert.deepEqual(pulls.map((p: any) => p.value), [...pulls.map((p: any) => p.value)].sort((a, b) => b - a));
   assert.equal((await call(`/api/servers/${hearth.id}/casino/pulls?since=${Date.now() + 1000}`, { token: ella.token })).data.length, 0);
 

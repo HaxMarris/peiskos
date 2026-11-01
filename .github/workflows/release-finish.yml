@@ -42,7 +42,7 @@ jobs:
           if [ "$NOW" = true ] && [ -z "$only" ]; then echo "::error::Say which version to publish now."; exit 1; fi
           # Draft releases, with the iPhone build each one is waiting on (empty if it isn't waiting).
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
-            --jq '.[] | select(.draft) | [.tag_name, ((.body // "") | capture("waiting-for-apple: (?<id>[A-Za-z0-9-]+)").id // "")] | @tsv' > drafts.tsv
+            --jq '.[] | select(.draft) | [.tag_name, ((.body // "") | [scan("<!-- waiting-for-apple: ([A-Za-z0-9-]+) -->")] | last | .[0] // "")] | @tsv' > drafts.tsv
           failed=0
           while IFS=$'\t' read -r tag build; do
             [ -z "$only" ] || [ "$tag" = "$only" ] || continue

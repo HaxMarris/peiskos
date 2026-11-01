@@ -47,6 +47,9 @@ release_to_install() {
   [ "$AUTO" = releases ] || return 0
   for tag in $(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --no-merged HEAD --sort=-v:refname); do
     git merge-base --is-ancestor HEAD "$tag" 2>/dev/null || continue
+    # And only tags on the branch this server follows (main), so a tag pushed onto a commit that
+    # never went through a pull request is never installed by itself.
+    git merge-base --is-ancestor "$tag" "origin/$(git rev-parse --abbrev-ref HEAD)" 2>/dev/null || continue
     [ "$tag" != "$(cat "$DIR/auto-failed" 2>/dev/null)" ] && echo "$tag"
     return 0
   done
