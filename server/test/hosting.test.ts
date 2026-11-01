@@ -140,6 +140,16 @@ test('crash reports', async () => {
   assert.deepEqual((await call('/api/admin/errors', { method: 'DELETE', token: max.token })).data.errors, []);
 });
 
+test('crash reports from people not logged in get a smaller allowance', async () => {
+  // The earlier test already used 4 of this address's 5 logged-out reports for the hour.
+  for (let i = 0; i < 5; i++) await call('/api/errors', { body: { message: `made up ${i}` } });
+  for (let i = 0; i < 5; i++) await call('/api/errors', { body: { message: `real ${i}` }, token: sam.token });
+  const list = (await call('/api/admin/errors', { token: max.token })).data.errors;
+  assert.equal(list.filter((e: any) => /^made up/.test(e.message)).length, 1);
+  assert.equal(list.filter((e: any) => /^real/.test(e.message)).length, 5);
+  await call('/api/admin/errors', { method: 'DELETE', token: max.token });
+});
+
 test('storage clean-up leaves files in use alone', async () => {
   const s = (await call('/api/servers', { body: { name: 'Pics' }, token: max.token })).data;
   const room = s.channels[0].id;

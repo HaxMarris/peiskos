@@ -1,4 +1,4 @@
-// Fireside Angler: fish by hand at eleven waters, collect 253 species and 27 hats, and leave idle
+// Fireside Angler: fish by hand at eleven waters, collect 264 species and 30 hats, and leave idle
 // rods fishing while you're away. Peiskos frames this page and keeps the save (see client/js/fishing.js).
 (() => {
 'use strict';
@@ -312,6 +312,45 @@ PONDS.forEach(p => p.fish.sort((a, b) => a.r - b.r || a.base - b.base));
 const FISH = {};
 PONDS.forEach(p => p.fish.forEach(f => { f.pond = p.id; f.w = RARITY_W[f.r - 1]; f.rf = (f.r - 1) / 4; FISH[f.id] = f; }));
 
+// Timed legendaries: one per water that bites only in a 3-hour window each day, on Eastern time
+// (the same clock as Today's best). Hand casts only, at half a legendary's odds. They're a set of
+// their own, so they don't count toward a water's species, bonuses or area hat.
+const TIMED_HOURS = 3;
+const TIMED = [
+  ['mill', 9, F('morningcarp', 'Morning Carp', 50, 110, 225, 5, ['grazer', 'rare'], 2, L('#e8b04a', '#fff0c0', '#d08a2a', .34, { spots: '#fff4d0', glow: '#ffe08a' }))],
+  ['birch', 12, F('sunscalepike', 'Sunscale Pike', 80, 150, 600, 5, ['predator', 'rare'], 3, L('#d8a830', '#fff4c0', '#b08020', .18, { stripes: '#fff0a0', glow: '#ffe08a' }))],
+  ['fjord', 18, F('twilightcod', 'Twilight Cod', 80, 180, 1200, 5, ['sea', 'bottom', 'rare'], 4, L('#5a4a8a', '#d8c8f0', '#3a2a6a', .26, { spots: '#f0a0c0', glow: '#c8a0ff', whiskers: 1 }))],
+  ['frozen', 21, F('starlightchar', 'Starlight Char', 60, 120, 5500, 5, ['cold', 'rare'], 4, L('#1a2a4a', '#e0e8ff', '#3a5a8a', .26, { spots: '#ffffff', glow: '#c8d8ff' }))],
+  ['aurora', 21, F('auroramoonfish', 'Aurora Moonfish', 100, 250, 70000, 5, ['ember', 'deep', 'rare'], 5, L('#c8d0e0', '#ffffff', '#7ff0c8', .5, { stripes: '#7ff0c8', glow: '#e8f0ff' }))],
+  ['river', 9, F('mistwraith', 'Mist Wraith Trout', 50, 110, 180000, 5, ['predator', 'rare'], 6, L('#cfd8d4', '#f4f8f6', '#9ab0a8', .24, { spots: '#ffffff', glow: '#e8f4f0' }))],
+  ['marsh', 18, F('fireflygar', 'Firefly Gar', 150, 300, 630000, 5, ['predator', 'rare'], 6, L('#3a4a2a', '#c8d8a0', '#2a3a1a', .12, { spots: '#f2ff80', glow: '#e8ff60' }))],
+  ['lagoon', 12, F('sunraymarlin', 'Sunray Marlin', 200, 450, 1800000, 5, ['sea', 'rare'], 7, L('#2a6ab0', '#e8f4ff', '#f2c230', .22, { sail: 1, stripes: '#8ad0ff', glow: '#ffe08a' }))],
+  ['harbor', 18, F('lamplighteel', 'Lamplight Eel', 150, 400, 6600000, 5, ['sea', 'deep', 'rare'], 7, L('#2a2a30', '#f0c060', '#c08a30', .08, { shape: 'eel', spots: '#ffe08a', glow: '#ffc46b' }))],
+  ['tarn', 21, F('polarsturgeon', 'Polar Night Sturgeon', 400, 1000, 20000000, 5, ['cold', 'deep', 'rare'], 8, L('#1a2030', '#a8c0e0', '#3a4a6a', .2, { whiskers: 1, stripes: '#c8eaff', glow: '#a0c8ff' }))],
+  ['springs', 0, F('witchingkoi', 'Witching Koi', 80, 160, 70000000, 5, ['ember', 'rare'], 8, L('#2a1030', '#e0a0ff', '#8a2ab0', .36, { spots: '#ff6a2a', glow: '#c860ff', whiskers: 1 }))],
+].map(([pid, from, f]) => { Object.assign(f, { pond: pid, from, timed: true, w: RARITY_W[4] / 2, rf: 1 }); PONDS.find(p => p.id === pid).timed = f; FISH[f.id] = f; return f; });
+// The game opens with the server's time, so a device clock set wrong (or on purpose) changes nothing.
+let clockSkew = 0;
+const serverNow = () => Date.now() + clockSkew;
+function easternClock() {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(serverNow());
+  const get = t => +parts.find(x => x.type === t).value;
+  return { h: get('hour') % 24, m: get('minute') };
+}
+/** Minutes left in a timed fish's window, or 0 when it isn't biting. */
+function timedLeft(f) {
+  const { h, m } = easternClock(), at = h * 60 + m, from = f.from * 60;
+  return at >= from && at < from + TIMED_HOURS * 60 ? from + TIMED_HOURS * 60 - at : 0;
+}
+const timedLeftText = f => { const n = timedLeft(f); return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m left` : `${n}m left`; };
+/** The window in this device's own time zone, like "9 PM–12 AM". */
+function timedWindowText(f) {
+  const { h, m } = easternClock(), start = serverNow() + (((f.from - h + 24) % 24) * 60 - m) * 60000;
+  const t = d => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+  return `${t(start)}–${t(start + TIMED_HOURS * 3600000)}`;
+}
+const timedNow = () => TIMED.filter(timedLeft);
+
 // The map, in the order the angler walks the path: three rows that wind up from Millpond.
 const MAP = [
   { id: 'mill', x: 10, y: 84 },
@@ -390,6 +429,9 @@ const HATS = [
   { id: 'divinghelmet', name: 'Brass Diving Helmet', r: 5, area: 'harbor' },
   { id: 'icecrown', name: 'Glacier Crown', r: 5, area: 'tarn' },
   { id: 'phoenixcrest', name: 'Phoenix Crest', r: 5, area: 'springs' },
+  { id: 'lantern', name: 'Lantern Hat', r: 5, timed: true },
+  { id: 'derbycap', name: 'Derby Cap', r: 5, derby: 1 },
+  { id: 'goldderbycap', name: 'Gold Derby Cap', r: 5, derby: 5 },
 ];
 const HAT = Object.fromEntries(HATS.map(h => [h.id, h]));
 const SLOT_COSTS = [150, 1200, 8000, 50000, 250000, 1200000];
@@ -400,7 +442,8 @@ function fresh() {
   return { v: 2, coins: 0, pond: 'mill', ponds: ['mill'], rod: 'willow', rods: ['willow'],
     up: { line: 0, reel: 0, luck: 0, hook: 0, market: 0, nets: 0 }, bait: {}, baitOn: 'worms',
     hat: 'bucket', hats: ['bucket'],
-    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0, bestStreak: 0 }, streak: 0, saved: Date.now(), tab: 'shop', shopTab: 'rods' };
+    slots: [], coll: {}, recent: [], hatsNew: false, stats: { caught: 0, earned: 0, giants: 0, fives: 0, chests: 0, bestStreak: 0 }, streak: 0, saved: Date.now(), tab: 'shop', shopTab: 'rods',
+    derby: { paid: [], wins: 0, trophy: null, boost: 0 } };
 }
 let S = fresh();
 function migrate(d) {
@@ -420,7 +463,7 @@ function load(d) {
   if (d && (d.v === 1 || d.v === 2)) {
     d = migrate(d);
     const f = fresh();
-    S = Object.assign(f, d, { up: Object.assign(f.up, d.up || {}), stats: Object.assign(f.stats, d.stats || {}) });
+    S = Object.assign(f, d, { up: Object.assign(f.up, d.up || {}), stats: Object.assign(f.stats, d.stats || {}), derby: Object.assign(f.derby, d.derby || {}) });
     S.slots.forEach(s => { s.missed = s.missed || 0; });
     if (!S.hats || !S.hats.length) { S.hats = ['bucket']; S.hat = 'bucket'; }
   }
@@ -499,7 +542,11 @@ const LAND_BY_RARITY = [.9, .8, .65, .5, .35];
 const landChance = (sl, f) => Math.min(.95, LAND_BY_RARITY[f.r - 1] * pondOf(sl.pond).idle + .02 * (sl.lvl - 1));
 
 // ---------- rolling a fish ----------
-function pool(pid) { const tier = rod().tier; return pondOf(pid).fish.filter(f => (f.rod || 1) <= tier); }
+function pool(pid, hand) {
+  const tier = rod().tier, p = pondOf(pid), l = p.fish.filter(f => (f.rod || 1) <= tier);
+  if (hand && p.timed && p.timed.rod <= tier && timedLeft(p.timed)) l.push(p.timed);
+  return l;
+}
 function fishWeights(list, opts) {
   return list.map(f => {
     let w = f.w * Math.exp(opts.luck * f.rf * .8);
@@ -512,7 +559,7 @@ function pick(list, ws) {
   for (let i = 0; i < list.length; i++) { r -= ws[i]; if (r <= 0) return list[i]; }
   return list[list.length - 1];
 }
-const rollFish = (pid, opts) => { const l = pool(pid); return pick(l, fishWeights(l, opts)); };
+const rollFish = (pid, opts, hand) => { const l = pool(pid, hand); return pick(l, fishWeights(l, opts)); };
 function rollStars(luck, perfect) {
   const ws = [50, 28, 14, 6, 2].map((x, i) => x * Math.exp(luck * .3 * i));
   let q = pick([1, 2, 3, 4, 5], ws);
@@ -525,7 +572,7 @@ function rollCatch(f, opts, perfect) {
   const q = rollStars(opts.luck, perfect);
   const giant = t >= .98;
   const size = f.min + t * (f.max - f.min);
-  const v = f.base * (.5 + t) * STAR_MUL[q - 1] * (giant ? 3 : 1) * (1 + .04 * S.up.market) * pondBonus(f.pond);
+  const v = f.base * (.5 + t) * STAR_MUL[q - 1] * (giant ? 3 : 1) * (1 + .04 * S.up.market) * pondBonus(f.pond) * champBoost();
   return { f: f.id, s: Math.round(size * 10) / 10, t: Math.round(t * 100), q, v: Math.max(1, Math.round(v)), g: giant, p: !!perfect };
 }
 function handOpts(baitId) {
@@ -592,10 +639,13 @@ function record(c, source) {
   const how = source === 'idle' ? ' on an idle rod' : '';
   if (c.g) { S.stats.giants++; post(`Landed a giant ${f.name}${how}: ${cm(c.s)}, size ${c.t}/100, worth ${fmt(c.v)} coins.`); }
   else if (c.q === 5) { S.stats.fives++; post(`Caught a 5-star ${f.name}${how} (${cm(c.s)}), worth ${fmt(c.v)} coins.`); }
+  else if (f.timed) post(`Caught the ${f.name} at ${pondOf(f.pond).name} in its window, worth ${fmt(c.v)} coins.`);
   else if (notes.includes('new') && f.r >= 4) post(`Caught my first ${f.name}${how}, a ${RARITY[f.r - 1].toLowerCase()} fish.`);
   if (notes.includes('new') && pondDone(f.pond)) post(`Caught every species in ${pondOf(f.pond).name}. Fish from there now sell for 5% more.`, true);
   if (c.q === 5) checkAreaHat(f.pond);
+  if (f.timed) checkTimedHat();
   reportBest(c, source);
+  if (source !== 'idle') { const dn = derbyCatch(c); if (dn) notes.push(dn); }
   return notes;
 }
 
@@ -614,6 +664,83 @@ function reportBest(c, source) {
 }
 let board = null, boardAsked = 0;
 function askBoard() { boardAsked = Date.now(); toPeiskos({ kind: 'board' }); }
+
+// ---------- the weekly derby ----------
+// One rare-or-better fish at one water, Monday to Sunday Eastern. The server picks it, keeps
+// everyone's longest hand-caught one and settles the places when the week ends; the game pays its
+// own prizes, scaled to your furthest water so a Millpond derby is worth winning for everyone.
+let derby = null, derbyAsked = 0;
+function askDerby() { derbyAsked = Date.now(); toPeiskos({ kind: 'derby' }); }
+const DERBY_PRIZE = [500, 250, 125]; // about an hour, half an hour and a quarter of hand fishing
+const furthestIdx = () => Math.max(...S.ponds.map(pondIdx));
+const derbyPrize = place => place <= 3 ? roundPrice(wormValueAt(furthestIdx()) * DERBY_PRIZE[place - 1]) : 0;
+/** The best bait you can buy, for everyone who entered. */
+const bestBait = () => BAITS.filter(b => b.cost && baitShown(b)).reduce((a, b) => (b.gain > a.gain ? b : a));
+const champBoost = () => serverNow() < S.derby.boost ? 1.1 : 1;
+const derbyName = d => `${FISH[d.fish] ? FISH[d.fish].name : 'Mystery fish'} week at ${pondOf(d.pond) ? pondOf(d.pond).name : 'the lake'}`;
+const placeWord = n => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
+/** A hand catch of this week's fish: sent when it beats your best, and marked on the catch card. */
+function derbyCatch(c) {
+  const d = derby && derby.derby;
+  if (!d || c.f !== d.fish) return null;
+  const me = derby.me;
+  if (me && (c.s < me.size || (c.s === me.size && c.q <= me.stars))) return 'derby';
+  derby.me = Object.assign({}, me, { size: c.s, stars: c.q });
+  toPeiskos({ kind: 'derbyEntry', c: { f: c.f, s: c.s, t: c.t, q: c.q, g: c.g } });
+  return 'derbybest';
+}
+function onDerbyEntry(r) {
+  if (!r || r.error || !derby || !derby.derby) return;
+  if (r.lead) post(`Took the lead in the derby (${derbyName(derby.derby)}) with ${cm(derby.me.size)}.`, true);
+  askDerby();
+}
+/** Prizes for weeks that have finished since you last looked, each paid once. */
+function payDerby() {
+  const fresh = (derby.awards || []).filter(a => !S.derby.paid.includes(a.week));
+  if (!fresh.length) return;
+  const lines = []; let total = 0;
+  fresh.forEach(a => {
+    S.derby.paid.push(a.week);
+    const coins = derbyPrize(a.place), b = bestBait(), name = derbyName(a);
+    total += coins; S.coins += coins;
+    S.bait[b.id] = (S.bait[b.id] || 0) + b.pack;
+    lines.push(`<div><span>${name}: ${placeWord(a.place)}, ${cm(a.size)}</span><b>${coins ? '+' + fmt(coins) : ''}</b></div><div><span>Entry prize</span><b>${b.pack} ${b.name}</b></div>`);
+    if (a.place === 1) {
+      S.derby.trophy = { f: a.fish, s: a.size, week: a.week };
+      // Champion's week: +10% on every catch until the next derby ends.
+      S.derby.boost = Math.max(S.derby.boost, Date.parse(a.week + 'T05:00:00Z') + 14 * 86400000);
+      post(`Won the derby: ${name}, with ${cm(a.size)}.`, true);
+    }
+  });
+  S.derby.paid = S.derby.paid.slice(-12);
+  S.derby.wins = Math.max(S.derby.wins, derby.wins || 0);
+  HATS.filter(h => h.derby && S.derby.wins >= h.derby && !S.hats.includes(h.id)).forEach(h => { S.hats.push(h.id); S.hatsNew = true; addRecent({ chest: true, hat: h.id, area: true }); lines.push(`<div><span>New hat</span><b>${h.name}</b></div>`); });
+  const won = fresh.some(a => a.place === 1);
+  modal(won ? 'You won the derby!' : 'Derby results', `<p style="margin:0">${won ? 'Your winning fish is mounted on your dock, and your catches sell for 10% more until the next derby ends.' : 'Thanks for fishing in it. Here is what you earned.'}</p><div class="lines">${lines.join('')}</div>`, `<button class="buy" data-act="close">${total ? 'Collect' : 'Nice'}</button>`);
+  save(); renderAll();
+}
+function onDerby(d) {
+  derby = d;
+  if (d && !d.error) payDerby();
+  if (S.tab === 'derby') renderPane();
+  renderMapNodes();
+}
+const timeLeftText = ms => { const h = Math.floor(ms / 3600000); return h >= 48 ? `${Math.floor(h / 24)} days left` : h >= 1 ? `${h}h ${Math.floor(ms / 60000) % 60}m left` : `${Math.max(1, Math.floor(ms / 60000))}m left`; };
+function derbyHtml() {
+  let h = `<h2>Derby <small>Monday to Sunday, Eastern</small></h2><p class="note" style="margin:0">One fish, one water, all week. Your longest one caught by hand counts; idle rods don't. Ties go to more stars, then whoever landed theirs first. The top three win coins (about an hour, 30 minutes and 15 minutes of fishing at your furthest water), everyone who enters gets a pack of your best bait, and the winner's fish is mounted on their dock with +10% on catches for a week.</p>`;
+  if (!derby) return h + `<div class="empty-state">Loading the derby…</div>`;
+  if (derby.error) return h + `<div class="empty-state">Couldn't load the derby. ${esc(derby.error)}</div>`;
+  const d = derby.derby;
+  if (!d) h += `<div class="empty-state">No derby this week. It needs at least two people fishing in this hearth.</div>`;
+  else {
+    const f = FISH[d.fish], own = S.ponds.includes(d.pond), can = f && (f.rod || 1) <= rod().tier;
+    h += `<div class="derby-head"><canvas data-fish="${d.fish}"></canvas><div><b>${f ? f.name : d.fish}</b> ${f ? rarHtml(f.r) : ''}<span>at ${pondOf(d.pond).name} · ${timeLeftText(derby.endsAt - serverNow())}</span>${!own ? `<span class="warn">You haven't opened ${pondOf(d.pond).name} yet.</span>` : !can ? `<span class="warn">Needs a tier ${f.rod} rod.</span>` : ''}${derby.me ? `<span>You: <b>${placeWord(derby.me.place)}</b> with ${cm(derby.me.size)} ${starsHtml(derby.me.stars)}</span>` : ''}</div></div>`;
+    if (!derby.rows.length) h += `<div class="empty-state">Nobody has landed one yet.</div>`;
+    else h += `<ol class="board derbyboard">${derby.rows.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${starsHtml(r.stars)}<b>${cm(r.size)}</b></div></li>`).join('')}</ol>`;
+  }
+  if (derby.last && derby.last.top.length) h += `<h2>Last week <small>${derbyName(derby.last)}</small></h2><ol class="board derbyboard">${derby.last.top.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${starsHtml(r.stars)}<b>${cm(r.size)}</b></div></li>`).join('')}</ol>`;
+  return h;
+}
 function boardHtml() {
   let h = `<h2>Today's best <small>resets at midnight Eastern</small></h2><p class="note" style="margin:0">Everyone's most valuable catch today in this hearth, by hand or idle rod. Worth here is the fish's own value, before Fishmonger friend and full-water bonuses, so everyone counts the same.</p>`;
   if (!board) return h + `<div class="empty-state">Loading the board…</div>`;
@@ -638,12 +765,18 @@ function checkAreaHat(pid) {
   addRecent({ chest: true, hat: h.id, area: true });
   post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}. Fish from there now sell for 10% more.`, true);
 }
+function checkTimedHat() {
+  if (S.hats.includes('lantern') || !TIMED.every(f => S.coll[f.id])) return;
+  S.hats.push('lantern'); S.hatsNew = true;
+  addRecent({ chest: true, hat: 'lantern', area: true });
+  post(`Caught all ${TIMED.length} timed legendaries and earned the Lantern Hat.`, true);
+}
 const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000, 25000, 60000, 150000, 400000, 1000000];
 function openChest() {
   S.stats.chests++;
   if (S.stats.chests === 1) S.hatsNew = true;
   const pi = pondIdx(S.pond);
-  const left = HATS.filter(h => !h.area && !S.hats.includes(h.id));
+  const left = HATS.filter(h => !h.area && !h.timed && !h.derby && !S.hats.includes(h.id));
   if (!left.length) {
     const coins = Math.round(300 * Math.pow(6, Math.min(pi, 4)) * Math.pow(3.6, Math.max(0, pi - 4)));
     S.coins += coins; S.stats.earned += coins;
@@ -843,6 +976,32 @@ function drawHat(c, id, x, y, r, T) {
       blob(c, '#8a2a12', () => c.rect(x - r * .95, y - r * .65, r * 1.9, r * .22));
       blob(c, '#ffe08a', () => c.arc(x, y - r * .54, r * .11, 0, 7));
       break; }
+    case 'lantern': {
+      // a dark wool cap with a little brass lantern on top, its flame breathing
+      blob(c, '#3a3450', () => c.arc(x, y - r * .3, r * 1, Math.PI, 0));
+      blob(c, '#2a2540', () => c.rect(x - r * 1.04, y - r * .55, r * 2.08, r * .28));
+      blob(c, '#8a6a2a', () => c.rect(x - r * .06, y - r * 1.55, r * .12, r * .3));
+      blob(c, '#c8962e', () => c.ellipse(x, y - r * 1.62, r * .38, r * .1, 0, 0, 7));
+      const gl = .75 + .25 * Math.sin((T || 0) * 3);
+      c.shadowColor = '#ffc46b'; c.shadowBlur = r * .9 * gl;
+      blob(c, `rgba(255,214,140,${.85 * gl + .15})`, () => c.rect(x - r * .28, y - r * 2.25, r * .56, r * .62));
+      c.shadowBlur = 0;
+      blob(c, '#fff4d0', () => c.ellipse(x, y - r * 1.9, r * .09, r * .18, 0, 0, 7));
+      c.strokeStyle = '#8a6a2a'; c.lineWidth = r * .08; c.strokeRect(x - r * .28, y - r * 2.25, r * .56, r * .62);
+      blob(c, '#c8962e', () => { c.moveTo(x - r * .38, y - r * 2.25); c.lineTo(x, y - r * 2.55); c.lineTo(x + r * .38, y - r * 2.25); });
+      c.strokeStyle = '#c8962e'; c.lineWidth = r * .06; c.beginPath(); c.arc(x, y - r * 2.6, r * .12, Math.PI, 0); c.stroke();
+      break; }
+    case 'derbycap':
+    case 'goldderbycap': {
+      // a cap with a ribbon rosette pinned to the front
+      const gold = id === 'goldderbycap', cap = gold ? '#d8a830' : '#2f5d8a', dark = gold ? '#a87a18' : '#21456a';
+      blob(c, cap, () => c.arc(x, y - r * .3, r * 1, Math.PI, 0));
+      blob(c, dark, () => c.ellipse(x + r * 1, y - r * .32, r * .75, r * .16, 0, 0, 7));
+      blob(c, '#fffaf3', () => c.arc(x, y - r * 1.25, r * .1, 0, 7));
+      [['#b8352b', -.5], ['#b8352b', .5]].forEach(([col, d]) => blob(c, col, () => { c.moveTo(x - r * .55 + d * r * .2, y - r * .7); c.lineTo(x - r * .55 + d * r * .35, y - r * .1); c.lineTo(x - r * .55 + d * r * .05, y - r * .25); }));
+      blob(c, gold ? '#fff0a0' : '#ffc46b', () => c.arc(x - r * .55, y - r * .75, r * .3, 0, 7));
+      blob(c, gold ? '#d8a830' : '#e09a2a', () => c.arc(x - r * .55, y - r * .75, r * .15, 0, 7));
+      break; }
     case 'flamecrown': {
       const fl = Math.sin((T || 0) * 9) * r * .12;
       c.shadowColor = '#ffb35c'; c.shadowBlur = r * .8;
@@ -1009,7 +1168,7 @@ function cast() {
 }
 function startBite() {
   G.opts = handOpts(G.bait);
-  G.fish = rollFish(S.pond, G.opts);
+  G.fish = rollFish(S.pond, G.opts, true);
   // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
   // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
   const r = rod(), pi = pondStep(S.pond), rf = G.fish.rf;
@@ -1116,6 +1275,8 @@ function showCatch(c, notes) {
   if (c.p) tags.push('<span class="tag green">Perfect hook</span>');
   if (notes.includes('new')) tags.push('<span class="tag">New species</span>');
   if (notes.includes('record')) tags.push('<span class="tag">Size record</span>');
+  if (notes.includes('derbybest')) tags.push('<span class="tag gold">Derby: your best this week</span>');
+  else if (notes.includes('derby')) tags.push('<span class="tag">Derby fish</span>');
   $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv"></canvas><div class="row"><h3>${f.name}</h3></div><div class="row">${rarHtml(f.r)}${starsHtml(c.q)}</div><div class="row"><span>${cm(c.s)} <small style="color:var(--muted)">(${f.min}–${f.max})</small></span><span class="val">+${fmt(c.v)}</span></div>${sizeHtml(c.t)}${tags.length ? '<div class="tags">' + tags.join('') + '</div>' : ''}</div>`;
   paintFishCanvas($('catchCv'), f, false, c.t / 100);
   G.resultAt = performance.now();
@@ -1162,7 +1323,9 @@ function renderMapNodes() {
     if (n.soon) return `<button class="node soon" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%"><span class="hit"></span><span class="lbl">${n.soon}<small>Coming soon</small></span></button>`;
     const p = pondOf(n.id), own = S.ponds.includes(n.id), here = S.pond === n.id;
     const sub = here ? 'You are here' : own ? `${p.fish.filter(f => S.coll[f.id]).length}/${p.fish.length} found` : `Unlock · ${fmt(p.cost)}`;
-    return `<button class="node${here ? ' here' : ''}" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%" aria-label="${p.name}, ${sub}"><span class="hit"></span><span class="lbl">${p.name}<small>${sub}</small></span></button>`;
+    const tl = p.timed && timedLeft(p.timed) ? `${p.timed.name} biting, ${timedLeftText(p.timed)}` : '';
+    const dl = derby && derby.derby && derby.derby.pond === n.id ? `this week's derby: ${FISH[derby.derby.fish] ? FISH[derby.derby.fish].name : 'a fish'}` : '';
+    return `<button class="node${here ? ' here' : ''}" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%" aria-label="${p.name}, ${sub}${tl ? ', ' + tl : ''}${dl ? ', ' + dl : ''}"${tl ? ` title="${tl}"` : ''}><span class="hit"></span><span class="lbl">${tl ? '<span class="moon" aria-hidden="true">☾</span>' : ''}${derby && derby.derby && derby.derby.pond === n.id ? '<span class="flag" title="This week\'s derby" aria-hidden="true">⚑</span>' : ''}${p.name}<small>${sub}</small></span></button>`;
   }).join('');
 }
 const trees = Array.from({ length: 70 }, (_, i) => [((i * 37) % 97) / 97, ((i * 53) % 89) / 89, (i * 7) % 3]);
@@ -1358,6 +1521,10 @@ function drawScene(now) {
   const tipX = W * .3, tipY = H * .5;
   const bend = G.phase === 'bite' ? 12 * Math.sin(T * 20) : 0;
   const sc = H / 210, feetY = p.feature === 'ice' ? H * .95 : H * .917;
+  // Derby winners hang over the dock, above whoever caught them.
+  const pw = Math.max(40, W * .075);
+  if (S.derby.trophy) drawPlaque(W * .09, H * .5, pw, S.derby.trophy);
+  friendsHere().forEach((o, i) => { if (o.status.trophy) drawPlaque(W * (.22 + i * .13), H * .5, pw, o.status.trophy); });
   drawFriends(T, sc, feetY);
   const hand = drawAngler(ctx, W * .09, feetY, sc, S.hat, { T, sit: true });
   ctx.strokeStyle = ROD[S.rod].color; ctx.lineWidth = Math.max(3, sc * 2.4); ctx.lineCap = 'round';
@@ -1395,7 +1562,8 @@ const coatOf = id => COATS[Math.abs(id) % COATS.length];
 function friendsHere() { return [...dock.others.values()].filter(o => o.status.pond === S.pond && !G.walk).slice(0, 3); }
 function dockStatus() {
   const phase = G.mode === 'map' || G.walk ? 'idle' : G.phase === 'cast' || G.phase === 'wait' ? 'wait' : G.phase === 'bite' ? 'bite' : 'idle';
-  return { pond: S.pond, hat: S.hat, rod: S.rod, phase, bob: phase === 'idle' ? null : [Math.round(G.bob.x * 100) / 100, Math.round(G.bob.y * 100) / 100] };
+  const tr = S.derby.trophy;
+  return { pond: S.pond, hat: S.hat, rod: S.rod, phase, bob: phase === 'idle' ? null : [Math.round(G.bob.x * 100) / 100, Math.round(G.bob.y * 100) / 100], trophy: tr ? { f: tr.f, s: tr.s } : null, wins: S.derby.wins };
 }
 /** Tells the fire when anything the others would see has changed (a catch right away). */
 function dockTick(now) {
@@ -1405,6 +1573,19 @@ function dockTick(now) {
   dock.sent = key; dock.sentAt = now;
   toPeiskos({ kind: 'status', status: Object.assign(st, { caught: dock.caught }) });
   dock.caught = null;
+}
+/** A derby winner, mounted on a little wooden plaque by the angler, with its length. */
+function drawPlaque(x, y, w, tr) {
+  const f = FISH[tr.f]; if (!f) return;
+  const h = w * .62;
+  ctx.save();
+  ctx.strokeStyle = '#3a2516'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x - w * .3, y - h / 2); ctx.lineTo(x, y - h * .85); ctx.lineTo(x + w * .3, y - h / 2); ctx.stroke();
+  ctx.fillStyle = '#8a5a30'; ctx.beginPath(); ctx.roundRect(x - w / 2, y - h / 2, w, h, w * .08); ctx.fill();
+  ctx.strokeStyle = '#c8962e'; ctx.lineWidth = Math.max(1, w * .03); ctx.stroke();
+  ctx.translate(x, y - h * .08); drawFish(ctx, w * .78, f, null); ctx.translate(-x, -(y - h * .08));
+  ctx.fillStyle = '#fff4d0'; ctx.font = `800 ${Math.max(8, Math.round(w * .15))}px 'Nunito Sans', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(cm(tr.s), x, y + h * .33);
+  ctx.restore();
 }
 function drawFriends(T, sc, feetY) {
   const ice = pondOf(S.pond).feature === 'ice';
@@ -1454,7 +1635,7 @@ function drawDockTags(sc, feetY) {
   if (here.length) pill('you', W * .09 + 4 * sc, tagY, th, 'rgba(196,86,28,.92)', '#fffaf3');
   here.forEach((o, i) => {
     const fx = W * (.22 + i * .13) + 4 * sc;
-    pill(o.name, fx, tagY, th, 'rgba(31,24,19,.72)', '#fffaf3');
+    pill(o.status.wins ? `${o.name} · ${o.status.wins} derby win${o.status.wins > 1 ? 's' : ''}` : o.name, fx, tagY, th, 'rgba(31,24,19,.72)', '#fffaf3');
     const c = o.caught, f = c && FISH[c.f];
     if (f && performance.now() - o.caughtSeen < 5000) { ctx.font = `800 ${Math.round(Math.max(11, sc * 6))}px 'Nunito Sans', sans-serif`; catchPill(f, `· ${cm(c.s)} ${'★'.repeat(c.q)}`, fx, feetY - 62 * sc - (i % 2) * (th + 4), th); ctx.font = small; }
   });
@@ -1496,7 +1677,8 @@ function renderTop() {
   const b = BAIT[S.baitOn];
   $('baitChip').textContent = b.id === 'worms' ? b.name : `${b.name} ×${S.bait[b.id] || 0}`;
   const p = pondOf(S.pond);
-  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}<span class="mapword">Map</span>`;
+  const tl = p.timed && timedLeft(p.timed) ? `☾ ${p.timed.name} · ${timedLeftText(p.timed)}` : '';
+  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}${tl ? `<span class="timedtag">${tl}</span>` : ''}<span class="mapword">Map</span>`;
   $('pondtag').setAttribute('aria-label', `${p.name}. Open the map`);
   document.querySelectorAll('#tabs button').forEach(bt => {
     bt.setAttribute('aria-selected', bt.dataset.tab === S.tab);
@@ -1572,13 +1754,17 @@ function renderPane() {
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
       if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars. Fish from there also sell for another 5% more.</p><div class="hat-grid">`;
-      h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
+      if (ht.derby && !HATS[i - 1].derby) h += `</div><h2>Derby hats</h2><p class="note">Win a weekly derby for the Derby Cap, and five for the gold one.</p><div class="hat-grid">`;
+      if (ht.timed && !HATS[i - 1].timed) h += `</div><h2>Timed hat</h2><p class="note">Catch all ${TIMED.length} timed legendaries. Each one bites for ${TIMED_HOURS} hours a day; the Collection shows when.</p><div class="hat-grid">`;
+      h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : ht.derby ? `<span class="rar r5">Derby</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">${Math.min(S.derby.wins, ht.derby)}/${ht.derby} win${ht.derby > 1 ? 's' : ''}</span>`}` : ht.timed ? `<span class="rar r5">Timed</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">${TIMED.filter(f => S.coll[f.id]).length}/${TIMED.length} caught</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
     });
     h += `</div>`;
   } else if (S.tab === 'board') {
     h += boardHtml();
+  } else if (S.tab === 'derby') {
+    h += derbyHtml();
   } else if (S.tab === 'coll') {
-    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more.</p>`;
+    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more. Each water also has a timed legendary that bites only ${TIMED_HOURS} hours a day, by hand; times below are yours.</p>`;
     PONDS.forEach(p => {
       const got = p.fish.filter(f => S.coll[f.id]).length;
       h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${bonusTag(p.id) ? ` · ${bonusTag(p.id)} coins` : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
@@ -1587,6 +1773,9 @@ function renderPane() {
         if (e) h += `<div class="fishcard"><canvas data-fish="${f.id}"></canvas><div class="name">${f.name}</div>${rarHtml(f.r)}<div class="meta">${f.min}–${f.max} cm · caught ${e.n}<br>Biggest ${cm(e.best)}<br>Best ${starsHtml(e.bestQ || 1)}</div></div>`;
         else h += `<div class="fishcard unknown"><canvas data-fish="${f.id}" data-sil="1"></canvas><div class="name">Not caught yet</div>${rarHtml(f.r)}<div class="meta">${(f.rod || 1) > 1 ? 'Needs a tier ' + f.rod + ' rod' : '&nbsp;'}<br>&nbsp;<br>&nbsp;</div></div>`;
       });
+      const t = p.timed, te = S.coll[t.id], when = timedLeft(t) ? `<b class="biting">Biting now · ${timedLeftText(t)}</b>` : `Bites ${timedWindowText(t)}`;
+      if (te) h += `<div class="fishcard timed"><canvas data-fish="${t.id}"></canvas><div class="name">${t.name}</div><span class="rar r5">Timed</span><div class="meta">${when}<br>Biggest ${cm(te.best)} · caught ${te.n}<br>Best ${starsHtml(te.bestQ || 1)}</div></div>`;
+      else h += `<div class="fishcard timed unknown"><canvas data-fish="${t.id}" data-sil="1"></canvas><div class="name">Timed legendary</div><span class="rar r5">Timed</span><div class="meta">${when}<br>Needs a tier ${t.rod} rod<br>By hand only</div></div>`;
       h += `</div></div>`;
     });
   }
@@ -1600,7 +1789,7 @@ function renderRecent() {
   const el = $('recent'), list = S.recent.slice(0, 6);
   if (!list.length) { el.innerHTML = `<h2>Recent catches</h2><div class="empty-state">Your last six catches show up here.</div>`; return; }
   el.innerHTML = `<h2>Recent catches <small>last ${list.length}</small></h2><div class="rc-grid">${list.map((r, i) => {
-    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
+    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? (h && h.timed ? 'Timed hat' : h && h.derby ? 'Derby hat' : 'Area hat') : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
     const c = r.c, f = FISH[c.f], tags = [];
     if (c.g) tags.push('<span class="tag gold">Giant ×3</span>');
     if (c.p) tags.push('<span class="tag green">Perfect</span>');
@@ -1643,7 +1832,7 @@ document.addEventListener('click', e => {
     if (!S.ponds.includes(n.id)) return unlockModal(n.id);
     return walkTo(n.id);
   }
-  if (t.dataset.tab) { S.tab = t.dataset.tab; if (S.tab === 'hats') S.hatsNew = false; if (S.tab === 'board') askBoard(); renderTop(); renderPane(); save(); return; }
+  if (t.dataset.tab) { S.tab = t.dataset.tab; if (S.tab === 'hats') S.hatsNew = false; if (S.tab === 'board') askBoard(); if (S.tab === 'derby') askDerby(); renderTop(); renderPane(); save(); return; }
   if (t.dataset.sub) { S.shopTab = t.dataset.sub; renderPane(); return; }
   if (t.dataset.go) { const [a, b] = t.dataset.go.split(':'); S.tab = a; S.shopTab = b; renderTop(); renderPane(); return; }
   const a = t.dataset.act, id = t.dataset.id, i = +t.dataset.i;
@@ -1681,7 +1870,18 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
 window.addEventListener('pagehide', flushSave);
 setInterval(flushSave, 30000);
+// Timed windows open and close on the hour; keep the countdowns and the map current.
+let timedOpen = null, timedMinute = -1;
+setInterval(() => {
+  if (!ready || document.hidden) return;
+  const k = timedNow().map(f => f.id).join(), m = easternClock().m;
+  if (k === timedOpen && m === timedMinute) return;
+  const changed = k !== timedOpen; timedOpen = k; timedMinute = m;
+  renderTop(); renderMapNodes(); if (changed && S.tab === 'coll') renderPane();
+}, 20000);
 setInterval(() => { if (ready && S.tab === 'board' && !document.hidden && Date.now() - boardAsked > 55000) askBoard(); }, 5000);
+// The derby every few minutes (every minute while you're looking at it), so a finished week pays soon.
+setInterval(() => { if (ready && !document.hidden && Date.now() - derbyAsked > (S.tab === 'derby' ? 55000 : 300000)) askDerby(); }, 5000);
 
 // ---------- boot ----------
 // Peiskos answers "ready" with the save (or nothing, for someone new), and sends it again if
@@ -1700,18 +1900,21 @@ function start(data, theme) {
   if ((r.added || r.missed) && away > 60000) awaySummary(away, r);
   if (r.added || r.missed) save();
   if (S.tab === 'board') askBoard();
+  askDerby();
   if (!running) { running = true; requestAnimationFrame(frame); }
 }
 window.addEventListener('message', e => {
   if (e.source !== peiskos()) return;
   const m = e.data;
   if (!m || typeof m !== 'object') return;
-  if (m.kind === 'init') start(m.save, m.theme);
+  if (m.kind === 'init') { if (Number.isFinite(m.now)) clockSkew = m.now - Date.now(); start(m.save, m.theme); }
   else if (m.kind === 'reload') { start(m.save); $('catchbox').innerHTML = '<div class="catch"><h3>Picked up your other device</h3><div class="row" style="color:var(--muted)"><span>You saved there more recently, so this is where you left off.</span></div></div>'; G.resultAt = performance.now(); }
   else if (m.kind === 'theme') document.documentElement.dataset.theme = m.theme;
   else if (m.kind === 'flush') flushSave();
   else if (m.kind === 'dock') onDock(m);
   else if (m.kind === 'board') { board = m.board; if (S.tab === 'board') renderPane(); }
+  else if (m.kind === 'derby') onDerby(m.derby);
+  else if (m.kind === 'derbyEntry') onDerbyEntry(m.r);
 });
 toPeiskos({ kind: 'ready' });
 })();

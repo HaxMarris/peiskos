@@ -110,15 +110,20 @@ function showUpdateButton(update) {
   btn.title = label;
   btn.setAttribute('aria-label', label);
   btn.classList.remove('hidden');
-  btn.onclick = () => {
+  btn.onclick = async () => {
+    const lines = await updateNews();
     modal(`<h2>Update Peiskos?</h2>
-      ${unseenNews.length ? `<h3>What's new</h3>${whatsNewList(unseenNews.slice(0, 8))}` : ''}
+      ${lines.length ? `<h3>What's new in ${escapeHtml(update.version)}</h3>${whatsNewList(lines.slice(0, 8))}` : ''}
       <p class="muted">${update.install
-        ? `Version ${escapeHtml(update.version)} is ready. Peiskos closes and opens again in a few seconds. If you're by a fire, you'll need to join it again.`
-        : `Version ${escapeHtml(update.version)} is out. Download it and install it over this one.`}</p>
+        ? `Peiskos closes and opens again in a few seconds. If you're by a fire, you'll need to join it again.`
+        : `Download version ${escapeHtml(update.version)} and install it over this one.`}</p>
       <div class="modal-row"><span class="spacer"></span><button type="button" class="btn secondary" data-close>Not now</button><button type="button" class="btn" id="update-go">${update.install ? 'Restart and update' : 'Download'}</button></div>`);
-    $('#update-go').onclick = () => { closeModal(); updates.install(); };
-    if (unseenNews.length) store.set('whatsNewSeen', String(newsTotal)); // shown here, so not again after the restart
+    $('#update-go').onclick = () => {
+      // Read here, so not again once the new version opens. "Not now" leaves them for then.
+      if (lines.length) store.set('whatsNewSeen', String(Math.max(Number(store.get('whatsNewSeen')) || 0, newsTotal + lines.length)));
+      closeModal();
+      updates.install();
+    };
   };
 }
 if (updates) {
@@ -1020,17 +1025,25 @@ function welcomeStep(n) {
 // ---------------------------------------------------------------- what's new
 
 // whats-new.json says what changed, in words for friends, newest first; lines are only ever added.
-// It comes from the server, which updates first, so the desktop app's update button can say what
-// the new version brings. Each device remembers how many lines it has shown.
-async function whatsNewLines() {
+// The copy that came with this app is what it has, so "What's new" shows only once you're on the
+// version that brings it. The desktop app ships its own copy and the server updates first, so the
+// server's copy has more lines while an update waits; the update popup shows those.
+// Each device remembers how many lines it has shown.
+async function whatsNewLines(url = 'whats-new.json') {
   try {
-    const r = await fetch(`${state.serverUrl.replace(/\/$/, '')}/whats-new.json`, { cache: 'no-cache' });
+    const r = await fetch(url, { cache: 'no-cache' });
     return r.ok ? ((await r.json()).entries ?? []).flatMap((e) => e.items) : [];
   } catch { return []; }
 }
 const whatsNewList = (lines) => `<ul class="whats-new">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`;
-let unseenNews = [];
-let newsTotal = 0;
+let newsTotal = 0; // lines in this app's copy
+
+/** What the server's copy has that this app's doesn't: what the waiting update brings. */
+async function updateNews() {
+  const [mine, server] = await Promise.all([whatsNewLines(), whatsNewLines(`${state.serverUrl.replace(/\/$/, '')}/whats-new.json`)]);
+  newsTotal = mine.length;
+  return server.slice(0, Math.max(0, server.length - mine.length));
+}
 
 /** After an update, the lines this device hasn't shown yet, once. A new account starts with none. */
 async function showWhatsNew(newAccount) {
@@ -1040,12 +1053,12 @@ async function showWhatsNew(newAccount) {
   const seen = Number(store.get('whatsNewSeen'));
   // A device that's never shown any (a new account, or before this existed) starts from now.
   if (newAccount || !Number.isFinite(seen) || store.get('whatsNewSeen') == null) return store.set('whatsNewSeen', String(lines.length));
-  unseenNews = lines.slice(0, Math.max(0, lines.length - seen));
-  if (!unseenNews.length || updates?.get()) return; // with a desktop update waiting, its button says it
+  const unseen = lines.slice(0, Math.max(0, lines.length - seen));
+  if (!unseen.length) return;
   whenNoModal(() => {
-    modal(`<h2>What's new</h2>${whatsNewList(unseenNews.slice(0, 8))}
+    if (Number(store.get('whatsNewSeen')) >= lines.length) return; // read in the update popup meanwhile
+    modal(`<h2>What's new</h2>${whatsNewList(unseen.slice(0, 8))}
       <div class="modal-row"><button type="button" class="btn" data-close>Got it</button></div>`, 'whats-new-modal');
     store.set('whatsNewSeen', String(lines.length));
-    unseenNews = [];
   });
 }

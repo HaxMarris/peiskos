@@ -106,6 +106,8 @@ Data goes to `server/data/chat.db`.
 | `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | unset (voice off) | Shared with LiveKit; turns on voice rooms.             |
 | `UPLOAD_DIR`        | `uploads/` next to the database | Where shared files are stored (`/data/uploads` in Docker).  |
 | `MAX_UPLOAD_MB`     | `25`                   | Largest file someone can share.                                     |
+| `UPLOAD_DAILY_MB`   | `2048`                 | Most one person can upload in a day, all files together.            |
+| `MIN_FREE_DISK_MB`  | `2048`                 | Uploads pause while the disk has less than this free.               |
 | `LIVEKIT_URL`       | same address as Peiskos | Where apps reach LiveKit, if not routed through Peiskos's address.   |
 | `LIVEKIT_API_URL`   | `http://localhost:7880` | Where Peiskos reaches LiveKit to disconnect removed people (Docker Compose points it at the host). |
 | `KLIPY_API_KEY`     | unset (GIFs off)       | Turns on the GIF picker. See *GIFs* below.                          |

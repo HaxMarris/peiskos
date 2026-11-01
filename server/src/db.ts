@@ -842,6 +842,28 @@ function addFishing(db: Db) {
       caught_at INTEGER NOT NULL,
       PRIMARY KEY (server_id, day, user_id)
     );
+    -- The weekly derby in each hearth: one species at one water, Monday to Sunday Eastern.
+    CREATE TABLE IF NOT EXISTS fishing_derby (
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      week      TEXT NOT NULL,
+      pond      TEXT NOT NULL,
+      fish      TEXT NOT NULL,
+      settled   INTEGER NOT NULL DEFAULT 0,
+      lead_said INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (server_id, week)
+    );
+    -- Each person's longest derby fish of the week (by hand), and where they finished once it closed.
+    CREATE TABLE IF NOT EXISTS fishing_derby_entries (
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      week      TEXT NOT NULL,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      size      REAL NOT NULL,
+      score     INTEGER NOT NULL,
+      stars     INTEGER NOT NULL,
+      caught_at INTEGER NOT NULL,
+      place     INTEGER,
+      PRIMARY KEY (server_id, week, user_id)
+    );
   `);
 }
 

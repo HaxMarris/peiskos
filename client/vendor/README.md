@@ -26,3 +26,8 @@
   authenticator app. Loaded only then.
 - `three.min.js`: [three.js](https://threejs.org) r128 (MIT License), the npm package's `build/three.min.js`
   unchanged. Draws Melon Bomber's board (`client/games/melonbomber/`). Loaded only when someone opens the game.
+- `noto-emoji/`: the pictures every emoji is drawn with, from Google's [Noto Emoji](https://github.com/googlefonts/noto-emoji)
+  (artwork Apache License 2.0; flags from its `third_party/region-flags`, public domain). One 72px WebP per emoji,
+  named by its code points without U+FE0F (`1f602.webp`), each fetched the first time it's shown. Rebuild from a
+  checkout of that repository with `python3 scripts/build-noto-emoji.py <path>`. Credits and the license are in
+  `noto-emoji/LICENSE`.

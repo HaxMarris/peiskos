@@ -112,7 +112,8 @@ export function staticFiles() {
     const headers: Record<string, string | number> = {
       'content-type': type,
       // Otherwise always check, but a 304 costs almost nothing.
-      'cache-control': lasting ? 'public, max-age=31536000, immutable' : 'no-cache',
+      // Emoji pictures are named by the emoji they draw, so they can be kept for a week unchecked.
+      'cache-control': lasting ? 'public, max-age=31536000, immutable' : file.includes('/vendor/noto-emoji/') ? 'public, max-age=604800' : 'no-cache',
       etag: entry.etag,
       vary: 'accept-encoding',
     };

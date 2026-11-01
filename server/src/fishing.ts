@@ -9,11 +9,15 @@
 // Each person's most valuable catch of the day also goes on the hearth's leaderboard. The game runs on the
 // player's device, so the server can only check that a catch adds up: a real species, and a size
 // that matches its score within that species' range.
+//
+// Each hearth also runs a weekly derby: one rare-or-better species at one water, Monday to Sunday
+// Eastern. Everyone's longest hand-caught one counts, and the server settles the places once the
+// week is over. The game pays its own prizes from those places, as it does every other coin.
 import { readFileSync } from 'node:fs';
 import type { Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 
-/** A save is the game's whole state as JSON; 253 fish, 27 hats and six nets of 20 fit in far less. */
+/** A save is the game's whole state as JSON; 264 fish, 30 hats and six nets of 20 fit in far less. */
 export const MAX_SAVE_BYTES = 256 * 1024;
 
 /** The leaderboard's day runs midnight to midnight, Eastern time. */
@@ -40,12 +44,68 @@ export function loadSpecies(file = new URL('../../client/games/fishing/game.js',
   try { src = readFileSync(file, 'utf8'); } catch { return species; }
   // Each water ({ id: 'mill', name: ..., cost: ...) lists its fish after it, so a fish belongs to the water before it.
   let pond = '';
-  for (const m of src.matchAll(/\{ id: '([a-z0-9]+)', name: '[^']*', cost:|\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
-    if (m[1]) pond = m[1];
-    else species.set(m[2], { name: m[3], min: Number(m[4]), max: Number(m[5]), base: Number(m[6]), rarity: Number(m[7]), pond });
+  // The timed legendaries come after, each as ['mill', 9, F(...)], with its water in front.
+  for (const m of src.matchAll(/\{ id: '([a-z0-9]+)', name: '[^']*', cost:|\['([a-z0-9]+)', \d+, (?=F\()|\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
+    if (m[1] || m[2]) pond = m[1] ?? m[2];
+    else species.set(m[3], { name: m[4], min: Number(m[5]), max: Number(m[6]), base: Number(m[7]), rarity: Number(m[8]), pond });
   }
   return species;
 }
+
+/** The waters in walking order, and each one's regular fish (the timed legendaries are left out). */
+export function loadPonds(file = new URL('../../client/games/fishing/game.js', import.meta.url)): { id: string; fish: { id: string; rarity: number }[] }[] {
+  const ponds: { id: string; fish: { id: string; rarity: number }[] }[] = [];
+  let src = '';
+  try { src = readFileSync(file, 'utf8'); } catch { return ponds; }
+  for (const line of src.split('\n')) {
+    const p = line.match(/^ {2}\{ id: '([a-z]+)', name: '[^']+', cost: \d+, idle:/);
+    if (p) ponds.push({ id: p[1], fish: [] });
+    else if (ponds.length && line.startsWith('];')) break;
+    else if (ponds.length) for (const m of line.matchAll(/\bF\('([a-z0-9]+)', '[^']+', [\d.]+, [\d.]+, [\d.]+, ([1-5]),/g)) ponds[ponds.length - 1].fish.push({ id: m[1], rarity: Number(m[2]) });
+  }
+  return ponds;
+}
+
+/** The Monday (Eastern) that starts the derby week t falls in, as YYYY-MM-DD. */
+export function derbyWeek(t = Date.now()): string {
+  const d = new Date(boardDay(t) + 'T12:00:00Z');
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
+}
+const addDays = (day: string, n: number) => { const d = new Date(day + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+/** The moment an Eastern date starts (midnight is 04:00 or 05:00 UTC, depending on daylight saving). */
+export function easternMidnight(day: string): number {
+  for (const h of ['04', '05']) { const t = Date.parse(`${day}T${h}:00:00Z`); if (boardDay(t) === day && boardDay(t - 1) !== day) return t; }
+  return Date.parse(`${day}T05:00:00Z`);
+}
+
+/** Rare fish half the weeks, epic 30%, legendary 20%: common and uncommon ones are too easy over a week. */
+const DERBY_TIERS: [number, number][] = [[3, 0.5], [4, 0.3], [5, 0.2]];
+function seeded(text: string) {
+  let h = 2166136261;
+  for (let i = 0; i < text.length; i++) { h ^= text.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return () => { h = (h + 0x6d2b79f5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t ^= t + Math.imul(t ^ (t >>> 7), 61 | t); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+/**
+ * This week's water and fish: the furthest water at least half the hearth's recent anglers have
+ * opened (never last week's again, when there's another), and a rare, epic or legendary fish there.
+ * No derby with fewer than two anglers.
+ */
+export function pickDerby(ponds: ReturnType<typeof loadPonds>, opened: string[][], last: string | null, seed: string): { pond: string; fish: string } | null {
+  if (opened.length < 2 || !ponds.length) return null;
+  const need = Math.ceil(opened.length / 2);
+  let i = Math.max(0, ponds.map((p) => opened.filter((o) => o.includes(p.id)).length >= need).lastIndexOf(true));
+  if (ponds[i].id === last && i > 0) i--;
+  const rand = seeded(seed), pond = ponds[i];
+  const tiers = DERBY_TIERS.filter(([r]) => pond.fish.some((f) => f.rarity === r));
+  let roll = rand() * tiers.reduce((a, [, w]) => a + w, 0), tier = tiers[tiers.length - 1][0];
+  for (const [r, w] of tiers) { roll -= w; if (roll <= 0) { tier = r; break; } }
+  const pool = pond.fish.filter((f) => f.rarity === tier);
+  return { pond: pond.id, fish: pool[Math.floor(rand() * pool.length)].id };
+}
+type Entry = { userId: number; size: number; stars: number; caughtAt: number };
+/** Longest first; then more stars; then whoever landed theirs first. */
+export const derbyOrder = (a: Entry, b: Entry) => b.size - a.size || b.stars - a.stars || a.caughtAt - b.caughtAt;
 
 type User = { id: number };
 type Handler = (ctx: { user: User; params: string[]; body: Json; url: URL }) => unknown;
@@ -55,6 +115,7 @@ export interface FishingContext {
   route: (method: string, path: string, handler: Handler) => void;
   fail: (status: number, message: string) => Error;
   isMember: (serverId: number, userId: number) => boolean;
+  now?: () => number;
 }
 
 type Row = { data: string; rev: number; savedAt: number };
@@ -65,10 +126,31 @@ export function fishing(ctx: FishingContext) {
   const catches = allowance(20, 1); // only a catch that beats your best of the day is sent
   const species = loadSpecies();
   const starMul = loadStarMul();
+  const ponds = loadPonds();
+  const clock = ctx.now ?? Date.now;
+  const derbyEntries = allowance(20, 1);
   const firstPond = species.values().next().value?.pond ?? '';
   const worthOf = (r: { fish: string; score: number; stars: number; giant: number }) => {
     const sp = species.get(r.fish);
     return sp ? boardWorth(sp, r.score, r.stars, !!r.giant, starMul) : 0;
+  };
+
+  /** A catch the game reports, checked as far as the server can: a real fish, and a size that fits its score. */
+  const checkCatch = (body: Json, userId: number, h: number) => {
+    const fish = String(body.f ?? '');
+    const sp = species.get(fish);
+    const size = Number(body.s), score = Number(body.t), stars = Number(body.q);
+    if (!sp) throw fail(400, 'No such fish');
+    // Only from a water this angler has reached (the game saves an unlock before anyone can cast there).
+    const saved = current(userId, h);
+    const reachedPonds = saved ? (JSON.parse(saved.data) as { ponds?: unknown }).ponds : null;
+    const reached = Array.isArray(reachedPonds) ? reachedPonds : [firstPond];
+    if (!reached.includes(sp.pond)) throw fail(400, "You haven't reached that water yet");
+    if (!Number.isInteger(score) || score < 0 || score > 100 || !Number.isInteger(stars) || stars < 1 || stars > 5) throw fail(400, "That catch doesn't add up");
+    // The game rounds the size to a tenth and the score to a whole number, so allow for both.
+    const expected = sp.min + (score / 100) * (sp.max - sp.min);
+    if (!Number.isFinite(size) || Math.abs(size - expected) > (sp.max - sp.min) * 0.006 + 0.1) throw fail(400, "That catch doesn't add up");
+    return { fish, sp, size, score, stars, giant: body.g === true && score >= 98 };
   };
 
   const hearth = (id: string, userId: number) => {
@@ -80,7 +162,8 @@ export function fishing(ctx: FishingContext) {
     db.prepare('SELECT data, rev, saved_at AS savedAt FROM fishing_saves WHERE user_id = ? AND server_id = ?').get(userId, h) as Row | undefined;
   const view = (row: Row | undefined) => (row ? { save: JSON.parse(row.data), rev: row.rev, savedAt: row.savedAt } : { save: null, rev: 0, savedAt: 0 });
 
-  route('GET', '/api/servers/:id/fishing', ({ user, params }) => view(current(user.id, hearth(params[0], user.id))));
+  // The server's clock comes along so timed fish follow it, not whatever the device's clock says.
+  route('GET', '/api/servers/:id/fishing', ({ user, params }) => ({ ...view(current(user.id, hearth(params[0], user.id))), now: Date.now() }));
 
   route('POST', '/api/servers/:id/fishing', ({ user, params, body }) => {
     const h = hearth(params[0], user.id);
@@ -115,20 +198,7 @@ export function fishing(ctx: FishingContext) {
   route('POST', '/api/servers/:id/fishing/catch', ({ user, params, body }) => {
     const h = hearth(params[0], user.id);
     if (!catches.take(user.id)) throw fail(429, 'Catching too fast');
-    const fish = String(body.f ?? '');
-    const sp = species.get(fish);
-    const size = Number(body.s), score = Number(body.t), stars = Number(body.q);
-    if (!sp) throw fail(400, 'No such fish');
-    // Only from a water this angler has reached (the game saves an unlock before anyone can cast there).
-    const saved = current(user.id, h);
-    const ponds = saved ? (JSON.parse(saved.data) as { ponds?: unknown }).ponds : null;
-    const reached = Array.isArray(ponds) ? ponds : [firstPond];
-    if (!reached.includes(sp.pond)) throw fail(400, "You haven't reached that water yet");
-    if (!Number.isInteger(score) || score < 0 || score > 100 || !Number.isInteger(stars) || stars < 1 || stars > 5) throw fail(400, "That catch doesn't add up");
-    // The game rounds the size to a tenth and the score to a whole number, so allow for both.
-    const expected = sp.min + (score / 100) * (sp.max - sp.min);
-    if (!Number.isFinite(size) || Math.abs(size - expected) > (sp.max - sp.min) * 0.006 + 0.1) throw fail(400, "That catch doesn't add up");
-    const giant = body.g === true && score >= 98;
+    const { fish, sp, size, score, stars, giant } = checkCatch(body, user.id, h);
     const day = boardDay();
     const best = db.prepare('SELECT fish, score, stars, giant FROM fishing_best WHERE server_id = ? AND day = ? AND user_id = ?').get(h, day, user.id) as
       { fish: string; score: number; stars: number; giant: number } | undefined;
@@ -144,6 +214,85 @@ export function fishing(ctx: FishingContext) {
     }
     return { day, best: better };
   });
+
+  // ---- The weekly derby ----
+  type DerbyRow = { week: string; pond: string; fish: string; settled: number; leadSaid: number };
+  const derbyAt = (h: number, week: string) =>
+    db.prepare('SELECT week, pond, fish, settled, lead_said AS leadSaid FROM fishing_derby WHERE server_id = ? AND week = ?').get(h, week) as DerbyRow | undefined;
+  const entriesOf = (h: number, week: string) => (db.prepare(
+    `SELECT e.user_id AS userId, COALESCE(m.nickname, u.display_name, u.username) AS name, e.size, e.stars, e.caught_at AS caughtAt, e.place
+     FROM fishing_derby_entries e JOIN users u ON u.id = e.user_id LEFT JOIN members m ON m.server_id = e.server_id AND m.user_id = e.user_id
+     WHERE e.server_id = ? AND e.week = ?`,
+  ).all(h, week) as (Entry & { name: string; place: number | null })[]).sort(derbyOrder);
+  const winsOf = (h: number) => new Map((db.prepare('SELECT user_id AS userId, COUNT(*) AS n FROM fishing_derby_entries WHERE server_id = ? AND place = 1 GROUP BY user_id').all(h) as { userId: number; n: number }[]).map((r) => [r.userId, r.n]));
+
+  /** Finish every derby week that's over: everyone who entered gets their place. */
+  const settle = (h: number, week: string) => {
+    const open = db.prepare('SELECT week FROM fishing_derby WHERE server_id = ? AND settled = 0 AND week < ?').all(h, week) as { week: string }[];
+    for (const d of open) {
+      entriesOf(h, d.week).forEach((e, i) => db.prepare('UPDATE fishing_derby_entries SET place = ? WHERE server_id = ? AND week = ? AND user_id = ?').run(i + 1, h, d.week, e.userId));
+      db.prepare('UPDATE fishing_derby SET settled = 1 WHERE server_id = ? AND week = ?').run(h, d.week);
+    }
+  };
+  /** This week's derby, picked the first time anyone asks. */
+  const thisDerby = (h: number, week: string, now: number) => {
+    const have = derbyAt(h, week);
+    if (have) return have;
+    const opened = (db.prepare('SELECT data FROM fishing_saves WHERE server_id = ? AND saved_at >= ?').all(h, now - 14 * 86400000) as { data: string }[])
+      .map((r) => { try { const p = JSON.parse(r.data).ponds; return Array.isArray(p) ? p.filter((x: unknown) => typeof x === 'string') : []; } catch { return []; } });
+    const last = db.prepare('SELECT pond FROM fishing_derby WHERE server_id = ? AND week < ? ORDER BY week DESC LIMIT 1').get(h, week) as { pond: string } | undefined;
+    const pick = pickDerby(ponds, opened, last?.pond ?? null, `${h}:${week}`);
+    if (!pick) return null;
+    db.prepare('INSERT OR IGNORE INTO fishing_derby (server_id, week, pond, fish) VALUES (?, ?, ?, ?)').run(h, week, pick.pond, pick.fish);
+    return derbyAt(h, week)!;
+  };
+
+  route('GET', '/api/servers/:id/fishing/derby', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    const now = clock(), week = derbyWeek(now);
+    settle(h, week);
+    const d = thisDerby(h, week, now), wins = winsOf(h);
+    const rows = d ? entriesOf(h, week) : [];
+    const mine = rows.findIndex((r) => r.userId === user.id);
+    const prev = db.prepare('SELECT week, pond, fish FROM fishing_derby WHERE server_id = ? AND week < ? ORDER BY week DESC LIMIT 1').get(h, week) as { week: string; pond: string; fish: string } | undefined;
+    const row = (r: Entry & { name: string }) => ({ userId: r.userId, name: r.name, size: r.size, stars: r.stars, wins: wins.get(r.userId) ?? 0 });
+    // Where you finished in recent weeks: the game pays each one once and remembers which it paid.
+    const awards = db.prepare(
+      `SELECT e.week, e.place, e.size, d.pond, d.fish FROM fishing_derby_entries e JOIN fishing_derby d ON d.server_id = e.server_id AND d.week = e.week
+       WHERE e.server_id = ? AND e.user_id = ? AND e.place IS NOT NULL AND e.week >= ? ORDER BY e.week`,
+    ).all(h, user.id, addDays(week, -56));
+    return {
+      week, endsAt: easternMidnight(addDays(week, 7)), now,
+      derby: d ? { pond: d.pond, fish: d.fish } : null,
+      rows: rows.slice(0, 10).map(row),
+      me: mine >= 0 ? { place: mine + 1, size: rows[mine].size, stars: rows[mine].stars } : null,
+      last: prev ? { week: prev.week, pond: prev.pond, fish: prev.fish, top: entriesOf(h, prev.week).slice(0, 3).map(row) } : null,
+      awards, wins: wins.get(user.id) ?? 0,
+    };
+  });
+
+  route('POST', '/api/servers/:id/fishing/derby', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    if (!derbyEntries.take(user.id)) throw fail(429, 'Catching too fast');
+    const now = clock(), week = derbyWeek(now);
+    const d = derbyAt(h, week);
+    const { fish, size, score, stars } = checkCatch(body, user.id, h);
+    if (!d || d.fish !== fish) throw fail(400, "That isn't this week's derby fish");
+    if (body.idle === true) throw fail(400, "Idle rods don't count in the derby");
+    const before = entriesOf(h, week);
+    const had = before.find((e) => e.userId === user.id);
+    const entry = { userId: user.id, size, stars, caughtAt: now };
+    if (had && derbyOrder(entry, had) >= 0) return { best: false, place: before.indexOf(had) + 1, lead: false };
+    db.prepare(
+      `INSERT INTO fishing_derby_entries (server_id, week, user_id, size, score, stars, caught_at) VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT (server_id, week, user_id) DO UPDATE SET size = excluded.size, score = excluded.score, stars = excluded.stars, caught_at = excluded.caught_at`,
+    ).run(h, week, user.id, size, score, stars, now);
+    const after = entriesOf(h, week), place = after.findIndex((e) => e.userId === user.id) + 1;
+    // Taking the lead from someone else is worth a line in the fireside chat, at most once an hour per hearth.
+    const tookLead = place === 1 && before.length > 0 && before[0].userId !== user.id && now - d.leadSaid >= 3600000;
+    if (tookLead) db.prepare('UPDATE fishing_derby SET lead_said = ? WHERE server_id = ? AND week = ?').run(now, h, week);
+    return { best: true, place, lead: tookLead };
+  });
 }
 
 // ---- Friends on the dock ----
@@ -158,6 +307,9 @@ export type DockStatus = {
   phase: 'idle' | 'wait' | 'bite';
   bob: [number, number] | null;
   caught: { f: string; s: number; q: number; at: number } | null;
+  /** Their last derby winner, mounted on a plaque, and how many derbies they've won. */
+  trophy: { f: string; s: number } | null;
+  wins: number;
 };
 
 const word = (v: unknown) => (typeof v === 'string' && /^[A-Za-z0-9]{1,24}$/.test(v) ? v : null);
@@ -175,7 +327,11 @@ export function cleanStatus(raw: unknown): DockStatus | null {
   const c = s.caught as Record<string, unknown> | null | undefined;
   const f = c && word(c.f), size = c && Number(c.s), q = c && Number(c.q);
   const caught = f && Number.isFinite(size) && size! > 0 && Number.isInteger(q) && q! >= 1 && q! <= 5 ? { f, s: Math.round(size! * 10) / 10, q: q!, at: Date.now() } : null;
-  return { pond, hat, rod, phase, bob, caught };
+  const t = s.trophy as Record<string, unknown> | null | undefined;
+  const tf = t && word(t.f), ts = t && Number(t.s);
+  const trophy = tf && Number.isFinite(ts) && ts! > 0 ? { f: tf, s: Math.round(ts! * 10) / 10 } : null;
+  const wins = Number.isInteger(s.wins) && (s.wins as number) > 0 ? Math.min(999, s.wins as number) : 0;
+  return { pond, hat, rod, phase, bob, caught, trophy, wins };
 }
 
 export interface DockContext {

@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
-import { writeFile, mkdir, unlink, stat, copyFile, readFile } from 'node:fs/promises';
+import { writeFile, mkdir, unlink, stat, statfs, copyFile, readFile } from 'node:fs/promises';
 import { createReadStream, createWriteStream } from 'node:fs';
 import { createHash, createHmac, randomBytes, randomInt } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
@@ -37,6 +37,10 @@ export interface AppOptions {
   uploadDir?: string;
   /** Largest upload in bytes (default 25 MB). */
   maxUploadBytes?: number;
+  /** How much one person may upload in a day, all files together (default 2 GB). */
+  dailyUploadBytes?: number;
+  /** Uploads stop while the disk has less than this free, so the database always has room (default 2 GB). */
+  minFreeDiskBytes?: number;
   /** KLIPY settings; the GIF picker is turned off without them (or without uploads). */
   gifs?: GifOptions;
   /** Link previews are on unless this is false. */
@@ -772,6 +776,15 @@ export function createApp(opts: AppOptions): Server {
     false,
   );
 
+  /** Somewhere this person has a login from now: their own home or phone, not a stranger's. */
+  const knownAddress = (userId: number | undefined, ip: string) =>
+    userId !== undefined && !!db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND ip = ?').get(userId, ip);
+  /** The tries counted for a login: from this address, and (unless it's one they use) from everywhere. */
+  const loginKeys = (name: string, ip: string, userId?: number) => ({
+    here: `login-user:${name}|${ip}`,
+    anywhere: knownAddress(userId, ip) ? null : `login-user:${name}`,
+  });
+
   route(
     'POST',
     '/api/register',
@@ -807,17 +820,22 @@ export function createApp(opts: AppOptions): Server {
     '/api/login',
     ({ body, ip, ua }) => {
       const name = String(body.username ?? '').toLowerCase();
-      const keys = [`login-user:${name}`, `login-ip:${ip}`];
-      checkTries(keys.slice(0, 1), 10);
-      checkTries(keys.slice(1), 30);
+      checkTries([`login-ip:${ip}`], 30);
       const row = db
         .prepare(`SELECT id, password_hash FROM users WHERE username = ? AND deleted_at IS NULL`)
         .get(String(body.username ?? '')) as { id: number; password_hash: string } | undefined;
+      // Wrong passwords lock a name out only from the address they came from, so a stranger
+      // can't keep someone out of their own account. Many addresses guessing one name together
+      // also stop, but not where that person has logged in before.
+      const keys = loginKeys(name, ip, row?.id);
+      checkTries([keys.here], 10);
+      if (keys.anywhere) checkTries([keys.anywhere], 100);
       if (!row || !verifyPassword(String(body.password ?? ''), row.password_hash)) {
-        failedTry(keys);
+        failedTry([keys.here, `login-ip:${ip}`]);
+        if (keys.anywhere) failedTry([keys.anywhere], 60 * 60 * 1000);
         throw new HttpError(401, 'Wrong username or password');
       }
-      clearTries(keys[0]);
+      clearTries(keys.here);
       return loginOrAskCode(row.id, { ip, ua });
     },
     false,
@@ -1424,7 +1442,8 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/voice/disconnect', ({ user, body }) => {
     const targetId = Number(body.userId);
     const from = channelById(inVoice.get(targetId) ?? -1);
-    if (!from) throw new HttpError(400, "They aren't at a fire");
+    // The same answer whether or not they're at a fire somewhere else, so nobody can use this to find out.
+    if (!from || !isMember(from.serverId, user.id)) throw new HttpError(400, "They aren't at a fire");
     voiceTarget(from.serverId, user, targetId);
     sendTo([targetId], { type: 'voice_kicked', by: user.displayName || user.username });
     audit(from.serverId, user.id, 'voice_disconnect', targetId, `#${from.name}`);
@@ -2066,9 +2085,22 @@ export function createApp(opts: AppOptions): Server {
   const maxUpload = opts.maxUploadBytes ?? 25 * 1024 * 1024;
   // Files uploaded but not sent yet wait a day before they're cleared out; this many at most per person, so nobody can fill the disk.
   const MAX_UNSENT = 3 * MAX_ATTACHMENTS;
+  // Uploads still coming in count as waiting too, so many started at once can't get past the limit.
+  const uploading = new Map<number, number>();
   const checkUnsent = (userId: number) => {
     const n = (db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE uploader_id = ? AND message_id IS NULL').get(userId) as { n: number }).n;
-    if (n >= MAX_UNSENT) throw new HttpError(429, 'You have a lot of files waiting to be sent. Send or remove some first.');
+    if (n + (uploading.get(userId) ?? 0) >= MAX_UNSENT) throw new HttpError(429, 'You have a lot of files waiting to be sent. Send or remove some first.');
+  };
+  // Sent files have no limit of their own, so a day's uploads are capped, and nothing is taken in
+  // while the disk is nearly full: a full disk would stop the database, and Peiskos with it.
+  const DAILY_UPLOAD = opts.dailyUploadBytes ?? 2 * 1024 ** 3;
+  const MIN_FREE_DISK = opts.minFreeDiskBytes ?? 2 * 1024 ** 3;
+  const uploadedToday = (userId: number) =>
+    (db.prepare('SELECT COALESCE(SUM(size), 0) AS n FROM attachments WHERE uploader_id = ? AND created_at > ?').get(userId, now() - 24 * 60 * 60 * 1000) as { n: number }).n;
+  const roomOnDisk = async (bytes: number) => {
+    await mkdir(opts.uploadDir!, { recursive: true });
+    const disk = await statfs(opts.uploadDir!).catch(() => null);
+    if (disk && disk.bavail * disk.bsize - bytes < MIN_FREE_DISK) throw new HttpError(507, 'This server is nearly out of space, so it can\'t take files right now. Tell whoever runs it.');
   };
   const filePath = (id: string) => join(opts.uploadDir!, id);
   const removeFiles = (rows: Json[]) => {
@@ -2099,6 +2131,23 @@ export function createApp(opts: AppOptions): Server {
     const tooBig = () => new HttpError(413, `You can share files up to ${Math.round(limit / 1048576)} MB here`);
     const declared = Number(req.headers['content-length']);
     if (declared > limit) throw tooBig();
+    const today = uploadedToday(user.id);
+    const overDay = () => new HttpError(429, `You've shared ${Math.round(DAILY_UPLOAD / 1048576)} MB of files today, the most for a day. Try again tomorrow.`);
+    if (today + (declared > 0 ? declared : 1) > DAILY_UPLOAD) throw overDay();
+    uploading.set(user.id, (uploading.get(user.id) ?? 0) + 1);
+    try {
+      await roomOnDisk(declared > 0 ? declared : limit);
+      return await receiveUpload(req, res, user, channel, limit, today, tooBig, overDay);
+    } finally {
+      const left = (uploading.get(user.id) ?? 1) - 1;
+      if (left > 0) uploading.set(user.id, left);
+      else uploading.delete(user.id);
+    }
+  };
+  const receiveUpload = async (
+    req: IncomingMessage, res: ServerResponse, user: User, channel: Channel, limit: number, today: number,
+    tooBig: () => HttpError, overDay: () => HttpError,
+  ) => {
     let name = 'file';
     try {
       name = decodeURIComponent(String(req.headers['x-filename'] ?? 'file'));
@@ -2106,16 +2155,15 @@ export function createApp(opts: AppOptions): Server {
     name = name.replace(/[\\/\x00-\x1f]/g, '_').trim().slice(-200) || 'file';
     const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
 
-    await mkdir(opts.uploadDir, { recursive: true });
     const id = randomBytes(16).toString('base64url');
     const out = createWriteStream(filePath(id));
     let size = 0;
     await new Promise<void>((resolve, reject) => {
       req.on('data', (chunk: Buffer) => {
         size += chunk.length;
-        if (size > limit) {
+        if (size > limit || today + size > DAILY_UPLOAD) {
           req.pause();
-          reject(tooBig());
+          reject(size > limit ? tooBig() : overDay());
         } else out.write(chunk);
       });
       req.on('end', () => out.end(resolve));
@@ -2858,13 +2906,25 @@ export function createApp(opts: AppOptions): Server {
     await sendMail(opts.mail, { to, subject, text, html, replyTo });
   };
 
+  /** Tells the address that used to reset this account that it doesn't any more, in case that wasn't them. */
+  const emailRemovedNotice = (user: User, to: string) =>
+    void mailTo(to, 'Your Peiskos email was changed', {
+      username: user.username,
+      intro: 'This address no longer resets the password of your Peiskos account.',
+      note: "If you didn't do this, someone may have your password: ask whoever runs this server for a reset link.",
+    }).catch((err) => console.error('Sending an email-changed notice failed:', err));
+
   route('POST', '/api/me/email', async ({ user, body }) => {
     if (!opts.mail) throw new HttpError(400, "Email isn't set up on this server");
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     if (!looksLikeEmail(email)) throw new HttpError(400, "That doesn't look like an email address");
+    // Whoever has the email can reset the password, so changing it takes the password (and code) too:
+    // a login someone got hold of for a while can't be turned into the account for good.
+    confirmIdentity(user, body);
     checkTries([`email:${user.id}`], 5);
     failedTry([`email:${user.id}`], 60 * 60 * 1000); // every code sent counts, so nobody's inbox is flooded
     const code = String(randomBytes(4).readUInt32BE() % 1_000_000).padStart(6, '0');
+    const before = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(user.id) as { email: string | null; email_verified: number };
     db.prepare('UPDATE users SET email = ?, email_verified = 0, email_code = ?, email_code_expires = ? WHERE id = ?').run(email, code, now() + 30 * 60 * 1000, user.id);
     try {
       await mailTo(email, `Your Peiskos code: ${code}`, {
@@ -2878,6 +2938,7 @@ export function createApp(opts: AppOptions): Server {
       console.error('Sending email failed:', err);
       throw new HttpError(502, "Peiskos couldn't send the email. Check the address, or ask whoever runs this server.");
     }
+    if (before.email && before.email_verified && before.email.toLowerCase() !== email.toLowerCase()) emailRemovedNotice(user, before.email);
     return meJson(user);
   });
   route('POST', '/api/me/email/verify', ({ user, body }) => {
@@ -2891,7 +2952,10 @@ export function createApp(opts: AppOptions): Server {
     db.prepare('UPDATE users SET email_verified = 1, email_code = NULL, email_code_expires = NULL WHERE id = ?').run(user.id);
     return meJson(user);
   });
-  route('DELETE', '/api/me/email', ({ user }) => {
+  route('DELETE', '/api/me/email', ({ user, body }) => {
+    confirmIdentity(user, body);
+    const before = db.prepare('SELECT email, email_verified FROM users WHERE id = ?').get(user.id) as { email: string | null; email_verified: number };
+    if (before.email && before.email_verified) emailRemovedNotice(user, before.email);
     db.prepare('UPDATE users SET email = NULL, email_verified = 0, email_code = NULL, email_code_expires = NULL, reset_code = NULL WHERE id = ?').run(user.id);
     return meJson(user);
   });
@@ -2906,12 +2970,18 @@ export function createApp(opts: AppOptions): Server {
       if (!opts.mail) throw new HttpError(400, "Email isn't set up on this server, so ask whoever runs it to reset your password.");
       const name = String(body.username ?? '').trim();
       checkTries([`forgot-ip:${ip}`], 10);
-      checkTries([`reset-user:${name.toLowerCase()}`], 3);
-      failedTry([`forgot-ip:${ip}`], 60 * 60 * 1000);
-      failedTry([`reset-user:${name.toLowerCase()}`], 60 * 60 * 1000); // every code sent counts, so nobody's inbox is flooded
       const u = db.prepare('SELECT id, username, email, email_verified FROM users WHERE username = ?').get(name) as
         | { id: number; username: string; email: string | null; email_verified: number }
         | undefined;
+      // Every code sent counts, so nobody's inbox is flooded: 3 an hour from one address, and 10 an
+      // hour from all the others together. Where they've logged in before only the first applies,
+      // so strangers asking for their codes can't use up their own asks.
+      const here = `reset-user:${name.toLowerCase()}|${ip}`;
+      const anywhere = knownAddress(u?.id, ip) ? null : `reset-user:${name.toLowerCase()}`;
+      checkTries([here], 3);
+      if (anywhere) checkTries([anywhere], 10);
+      failedTry([`forgot-ip:${ip}`, here], 60 * 60 * 1000);
+      if (anywhere) failedTry([anywhere], 60 * 60 * 1000);
       // The same answer either way, so this can't be used to find out who has an email on file.
       const answer = { ok: true, minutes: RESET_MINUTES };
       if (!u?.email || !u.email_verified) return answer;
@@ -2953,6 +3023,7 @@ export function createApp(opts: AppOptions): Server {
       // Signed out everywhere, as when you change it yourself.
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
       for (const ws of sockets.get(u.id) ?? []) ws.close(4001, 'Password changed');
+      clearTries(`login-user:${name.toLowerCase()}|${ip}`);
       clearTries(`login-user:${name.toLowerCase()}`);
       // With two-step login on, the new password still needs the code from their phone.
       return loginOrAskCode(u.id, { ip, ua });
@@ -4820,6 +4891,7 @@ export function createApp(opts: AppOptions): Server {
     if (typeof body.newPassword !== 'string' || body.newPassword.length < 8) throw new HttpError(400, 'New password must be at least 8 characters');
     db.prepare('UPDATE users SET password_hash = ?, reset_link = NULL, reset_link_expires = NULL WHERE id = ?').run(hashPassword(body.newPassword), u.id);
     signOutOthers(u.id, null, 'Password changed');
+    clearTries(`login-user:${u.username.toLowerCase()}|${ip}`);
     clearTries(`login-user:${u.username.toLowerCase()}`);
     return loginOrAskCode(u.id, { ip, ua });
   }, false);
