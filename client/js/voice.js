@@ -129,7 +129,8 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       .on(LK.RoomEvent.Reconnecting, () => renderVoiceBar('Reconnecting…'))
       .on(LK.RoomEvent.Reconnected, () => renderVoiceBar())
       .on(LK.RoomEvent.Disconnected, (reason) => {
-        if (state.voice !== voice) return;
+        // Never got in: the failed connect below says why, instead of quietly retrying.
+        if (state.voice !== voice || !voice.connected) return;
         // Left, removed, or the room closed: that's final. Anything else (Wi-Fi dropped, the voice
         // server restarted) and you're put back at the same fire once you can be.
         const R = LK.DisconnectReason ?? {};
@@ -148,7 +149,10 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
         renderStage();
       })
       .on(LK.RoomEvent.EncryptionError, (err) => console.warn('Voice encryption:', err?.message ?? err));
+    voice.reaching = true;
     await room.connect(url || state.serverUrl.replace(/^http/, 'ws'), token);
+    voice.reaching = false;
+    voice.connected = true;
     if (state.voice !== voice) return room.disconnect();
     await room.setE2EEEnabled(true);
     startKeyExchange(voice);
@@ -170,8 +174,11 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     // Still offline: keep trying quietly rather than showing an error each time.
     if (rejoin && state.rejoin) return scheduleRejoin(state.rejoin);
     const denied = err?.name === 'NotAllowedError' || /permission/i.test(err?.message ?? '');
-    notice(denied ? 'Peiskos needs microphone access for voice. Allow it in your system settings and try again.'
-                 : `Couldn't join voice: ${err?.message || err}`);
+    if (denied) return notice('Peiskos needs microphone access for voice. Allow it in your system settings and try again.');
+    // The voice server itself didn't answer: down, or blocked by this network.
+    const unreachable = voice.reaching;
+    toast(unreachable ? "Couldn't reach the voice server. It may be down, or this network may be blocking it." : `Couldn't join voice: ${err?.message || err}`,
+      { kind: 'error', timeout: 15000, action: 'Try again', onAction: () => joinVoice(channelId, { muted, deafened }) });
   }
 }
 

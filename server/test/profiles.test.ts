@@ -319,8 +319,10 @@ test('deleting your account', async () => {
   assert.ok(!summary.members.some((m: any) => m.id === lee.user.id));
   assert.equal((await call(`/api/channels/${dm.channels[0].id}/messages`, { body: { content: 'hello?' }, token: mo.token })).status, 403);
   assert.equal((await call('/api/friends', { token: mo.token })).data.incoming.length, 0);
-  // The username is free again.
-  assert.equal((await call('/api/register', { body: { username: 'lee', password: 'password1' } })).status, 200);
+  // The username is held for 30 days, so nobody new can pose as the person who left.
+  const again = await call('/api/register', { body: { username: 'lee', password: 'password1' } });
+  assert.equal(again.status, 409);
+  assert.equal(again.data.error, 'That username is taken');
 
   // Choosing to take your messages with you.
   const ned = await register('ned');

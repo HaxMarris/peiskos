@@ -804,7 +804,7 @@ function openScheduledList() {
 
 // ---------------------------------------------------------------- formatting
 //
-// Markdown-ish: **bold**, *italic*, __underline__, ~~strikethrough~~, ||spoilers||, `code`, ```code blocks```
+// Markdown-ish: **bold**, *italic* or _italic_, __underline__, ~~strikethrough~~, ||spoilers||, `code`, ```code blocks```
 // (coloured when they name a language), # headings, > quotes, - and 1. lists, links, @mentions and :custom: emoji.
 
 const LONG_PASTE = 2000; // pasting more than this many characters attaches it as a file
@@ -851,6 +851,8 @@ function formatContent(text) {
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
     .replace(/__(.+?)__/g, '<u>$1</u>')
     .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+    // _italic_ too, but not the underscores inside snake_case or a @user_name.
+    .replace(/(^|[^\w])_(?=[^\s_])([^_\n]*[^\s_])_(?!\w)/g, '$1<i>$2</i>')
     .replace(/~~(.+?)~~/g, '<s>$1</s>')
     .replace(/\|\|(.+?)\|\|/g, '<span class="spoiler" tabindex="0" title="Spoiler: click to show">$1</span>')
     .replace(/(^|\s)@([\w.-]*[\w-])/g, '$1<span class="mention">@$2</span>'); // a full stop after it ends the sentence

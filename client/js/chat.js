@@ -219,12 +219,16 @@ function startEdit(m, contentEl, value = emojiToNames(m.content), focus = true) 
   ta.className = 'edit';
   ta.value = value;
   editing = { id: m.id, ta };
-  ta.rows = Math.min(10, m.content.split('\n').length);
+  // Grows with what's in it (a long message wraps onto many lines), up to half the window.
+  const fit = () => { ta.style.height = 'auto'; ta.style.height = `${Math.min(ta.scrollHeight + 4, Math.max(120, innerHeight * 0.5))}px`; };
+  ta.rows = 1;
+  ta.addEventListener('input', fit);
   const hint = document.createElement('div');
   hint.className = 'small muted';
   hint.textContent = 'Enter to save · Esc to cancel';
   contentEl.replaceWith(ta);
   ta.after(hint);
+  fit();
   if (focus) ta.focus();
   const done = () => {
     editing = null;

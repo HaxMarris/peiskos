@@ -764,6 +764,7 @@ function handleEvent(ev) {
         break;
       }
       const isNew = !state.servers.has(ev.server.id);
+      const before = state.servers.get(ev.server.id);
       state.servers.set(ev.server.id, ev.server);
       if (isNew) state.serverOrder.push(ev.server.id);
       renderServers();
@@ -773,14 +774,25 @@ function handleEvent(ev) {
         && [...state.voice.crypto.pubs.keys()].some((id) => !ev.server.members.some((m) => String(m.id) === id))) keysChanged(state.voice);
       if (ev.server.id === state.serverId) {
         // The room we're in was deleted or made private without us.
-        if (!state.inDms && !ev.server.channels.some((c) => c.id === state.channelId) && !ev.server.threads?.some((t) => t.id === state.channelId))
+        if (!state.inDms && !ev.server.channels.some((c) => c.id === state.channelId) && !ev.server.threads?.some((t) => t.id === state.channelId)) {
+          // Say so, and keep what was being typed there, rather than dropping it without a word.
+          const room = before?.channels.find((c) => c.id === state.channelId) ?? before?.threads?.find((t) => t.id === state.channelId);
+          const draft = $('#composer-input').value.trim();
+          if (room) toast(`#${room.name} was deleted, or you can no longer see it.${draft ? ' Your unsent message is kept for copying.' : ''}`,
+            draft ? { timeout: 30000, action: 'Copy it', onAction: () => navigator.clipboard?.writeText(draft).catch(() => {}) } : { timeout: 8000 });
           selectServer(ev.server.id);
+        }
         else { renderChannels(); renderMembers(); renderMessages(); renderChatHeader(); }
       }
       break;
     }
-    case 'server_deleted':
-      // Deleted, or we were removed from it.
+    case 'server_deleted': {
+      // Deleted, or we were removed from it. Someone else doing it says so; your own leaving doesn't.
+      const gone = state.servers.get(ev.serverId);
+      if (gone && !isDm(gone) && gone.ownerId !== state.me.id && ev.reason) {
+        const name = gone.name;
+        toast(ev.reason === 'deleted' ? `${name} was deleted by its host.` : ev.reason === 'banned' ? `You were banned from ${name}.` : `You were removed from ${name}.`, { timeout: 12000 });
+      }
       state.servers.delete(ev.serverId);
       state.favorites = state.favorites.filter((id) => id !== ev.serverId);
       state.serverOrder = state.serverOrder.filter((id) => id !== ev.serverId);
@@ -789,6 +801,7 @@ function handleEvent(ev) {
       if (state.serverId === ev.serverId) state.inDms ? openDms() : selectServer(state.serverOrder[0] ?? null);
       else { renderServers(); if (state.inDms) renderChannels(); }
       break;
+    }
     case 'presence':
       for (const s of state.servers.values())
         for (const mem of s.members) if (mem.id === ev.userId) Object.assign(mem, { online: ev.online, status: ev.status, custom: ev.custom, activity: ev.activity });
