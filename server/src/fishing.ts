@@ -20,7 +20,7 @@ export const MAX_SAVE_BYTES = 256 * 1024;
 export const BOARD_TIME_ZONE = 'America/New_York';
 export const boardDay = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: BOARD_TIME_ZONE }).format(t);
 
-type Species = { name: string; min: number; max: number; base: number; rarity: number };
+type Species = { name: string; min: number; max: number; base: number; rarity: number; pond: string };
 /** The fish, read from the game itself so the two never drift apart: F('id', 'Name', min, max, base, rarity, ...). */
 /** What a catch is worth on the leaderboard: the fish's own value, without anyone's upgrades or bonuses. */
 export const boardWorth = (sp: Species, score: number, stars: number, giant: boolean, starMul: number[]) =>
@@ -38,8 +38,11 @@ export function loadSpecies(file = new URL('../../client/games/fishing/game.js',
   const species = new Map<string, Species>();
   let src = '';
   try { src = readFileSync(file, 'utf8'); } catch { return species; }
-  for (const m of src.matchAll(/\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
-    species.set(m[1], { name: m[2], min: Number(m[3]), max: Number(m[4]), base: Number(m[5]), rarity: Number(m[6]) });
+  // Each water ({ id: 'mill', name: ..., cost: ...) lists its fish after it, so a fish belongs to the water before it.
+  let pond = '';
+  for (const m of src.matchAll(/\{ id: '([a-z0-9]+)', name: '[^']*', cost:|\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
+    if (m[1]) pond = m[1];
+    else species.set(m[2], { name: m[3], min: Number(m[4]), max: Number(m[5]), base: Number(m[6]), rarity: Number(m[7]), pond });
   }
   return species;
 }
@@ -62,6 +65,7 @@ export function fishing(ctx: FishingContext) {
   const catches = allowance(20, 1); // only a catch that beats your best of the day is sent
   const species = loadSpecies();
   const starMul = loadStarMul();
+  const firstPond = species.values().next().value?.pond ?? '';
   const worthOf = (r: { fish: string; score: number; stars: number; giant: number }) => {
     const sp = species.get(r.fish);
     return sp ? boardWorth(sp, r.score, r.stars, !!r.giant, starMul) : 0;
@@ -115,6 +119,11 @@ export function fishing(ctx: FishingContext) {
     const sp = species.get(fish);
     const size = Number(body.s), score = Number(body.t), stars = Number(body.q);
     if (!sp) throw fail(400, 'No such fish');
+    // Only from a water this angler has reached (the game saves an unlock before anyone can cast there).
+    const saved = current(user.id, h);
+    const ponds = saved ? (JSON.parse(saved.data) as { ponds?: unknown }).ponds : null;
+    const reached = Array.isArray(ponds) ? ponds : [firstPond];
+    if (!reached.includes(sp.pond)) throw fail(400, "You haven't reached that water yet");
     if (!Number.isInteger(score) || score < 0 || score > 100 || !Number.isInteger(stars) || stars < 1 || stars > 5) throw fail(400, "That catch doesn't add up");
     // The game rounds the size to a tenth and the score to a whole number, so allow for both.
     const expected = sp.min + (score / 100) * (sp.max - sp.min);

@@ -712,12 +712,12 @@ function handleEvent(ev) {
         if (mine) { state.holdUnread = null; state.newFrom = null; state.unreadAtOpen = null; updateUnreadBar(); }
         markReadSoon();
       }
-      if (m.channelId !== state.channelId || where?.thread) {
+      if (!readingNow(m.channelId) || where?.thread) {
         renderServers();
         renderChannels();
       }
       if (mine) startSlowWait(m.channelId);
-      if (!mine && !isBlocked(m.authorId) && (document.hidden || m.channelId !== state.channelId) && !quietFor(m) && !hushed()) {
+      if (!mine && !isBlocked(m.authorId) && (document.hidden || !readingNow(m.channelId)) && !quietFor(m) && !hushed()) {
         notify(m);
         playSound('message');
       }

@@ -155,3 +155,8 @@ for (const b of document.querySelectorAll('.game-pop-btn')) {
   b.onclick = () => (gamePop?.kind === b.dataset.pop ? putGameBack() : popOutGame(b.dataset.pop));
 }
 renderGamePopButtons();
+
+// The game in the pop-out is run from this page, so when the page goes (reloaded, closed, or the
+// tab navigated away) the window would be left showing a game that's stopped. The desktop app
+// closes it itself; a browser leaves it open, so it's closed here.
+window.addEventListener('pagehide', () => { if (gamePop && !gamePop.win.closed) gamePop.win.close(); });
