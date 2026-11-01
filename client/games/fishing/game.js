@@ -486,8 +486,11 @@ const slotInterval = sl => { const fl = idleFloor(sl.pond); return Math.max(fl, 
 const slotLvlCost = (sl, i) => Math.max(Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8)),
   roundPrice(wormValueAt(Math.max(...S.ponds.map(pondIdx))) * 2 * Math.pow(1.6, sl.lvl - 1) * (1 + i * .5)));
 const pondDone = pid => pondOf(pid).fish.every(f => S.coll[f.id]);
-const pondBonus = pid => pondDone(pid) ? 1.05 : 1;
 const pondStarsDone = pid => pondOf(pid).fish.filter(f => (S.coll[f.id] || {}).bestQ === 5).length;
+const pondStarred = pid => pondStarsDone(pid) === pondOf(pid).fish.length;
+// +5% for catching every species in a water, and another +5% once each one has a 5-star catch.
+const pondBonus = pid => 1 + (pondDone(pid) ? .05 : 0) + (pondStarred(pid) ? .05 : 0);
+const bonusTag = pid => pondBonus(pid) > 1 ? `+${Math.round((pondBonus(pid) - 1) * 100)}%` : '';
 const hatsUnlocked = () => S.stats.chests > 0 || S.hats.length > 1;
 // Idle rods: harder fish and harder waters get away more often.
 const LAND_BY_RARITY = [.9, .8, .65, .5, .35];
@@ -631,7 +634,7 @@ function checkAreaHat(pid) {
   if (!h || S.hats.includes(h.id) || pondStarsDone(pid) < pondOf(pid).fish.length) return;
   S.hats.push(h.id); S.hatsNew = true;
   addRecent({ chest: true, hat: h.id, area: true });
-  post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}.`, true);
+  post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}. Fish from there now sell for 10% more.`, true);
 }
 const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000, 25000, 60000, 150000, 400000, 1000000];
 function openChest() {
@@ -1491,7 +1494,7 @@ function renderTop() {
   const b = BAIT[S.baitOn];
   $('baitChip').textContent = b.id === 'worms' ? b.name : `${b.name} ×${S.bait[b.id] || 0}`;
   const p = pondOf(S.pond);
-  $('pondtag').innerHTML = `<b>${p.name}</b>${pondDone(p.id) ? '<span>+5%</span>' : ''}<span class="mapword">Map</span>`;
+  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}<span class="mapword">Map</span>`;
   $('pondtag').setAttribute('aria-label', `${p.name}. Open the map`);
   document.querySelectorAll('#tabs button').forEach(bt => {
     bt.setAttribute('aria-selected', bt.dataset.tab === S.tab);
@@ -1566,17 +1569,17 @@ function renderPane() {
     h += `<h2>Hats <small>${S.hats.length}/${HATS.length}</small></h2><p class="note">Hats come from treasure chests. When you hook a fish by hand there's a ${parseFloat((chestChance() * 100).toFixed(2))}% chance it's a chest instead, with gold inside too (more at later waters). Later waters hold rarer hats. Each water also has its own hat for catching every fish there at 5 stars.</p><div class="hat-grid">`;
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
-      if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars.</p><div class="hat-grid">`;
+      if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars. Fish from there also sell for another 5% more.</p><div class="hat-grid">`;
       h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
     });
     h += `</div>`;
   } else if (S.tab === 'board') {
     h += boardHtml();
   } else if (S.tab === 'coll') {
-    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more.</p>`;
+    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more.</p>`;
     PONDS.forEach(p => {
       const got = p.fish.filter(f => S.coll[f.id]).length;
-      h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${got === p.fish.length ? ' · +5% coins' : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
+      h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${bonusTag(p.id) ? ` · ${bonusTag(p.id)} coins` : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
       p.fish.forEach(f => {
         const e = S.coll[f.id];
         if (e) h += `<div class="fishcard"><canvas data-fish="${f.id}"></canvas><div class="name">${f.name}</div>${rarHtml(f.r)}<div class="meta">${f.min}–${f.max} cm · caught ${e.n}<br>Biggest ${cm(e.best)}<br>Best ${starsHtml(e.bestQ || 1)}</div></div>`;
