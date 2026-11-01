@@ -1044,7 +1044,8 @@ function openEmojiPicker(anchor, m) {
   picker.className = 'emoji-picker';
   for (const e of EMOJI_CHOICES) {
     const b = document.createElement('button');
-    b.textContent = e;
+    b.innerHTML = emojiHtml(e);
+    b.title = e;
     b.onclick = () => { closeEmojiPicker(); toggleReaction(m, e); rememberEmoji(e); };
     picker.append(b);
   }

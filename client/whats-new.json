@@ -4,6 +4,7 @@
     {
       "id": 1,
       "items": [
+        "Emoji look the same for everyone now, on every device: Peiskos draws them with Google's Noto emoji instead of your device's own. Flags show on Windows too. While you type, the message box still uses your device's emoji.",
         "Pop out the game you're playing into its own window, from the button next to Back to the fire: the casino, Fireside Angler, Stockpile or Melon Bomber (between rounds). In the desktop app the pin keeps it on top.",
         "Confirmations and errors are Peiskos's own now, instead of your browser's pop-ups. Deleting a hearth asks you to type its name.",
         "A hearth's settings, Your account and Server admin are one page each, with sections down the side. On phones, a hearth's settings start as a list.",
