@@ -481,7 +481,10 @@ const pondStep = pid => { const i = pondIdx(pid); return i <= 4 ? i : 4 + (i - 4
 // A new holder starts at 10/3 of that floor (10 min at Millpond, 30 min at Aurora Deep, 40 at Ember Springs).
 const idleFloor = pid => IDLE_FLOOR + pondStep(pid) * 90000;
 const slotInterval = sl => { const fl = idleFloor(sl.pond); return Math.max(fl, fl * 10 / 3 * Math.pow(.85, sl.lvl - 1) * reelF()); };
-const slotLvlCost = (sl, i) => Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8));
+// Levels scale with your furthest water like bait does: fully levelling the first holder costs
+// about 15 minutes of hand fishing there. Early on the flat 120 x 2^level floor applies.
+const slotLvlCost = (sl, i) => Math.max(Math.round(120 * Math.pow(2, sl.lvl - 1) * (1 + i * .8)),
+  roundPrice(wormValueAt(Math.max(...S.ponds.map(pondIdx))) * 2 * Math.pow(1.6, sl.lvl - 1) * (1 + i * .5)));
 const pondDone = pid => pondOf(pid).fish.every(f => S.coll[f.id]);
 const pondBonus = pid => pondDone(pid) ? 1.05 : 1;
 const pondStarsDone = pid => pondOf(pid).fish.filter(f => (S.coll[f.id] || {}).bestQ === 5).length;
@@ -554,11 +557,9 @@ function wormCatchValue(i) {
 }
 const roundPrice = x => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 1)); return Math.round(x / p) * p; };
 const wormValues = [];
+const wormValueAt = i => wormValues[i] ??= wormCatchValue(i);
 /** A pack's price once water i is the furthest you've opened. */
-function baitPriceAt(b, i) {
-  if (wormValues[i] === undefined) wormValues[i] = wormCatchValue(i);
-  return Math.max(b.cost, roundPrice(wormValues[i] * b.gain * b.pack / BAIT_PAYBACK));
-}
+const baitPriceAt = (b, i) => Math.max(b.cost, roundPrice(wormValueAt(i) * b.gain * b.pack / BAIT_PAYBACK));
 const baitCost = b => b.cost ? baitPriceAt(b, Math.max(...S.ponds.map(pondIdx))) : 0;
 const baitShown = b => !b.from || S.ponds.includes(b.from);
 
