@@ -46,6 +46,8 @@ export interface HostingContext {
 export type SignupMode = 'open' | 'code' | 'links';
 const SIGNUP_LINK_DAYS = [1, 7, 30];
 const MAX_ERRORS = 200;
+/** Of those, how many may come from people who weren't logged in. */
+const MAX_ANON_ERRORS = 50;
 const UPDATER_FRESH_MS = 3 * 60_000; // the updater says it's there at least this often
 
 export function hosting(ctx: HostingContext) {
@@ -275,9 +277,12 @@ export function hosting(ctx: HostingContext) {
   const recentReports = new Map<string, { count: number; until: number }>();
   route('POST', '/api/errors', ({ body, ip, user }) => {
     const t = now();
-    const r = recentReports.get(ip);
-    if (r && r.until > t && r.count >= 20) return { ok: true }; // plenty from this address for now
-    if (!r || r.until <= t) recentReports.set(ip, { count: 1, until: t + 3600_000 });
+    // Crashes on the login screen come from people not logged in yet, but so would made-up ones, so
+    // those get a smaller allowance and only a corner of the list: they can't push out real reports.
+    const key = user ? ip : `anon:${ip}`;
+    const r = recentReports.get(key);
+    if (r && r.until > t && r.count >= (user ? 20 : 5)) return { ok: true }; // plenty from this address for now
+    if (!r || r.until <= t) recentReports.set(key, { count: 1, until: t + 3600_000 });
     else r.count++;
     if (recentReports.size > 5000) for (const [k, v] of recentReports) if (v.until <= t) recentReports.delete(k);
     const message = String(body.message ?? '').slice(0, 500);
@@ -289,6 +294,7 @@ export function hosting(ctx: HostingContext) {
     db.prepare(`INSERT INTO client_errors (hash, message, stack, where_at, app, user_id, first_at, last_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(hash) DO UPDATE SET count = count + 1, last_at = excluded.last_at, app = excluded.app, where_at = excluded.where_at`)
       .run(hash, message, stack, where, app, user?.id ?? null, t, t);
+    db.prepare(`DELETE FROM client_errors WHERE user_id IS NULL AND id NOT IN (SELECT id FROM client_errors WHERE user_id IS NULL ORDER BY last_at DESC LIMIT ${MAX_ANON_ERRORS})`).run();
     db.prepare(`DELETE FROM client_errors WHERE id NOT IN (SELECT id FROM client_errors ORDER BY last_at DESC LIMIT ${MAX_ERRORS})`).run();
     return { ok: true };
   }, false);

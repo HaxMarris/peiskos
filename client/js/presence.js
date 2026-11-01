@@ -291,15 +291,23 @@ function notificationSettings() {
     <span class="small muted">The desktop app spots games you run and shows "Playing …" under your name.</span>` : ''}`;
 }
 
-function emailSettings() {
+function emailSettings(asking = null) {
   const me = state.me;
+  // Adding, changing or removing the email takes your password (and code), since whoever controls
+  // the email can reset the password.
+  const confirm = asking ? `<form class="email-confirm" id="email-confirm">
+      <span class="small muted">${asking === 'remove' ? 'To remove your email' : 'To send the code'}, confirm it's you.</span>
+      ${confirmFields('email')}
+      <div class="modal-row"><button type="button" class="btn secondary" id="email-cancel">Cancel</button><button type="submit" class="btn ${asking === 'remove' ? 'danger' : ''}">${asking === 'remove' ? 'Remove my email' : 'Send code'}</button></div>
+    </form>` : '';
   return `<div class="email-settings" id="email-settings">
     <label>Your email, for resetting a forgotten password
-      <div class="inline-form"><input type="email" id="email-address" placeholder="you@example.com" autocomplete="email" value="${escapeHtml(me.email ?? '')}" />
-      <button type="button" class="btn secondary" id="email-send">${me.email ? (me.emailVerified ? 'Change' : 'Send code again') : 'Send code'}</button></div>
+      <div class="inline-form"><input type="email" id="email-address" placeholder="you@example.com" autocomplete="email" value="${escapeHtml(asking === 'send' ? $('#email-address')?.value ?? me.email ?? '' : me.email ?? '')}" ${asking ? 'readonly' : ''} />
+      ${asking ? '' : `<button type="button" class="btn secondary" id="email-send">${me.email ? (me.emailVerified ? 'Change' : 'Send code again') : 'Send code'}</button>`}</div>
     </label>
-    ${me.email && !me.emailVerified ? `<label>Code from the email<div class="inline-form"><input id="email-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" /><button type="button" class="btn" id="email-verify">Confirm</button></div></label>` : ''}
-    ${me.email && me.emailVerified ? `<span class="small muted">Confirmed. If you forget your password, "Forgot your password?" on the login screen emails a code here.</span>
+    ${confirm}
+    ${!asking && me.email && !me.emailVerified ? `<label>Code from the email<div class="inline-form"><input id="email-code" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="123456" /><button type="button" class="btn" id="email-verify">Confirm</button></div></label>` : ''}
+    ${!asking && me.email && me.emailVerified ? `<span class="small muted">Confirmed. If you forget your password, "Forgot your password?" on the login screen emails a code here.</span>
       <button type="button" class="link-btn danger-link" id="email-remove">Remove my email</button>` : ''}
     <div class="error" id="email-error"></div>
   </div>`;
@@ -317,21 +325,37 @@ function nudgeForEmail() {
 function wireEmailSettings() {
   const box = $('#email-settings');
   if (!box) return;
-  const redraw = (me) => { Object.assign(state.me, me); box.outerHTML = emailSettings(); wireEmailSettings(); };
+  const redraw = (me, asking = null) => { if (me) Object.assign(state.me, me); $('#email-settings').outerHTML = emailSettings(asking); wireEmailSettings(); };
   const fail = (err) => ($('#email-error').textContent = err.message);
-  $('#email-send').onclick = async () => {
-    $('#email-send').disabled = true;
-    try { redraw(await api('/api/me/email', { method: 'POST', body: { email: $('#email-address').value } })); toast('Code sent. Check your email.'); }
-    catch (err) { fail(err); $('#email-send').disabled = false; }
+  const form = $('#email-confirm');
+  if (form) {
+    const removing = !!$('#email-confirm .danger');
+    $('#email-password')?.focus();
+    $('#email-cancel').onclick = () => redraw(null);
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      button.disabled = true;
+      try {
+        if (removing) redraw(await api('/api/me/email', { method: 'DELETE', body: confirmValues('email') }));
+        else {
+          redraw(await api('/api/me/email', { method: 'POST', body: { email: $('#email-address').value, ...confirmValues('email') } }));
+          toast('Code sent. Check your email.');
+        }
+      } catch (err) { fail(err); button.disabled = false; }
+    };
+    return;
+  }
+  $('#email-send').onclick = () => {
+    if (!$('#email-address').value.trim()) return fail(new Error('Enter your email first'));
+    redraw(null, 'send');
   };
   $('#email-verify')?.addEventListener('click', async () => {
     try { redraw(await api('/api/me/email/verify', { method: 'POST', body: { code: $('#email-code').value } })); toast('Email confirmed.'); }
     catch (err) { fail(err); }
   });
   $('#email-code')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('#email-verify').click(); } });
-  $('#email-remove')?.addEventListener('click', async () => {
-    try { redraw(await api('/api/me/email', { method: 'DELETE' })); } catch (err) { fail(err); }
-  });
+  $('#email-remove')?.addEventListener('click', () => redraw(null, 'remove'));
 }
 
 function wireNotificationSettings() {

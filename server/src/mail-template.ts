@@ -7,8 +7,9 @@ export type CodeEmail = {
   username: string;
   /** One line above the code, like "Here's your code to reset your Peiskos password." */
   intro: string;
-  code: string;
-  minutes: number;
+  /** The code and how long it works; a notice without one leaves the code box out. */
+  code?: string;
+  minutes?: number;
   /** A line under the code, like "If it wasn't you, ignore this email." */
   note: string;
   /** Where Peiskos is, for the logo and the "Open Peiskos" button. */
@@ -33,10 +34,7 @@ export function codeEmail(m: CodeEmail): { text: string; html: string } {
     `Hi ${m.username},`,
     '',
     m.intro,
-    '',
-    `    ${m.code}`,
-    '',
-    `It works for ${m.minutes} minutes.`,
+    ...(m.code ? ['', `    ${m.code}`, '', `It works for ${m.minutes} minutes.`] : []),
     ...(base ? ['', `Open Peiskos: ${base}`] : []),
     '',
     m.note,
@@ -62,7 +60,7 @@ export function codeEmail(m: CodeEmail): { text: string; html: string } {
   const html = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light only"><title>Peiskos</title></head>
 <body style="margin:0;padding:0;background:${OAT}">
-<div style="display:none;max-height:0;overflow:hidden">Your code is ${esc(m.code)}. It works for ${m.minutes} minutes.</div>
+<div style="display:none;max-height:0;overflow:hidden">${m.code ? `Your code is ${esc(m.code)}. It works for ${m.minutes} minutes.` : esc(m.intro)}</div>
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${OAT}">
   <tr><td align="center" style="padding:32px 16px">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px">
@@ -77,10 +75,10 @@ export function codeEmail(m: CodeEmail): { text: string; html: string } {
           <tr><td style="padding:28px 32px 4px;font-family:${font};font-size:16px;line-height:1.5;color:${CHAR}">
             Hi ${esc(m.username)},<br><br>${esc(m.intro)}
           </td></tr>
-          <tr><td align="center" style="padding:20px 32px">
+          ${m.code ? `<tr><td align="center" style="padding:20px 32px">
             <div style="display:inline-block;background:${OAT};border:1px solid ${LINE};border-radius:12px;padding:14px 24px;font-family:'SFMono-Regular',Consolas,Menlo,monospace;font-size:32px;font-weight:700;letter-spacing:8px;color:${CHAR}">${esc(m.code)}</div>
             <div style="padding-top:10px;font-family:${font};font-size:13px;color:${MUTED}">It works for ${m.minutes} minutes.</div>
-          </td></tr>
+          </td></tr>` : '<tr><td style="padding:12px"></td></tr>'}
           ${button}
           <tr><td style="padding:0 32px 28px;font-family:${font};font-size:14px;line-height:1.5;color:${MUTED}">${esc(m.note)}</td></tr>
         </table>
