@@ -453,7 +453,8 @@ const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;'
 function fmt(n) {
   n = Math.floor(n);
   if (n < 10000) return n.toLocaleString('en-US');
-  for (const [v, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) return (n / v).toFixed(n / v < 100 ? 1 : 0).replace(/\.0$/, '') + s;
+  // Round down, so a balance never shows as more than it is (7.46M reads 7.4M, not 7.5M).
+  for (const [v, s] of [[1e12, 'T'], [1e9, 'B'], [1e6, 'M'], [1e3, 'k']]) if (n >= v) { const d = n / v < 100 ? 10 : 1; return String(Math.floor(n * d / v) / d) + s; }
   return String(n);
 }
 const cm = s => (s < 20 ? s.toFixed(1) : Math.round(s)) + ' cm';
@@ -1621,7 +1622,7 @@ function awaySummary(ms, r) {
 }
 function unlockModal(id) {
   const p = pondOf(id);
-  modal(`Unlock ${p.name}?`, `<p style="margin:0">${p.blurb} ${p.fish.length} species live here.</p><div class="lines"><div><span>Cost</span><b>${fmt(p.cost)} coins</b></div><div><span>You have</span><b>${fmt(S.coins)}</b></div></div>`,
+  modal(`Unlock ${p.name}?`, `<p style="margin:0">${p.blurb} ${p.fish.length} species live here.</p><div class="lines"><div><span>Cost</span><b>${fmt(p.cost)} coins</b></div><div><span>You have</span><b>${fmt(S.coins)}</b></div>${S.coins < p.cost ? `<div><span>Still need</span><b>${fmt(Math.ceil(p.cost - S.coins))}</b></div>` : ''}</div>`,
     `<button class="buy ghost" data-act="close">Not yet</button><button class="buy" data-act="unlock" data-id="${id}" ${S.coins < p.cost ? 'disabled' : ''}>${S.coins < p.cost ? 'Not enough coins' : 'Unlock and walk there'}</button>`);
 }
 
