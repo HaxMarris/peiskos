@@ -109,6 +109,25 @@ window.addEventListener('message', async (e) => {
       board = { error: err.message };
     }
     play.frame.contentWindow?.postMessage({ kind: 'board', board }, '*');
+  } else if (m.kind === 'derby') {
+    // This week's derby in the hearth, its standings, and where you finished in weeks since.
+    let derby;
+    try {
+      const r = await api(`${fishingApi(play.hearthId)}/derby`);
+      const mark = (row) => ({ ...row, me: row.userId === state.me?.id });
+      derby = { ...r, rows: r.rows.map(mark), last: r.last && { ...r.last, top: r.last.top.map(mark) } };
+    } catch (err) {
+      derby = { error: err.message };
+    }
+    play.frame.contentWindow?.postMessage({ kind: 'derby', derby }, '*');
+  } else if (m.kind === 'derbyEntry' && m.c && typeof m.c === 'object') {
+    let r;
+    try {
+      r = await api(`${fishingApi(play.hearthId)}/derby`, { method: 'POST', body: m.c });
+    } catch (err) {
+      r = { error: err.message };
+    }
+    play.frame.contentWindow?.postMessage({ kind: 'derbyEntry', r }, '*');
   } else if (m.kind === 'brag' && typeof m.text === 'string' && play === fishing.play) {
     // Said as you, in the fireside chat at the fire you're at.
     if (state.voice && state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fireside_send', content: m.text.slice(0, 1000) }));

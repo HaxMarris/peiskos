@@ -230,6 +230,13 @@ header.top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 /* Today's best */
 .board { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .board li { display: grid; grid-template-columns: 26px 64px 1fr auto; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.board.derbyboard li { grid-template-columns: 26px 1fr auto; }
+.derby-head { display: grid; grid-template-columns: 110px 1fr; gap: 12px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.derby-head canvas { width: 110px; height: 56px; }
+.derby-head > div { display: flex; flex-direction: column; gap: 3px; font-size: .86rem; color: var(--muted); }
+.derby-head > div > b { color: var(--strong); font-family: var(--font-head); font-size: 1.05rem; }
+.derby-head .warn { color: var(--accent-text); font-weight: 700; }
+.node .flag { color: #b8352b; margin-right: 4px; }
 .board li.me { border-color: var(--accent); background: var(--accent-soft); }
 .board .rank { font-family: var(--font-head); font-size: 18px; text-align: center; color: var(--muted); }
 .board li:first-child .rank { color: var(--accent-text); }
