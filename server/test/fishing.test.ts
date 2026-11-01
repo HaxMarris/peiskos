@@ -77,7 +77,11 @@ test('the fishing save is per person per hearth, and an older device cannot over
 test('the game\'s fish are all read from its file', () => {
   const species = loadSpecies();
   assert.equal(species.size, 264);
-  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5 });
+  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5, pond: 'aurora' });
+  assert.equal(species.get('roach')?.pond, 'mill');
+  // A timed legendary belongs to the water it's listed with.
+  assert.equal(species.get('morningcarp')?.pond, 'mill');
+  assert.equal(species.get('witchingkoi')?.pond, 'springs');
 });
 
 test("today's best keeps each person's most valuable catch", async () => {
@@ -96,7 +100,11 @@ test("today's best keeps each person's most valuable catch", async () => {
   assert.equal((await send(b.token, { f: 'roach', s: 22.5, t: 50, q: 1 })).data.best, false);
   // A giant 5-star roach is worth more, even though nothing else changed.
   assert.equal((await send(b.token, { f: 'roach', s: 35, t: 100, q: 5, g: true })).data.best, true);
-  // An Ember Leviathan is worth far more than any roach.
+  // An Ember Leviathan is worth far more than any roach, but only once its water is reached.
+  assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3 })).status, 400);
+  await call(path, { token: a.token, body: { save: { v: 2, ponds: ['mill', 'birch'] }, rev: 0 } });
+  assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3 })).status, 400);
+  await call(path, { token: a.token, body: { save: { v: 2, ponds: ['mill', 'birch', 'aurora'] }, rev: 1 } });
   assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3, idle: true })).data.best, true);
   assert.equal((await send(a.token, { f: 'leviathan', s: 360, t: 10, q: 1 })).data.best, false);
 

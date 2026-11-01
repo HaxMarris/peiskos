@@ -205,6 +205,7 @@ export function openDb(file: string): Db {
   addFishing(db);
   addSafetyReports(db);
   addPushLogins(db);
+  clearDeletedRoomJobs(db);
   hashSessionTokens(db);
   return db;
 }
@@ -924,6 +925,19 @@ function moveCasinoToHearths(db: Db, cols: (table: string) => string[]) {
  * Devices set up before this have no login on record, so they're dropped once: the app and the
  * web page sign their device up again each time they open while logged in, now with their login.
  */
+/**
+ * A deleted room used to stay the welcome room, AFK fire or someone's pinned fire, and because room
+ * ids are used again, the next room made took that job over. Rooms are now cleared from those when
+ * deleted; this tidies up ones deleted before that.
+ */
+function clearDeletedRoomJobs(db: Db) {
+  db.exec(`
+    UPDATE servers SET welcome_channel_id = NULL WHERE welcome_channel_id IS NOT NULL AND welcome_channel_id NOT IN (SELECT id FROM channels);
+    UPDATE servers SET afk_channel_id = NULL WHERE afk_channel_id IS NOT NULL AND afk_channel_id NOT IN (SELECT id FROM channels);
+    UPDATE members SET pinned_fire_id = NULL WHERE pinned_fire_id IS NOT NULL AND pinned_fire_id NOT IN (SELECT id FROM channels);
+  `);
+}
+
 function addPushLogins(db: Db) {
   if (!hasColumn(db, 'push_subs', 'session')) {
     addColumn(db, 'push_subs', 'session', 'TEXT');

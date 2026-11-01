@@ -20,11 +20,14 @@ function roomById(id) {
   }
   return null;
 }
-const isUnread = (c) => !!c && c.kind !== 'voice' && (c.unread ?? 0) > 0 && c.id !== state.channelId;
+// The room whose chat is on screen. On a phone the last room opened stays selected behind the room
+// list, but it isn't being read there, so its new messages and mentions show like any other room's.
+const readingNow = (id) => id != null && id === state.channelId && !(isPhone() && $('#app').dataset.view !== 'chat');
+const isUnread = (c) => !!c && c.kind !== 'voice' && (c.unread ?? 0) > 0 && !readingNow(c.id);
 // Muted rooms, and ones set to @mentions or nothing, don't light up the burrow. Mentions still count unless it's nothing.
 const serverUnread = (s) => !!s && [...s.channels, ...(s.threads ?? [])].some((c) => isUnread(c) && roomLoud(s, c));
 const serverMentions = (s) =>
-  [...s.channels, ...(s.threads ?? [])].reduce((n, c) => n + (c.id === state.channelId || notifyState(s, c).level === 'none' ? 0 : c.mentions ?? 0), 0);
+  [...s.channels, ...(s.threads ?? [])].reduce((n, c) => n + (readingNow(c.id) || notifyState(s, c).level === 'none' ? 0 : c.mentions ?? 0), 0);
 function pingCount(n) {
   const b = document.createElement('span');
   b.className = 'ping-count';
@@ -56,13 +59,13 @@ function threadRows(s, c) {
     .slice(0, 6)
     .map((t) => {
       const li = document.createElement('li');
-      li.className = 'thread-row' + (t.id === state.channelId ? ' active' : isUnread(t) ? ' unread' : '');
+      li.className = 'thread-row' + (t.id === state.channelId ? ' active' : '') + (isUnread(t) ? ' unread' : '');
       li.insertAdjacentHTML('beforeend', THREAD_ICON);
       const name = document.createElement('span');
       name.className = 'room-name';
       name.textContent = t.name;
       li.append(name);
-      if (t.id !== state.channelId && t.mentions) li.append(pingCount(t.mentions));
+      if (!readingNow(t.id) && t.mentions) li.append(pingCount(t.mentions));
       li.title = `${t.name}: thread in #${c.name}`;
       li.onclick = () => { selectChannel(t.id); showView('chat'); };
       return li;

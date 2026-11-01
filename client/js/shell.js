@@ -20,8 +20,12 @@ function formatTime(d, { short = false } = {}) {
   return d.toLocaleDateString() + ' ' + t;
 }
 
+// The first whole character of each word: an emoji (even one made of several, like a flag or a
+// family) stays in one piece instead of being cut in half into a broken symbol.
+const graphemes = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
+const firstChar = (w) => (graphemes ? graphemes.segment(w)[Symbol.iterator]().next().value?.segment : Array.from(w)[0]) ?? '';
 function initials(name) {
-  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0].toUpperCase()).join('') || '?';
+  return name.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => firstChar(w).toUpperCase()).join('') || '?';
 }
 
 // Forest palette for avatars and burrow tiles: spruce, moss, lingonberry, cloudberry,
@@ -109,7 +113,10 @@ $('#members-close').onclick = () => memberPane.classList.remove('open');
 const isPhone = () => matchMedia('(max-width: 760px)').matches;
 
 function showView(view) {
+  const changed = $('#app').dataset.view !== view;
   $('#app').dataset.view = view;
+  // The open room's badges depend on whether its chat is showing (see readingNow).
+  if (changed && state.me) { renderServers(); renderChannels(); }
   if (view === 'rooms') memberPane.classList.remove('open');
   if (view === 'chat') markReadSoon();
 }

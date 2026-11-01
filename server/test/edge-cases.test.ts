@@ -225,3 +225,66 @@ test('sitting down on a second device tells the first one to get up', async () =
   assert.deepEqual(s.channels.find((c: any) => c.id === fire).voiceUsers, [max.user.id]);
   phone.ws.close();
 });
+
+// From the November 2026 edge-case test.
+
+test("a deleted welcome room or AFK fire doesn't pass its job to the next room made", async () => {
+  const max = await reg('max');
+  const s = await burrowWith(max);
+  const made = (await call(`/api/servers/${s.id}/channels`, { body: { name: 'welcome' }, token: max.token })).data;
+  const welcome = made.channels.find((c: any) => c.name === 'welcome').id;
+  const afk = await fireOf(max, s);
+  await call(`/api/servers/${s.id}`, { method: 'PATCH', body: { welcomeChannelId: welcome, afkChannelId: afk }, token: max.token });
+  await call(`/api/servers/${s.id}/pinned-fire`, { method: 'PATCH', body: { channelId: afk }, token: max.token });
+  await call(`/api/channels/${afk}`, { method: 'DELETE', token: max.token });
+  await call(`/api/channels/${welcome}`, { method: 'DELETE', token: max.token });
+  // Room ids are used again, so these two may well get the deleted rooms' ids.
+  await call(`/api/servers/${s.id}/channels`, { body: { name: 'new-room' }, token: max.token });
+  await fireOf(max, s);
+  const after = (await call('/api/servers', { token: max.token })).data.find((x: any) => x.id === s.id);
+  assert.equal(after.welcomeChannelId, null);
+  assert.equal(after.afkChannelId, null);
+  assert.equal(after.pinnedFireId, null);
+});
+
+test("\"can't talk right now\" only goes to a DM call, not a hearth's fire", async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  const s = await burrowWith(max, sam);
+  await fireOf(max, s);
+  assert.equal((await call(`/api/dms/${s.id}/call/decline`, { body: {}, token: sam.token })).status, 404);
+  const dm = (await call('/api/dms', { body: { userId: sam.user.id }, token: max.token })).data;
+  assert.equal((await call(`/api/dms/${dm.id}/call/decline`, { body: {}, token: sam.token })).status, 200);
+});
+
+test('timed out, you can take a reaction off but not add one', async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  const s = await burrowWith(max, sam);
+  const m = (await call(`/api/channels/${s.channels[0].id}/messages`, { body: { content: 'hi' }, token: max.token })).data;
+  const react = (emoji: string) => call(`/api/messages/${m.id}/reactions`, { body: { emoji }, token: sam.token });
+  assert.equal((await react('👍')).status, 200);
+  await call(`/api/servers/${s.id}/members/${sam.user.id}/timeout`, { body: { minutes: 10 }, token: max.token });
+  assert.equal((await react('🔥')).status, 403);
+  assert.equal((await react('👍')).status, 200); // taken off
+});
+
+test('reactions, edits and poll votes have a speed limit, roomy enough for real use', async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  const s = await burrowWith(max, sam);
+  const room = s.channels[0].id;
+  const m = (await call(`/api/channels/${room}/messages`, { body: { content: 'hi' }, token: max.token })).data;
+  // A quick burst of reacting goes through...
+  const reacts = [];
+  for (let i = 0; i < 100; i++) reacts.push((await call(`/api/messages/${m.id}/reactions`, { body: { emoji: '🔥' }, token: sam.token })).status);
+  assert.ok(reacts.slice(0, 40).every((x) => x === 200));
+  // ...a script toggling as fast as it can doesn't.
+  assert.ok(reacts.includes(429));
+  const edits = [];
+  for (let i = 0; i < 60; i++) edits.push((await call(`/api/messages/${m.id}`, { method: 'PATCH', body: { content: `edit ${i}` }, token: max.token })).status);
+  assert.ok(edits.slice(0, 20).every((x) => x === 200));
+  assert.ok(edits.includes(429));
+  const poll = (await call(`/api/channels/${room}/polls`, { body: { question: 'Pizza?', options: ['Yes', 'No'] }, token: max.token })).data;
+  const votes = [];
+  for (let i = 0; i < 60; i++) votes.push((await call(`/api/messages/${poll.id}/vote`, { body: { options: [i % 2] }, token: sam.token })).status);
+  assert.ok(votes.slice(0, 20).every((x) => x === 200));
+  assert.ok(votes.includes(429));
+});

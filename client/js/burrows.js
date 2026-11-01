@@ -334,9 +334,9 @@ function renderChannels() {
     const n = notifyState(s, c);
     if (n.muted || n.level === 'none') li.classList.add('muted-room');
     if (c.id === state.channelId) li.classList.add('active');
-    else if (isUnread(c) && (roomLoud(s, c) || c.mentions)) li.classList.add('unread');
+    if (isUnread(c) && (roomLoud(s, c) || c.mentions)) li.classList.add('unread');
     li.prepend(roomIcon());
-    if (c.id !== state.channelId && c.mentions && n.level !== 'none') li.append(pingCount(c.mentions));
+    if (!readingNow(c.id) && c.mentions && n.level !== 'none') li.append(pingCount(c.mentions));
     li.onclick = () => { selectChannel(c.id); showView('chat'); };
     li.oncontextmenu = (e) => { e.preventDefault(); openNotifyMenu(li, s, c); };
     if (manager) li.append(roomSettingsButton(c));

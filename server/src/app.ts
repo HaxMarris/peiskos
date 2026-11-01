@@ -601,6 +601,11 @@ export function createApp(opts: AppOptions): Server {
   type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null };
   // Anyone can send a burst of messages, then about one a second: enough for any conversation, not for a flood.
   const postAllowance = allowance(60, 1);
+  // Reactions, edits and poll votes get their own, roomier allowances: a quick burst of reacting
+  // never runs into them, but nobody can flood everyone's app (or grow the edit history) with a script.
+  const reactAllowance = allowance(60, 3);
+  const editAllowance = allowance(30, 0.5);
+  const voteAllowance = allowance(30, 1);
   type PostExtras = { forwarded?: Json; poll?: PollInput; scheduled?: boolean; live?: Json; webhook?: boolean };
 
   // ---- slash commands, worked out by the server so nobody can fake a dice roll
@@ -1406,6 +1411,10 @@ export function createApp(opts: AppOptions): Server {
     db.prepare('DELETE FROM channels WHERE id = ?').run(channel.id);
     // Not tied to the room by the database, so a later room can't pick up its mute.
     db.prepare('DELETE FROM notify_prefs WHERE channel_id = ?').run(channel.id);
+    // Nor the jobs it had: room ids are used again, and the next room made would quietly take them over.
+    db.prepare('UPDATE servers SET welcome_channel_id = NULL WHERE welcome_channel_id = ?').run(channel.id);
+    db.prepare('UPDATE servers SET afk_channel_id = NULL WHERE afk_channel_id = ?').run(channel.id);
+    db.prepare('UPDATE members SET pinned_fire_id = NULL WHERE pinned_fire_id = ?').run(channel.id);
     if (channel.kind === 'thread') threadDeleted(channel, threadMessage);
     sendServerUpdate(channel.serverId);
     return { ok: true };
@@ -1662,7 +1671,7 @@ export function createApp(opts: AppOptions): Server {
   // Not picking up: the people in the call hear about it, and your other devices stop ringing.
   route('POST', '/api/dms/:id/call/decline', ({ user, params }) => {
     const serverId = Number(params[0]);
-    if (!isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
+    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
     const channelId = callRoom(serverId);
     if (channelId !== undefined) sendTo(usersInVoice(channelId), { type: 'ring_declined', serverId, userId: user.id, username: user.displayName || user.username });
     sendTo([user.id], { type: 'ring_stop', serverId });
@@ -1703,6 +1712,7 @@ export function createApp(opts: AppOptions): Server {
     if (room.archivedAt !== null) throw new HttpError(403, 'This room is archived');
     const left = timeoutLeft(channel.serverId, user.id);
     if (left) throw new HttpError(403, `You're timed out for ${left}`);
+    if (!editAllowance.take(user.id)) throw new HttpError(429, "You're editing very fast. Wait a moment.");
     const hasFiles = !!db.prepare('SELECT 1 FROM attachments WHERE message_id = ?').get(id);
     if (typeof body.content === 'string') body.content = withoutBidi(body.content);
     if (typeof body.content !== 'string' || (looksBlank(body.content) && !hasFiles)) throw new HttpError(400, 'Message is empty');
@@ -1734,9 +1744,13 @@ export function createApp(opts: AppOptions): Server {
     const emoji = typeof body.emoji === 'string' ? body.emoji.trim() : '';
     if (!emoji || !(isCustomEmoji(emoji, user.id) || (emoji.length <= 16 && EMOJI.test(emoji)))) throw new HttpError(400, 'That is not an emoji');
     const mine = db.prepare('SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').get(id, user.id, emoji);
+    if (!reactAllowance.take(user.id)) throw new HttpError(429, "You're reacting very fast. Wait a moment.");
     if (mine) {
       db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(id, user.id, emoji);
     } else {
+      // Timed out: taking a reaction off is fine, adding one is writing in the room.
+      const left = timeoutLeft(channel.serverId, user.id);
+      if (left) throw new HttpError(403, `You're timed out for ${left}`);
       const kinds = reactionsFor(id);
       if (!kinds.some((k) => k.emoji === emoji) && kinds.length >= MAX_REACTIONS)
         throw new HttpError(400, 'That message has all the reactions it can hold');
@@ -3523,6 +3537,7 @@ export function createApp(opts: AppOptions): Server {
     const picks = [...new Set((Array.isArray(body.options) ? body.options : []).map(Number))];
     if (picks.some((i) => !Number.isInteger(i) || i < 0 || i >= poll.options.length)) throw new HttpError(400, "That isn't one of the answers");
     if (!poll.multi && picks.length > 1) throw new HttpError(400, 'This poll takes one answer');
+    if (!voteAllowance.take(user.id)) throw new HttpError(429, "You're voting very fast. Wait a moment.");
     db.prepare('DELETE FROM poll_votes WHERE message_id = ? AND user_id = ?').run(id, user.id);
     for (const i of picks) db.prepare('INSERT INTO poll_votes (message_id, user_id, option) VALUES (?, ?, ?)').run(id, user.id, i);
     return messageChanged(id, channel);
