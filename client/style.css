@@ -375,6 +375,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .lock-icon { width: 13px; height: 13px; fill: currentColor; opacity: .6; flex: none; }
 .room-gear { margin-left: auto; padding: 2px; opacity: 0; }
 .room-gear svg { width: 15px; height: 15px; }
+.fire-pin + .room-gear { margin-left: 0; }
 #channel-list li:hover .room-gear, #voice-list li:hover .room-gear, .room-gear:focus-visible { opacity: 1; }
 @media (hover: none) { .room-gear { opacity: 1 !important; } }
 label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }

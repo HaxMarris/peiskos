@@ -571,6 +571,7 @@ function addProfiles(db: Db) {
   addColumn(db, 'users', 'reset_link_expires', 'INTEGER');
   addColumn(db, 'users', 'deleted_at', 'INTEGER');
   addColumn(db, 'members', 'nickname', 'TEXT'); // your name in one burrow
+  addColumn(db, 'members', 'pinned_fire_id', 'INTEGER'); // the fire you keep at the top; null (or one you can't see) = the first you can
   addColumn(db, 'members', 'shown_role_id', 'INTEGER'); // the role you show in the member list; null (or one you lost) = your top one
   addColumn(db, 'sessions', 'device', 'TEXT'); // the browser or app's user agent
   addColumn(db, 'sessions', 'ip', 'TEXT');

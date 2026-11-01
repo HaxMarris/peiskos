@@ -95,11 +95,11 @@ function roomSettingsButton(c) {
 const roleDot = (color) => `<span class="role-dot" style="background:${escapeHtml(color)}"></span>`;
 
 // The "private" checkbox and, under it, which roles and people get in. People who manage rooms always can.
-function privacyFields(s, isPrivate, memberIds, roleIds = []) {
+function privacyFields(s, isPrivate, memberIds, roleIds = [], noun = 'room') {
   const managers = (m) => isHost(s, m.id) || rolesOf(s, m).some((r) => r.perms.includes('rooms'));
   const people = s.members.filter((m) => !managers(m));
   const roles = s.roles ?? [];
-  return `<label class="check"><input type="checkbox" id="room-private" ${isPrivate ? 'checked' : ''} /> Private room</label>
+  return `<label class="check"><input type="checkbox" id="room-private" ${isPrivate ? 'checked' : ''} /> Private ${noun}</label>
     <div id="room-access" class="${isPrivate ? '' : 'hidden'}">
       <p class="small muted">The host and anyone who can manage rooms can always see it. Who else can?</p>
       ${roles.length ? `<h4>Roles</h4><ul class="access-list" id="access-roles">${roles.map((r) => `<li><label class="check"><input type="checkbox" value="${r.id}" ${roleIds.includes(r.id) ? 'checked' : ''} /> ${roleDot(r.color)}${escapeHtml(r.name)}</label></li>`).join('')}</ul>` : ''}
@@ -121,9 +121,10 @@ function openRoomSettings(c) {
   const s = state.servers.get(state.serverId);
   const text = c.kind === 'text';
   const postRoles = c.postRoleIds ?? [];
-  modal(`<h2>Room settings</h2>
+  const noun = c.kind === 'voice' ? 'Fire' : 'Room';
+  modal(`<h2>${noun} settings</h2>
     <form id="room-form">
-      <label>Room name<input id="room-name" maxlength="32" required value="${escapeHtml(c.name)}" /></label>
+      <label>${noun} name<input id="room-name" maxlength="32" required value="${escapeHtml(c.name)}" /></label>
       ${text ? `<label>Topic<input id="room-topic" maxlength="200" placeholder="What's this room for?" value="${escapeHtml(c.topic ?? '')}" /></label>
       <label>Slow mode<select id="room-slow">${SLOW_CHOICES.map(([v, l]) => `<option value="${v}" ${v === (c.slow ?? 0) ? 'selected' : ''}>${l}</option>`).join('')}</select>
         <span class="small muted">How long people wait between messages. People who manage rooms or messages don't wait.</span></label>
@@ -134,10 +135,10 @@ function openRoomSettings(c) {
       </div>
       ${s.roles?.length ? `<h4>Read only</h4><p class="small muted">People with these roles can read this room but not write in it, unless they manage rooms.</p>
         <ul class="access-list" id="read-only-roles">${s.roles.map((r) => `<li><label class="check"><input type="checkbox" value="${r.id}" ${(c.readOnlyRoleIds ?? []).includes(r.id) ? 'checked' : ''} /> ${roleDot(r.color)}${escapeHtml(r.name)}</label></li>`).join('')}</ul>` : ''}` : c.kind === 'voice' ? voiceRoomSettings(c) : ''}
-      ${privacyFields(s, c.private, c.memberIds ?? [], c.roleIds ?? [])}
+      ${privacyFields(s, c.private, c.memberIds ?? [], c.roleIds ?? [], c.kind === 'voice' ? 'fire' : 'room')}
       <div class="error" id="modal-error"></div>
       <div class="modal-row">
-        <button type="button" class="btn danger" id="room-delete">Delete room</button>
+        <button type="button" class="btn danger" id="room-delete">Delete ${noun.toLowerCase()}</button>
         ${text ? `<button type="button" class="btn secondary" id="room-archive">${c.archived ? 'Unarchive' : 'Archive'}</button>` : ''}
         <span class="spacer"></span>
         <button type="button" class="btn secondary" data-close>Cancel</button>
