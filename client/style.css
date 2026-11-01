@@ -1283,6 +1283,13 @@ button.seat-face { cursor: pointer; }
 /* Games at the fire: the game fills the stage, and the fire shows who's playing. */
 #fire-game.on { background: var(--accent); color: var(--accent-ink); }
 .game-view, .fishing-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.game-view .stage-head h1, .casino-view .stage-head h1, .fishing-view .stage-head h1 { margin-right: auto; }
+.game-pop-btn.on, .game-pop-pin.on { color: var(--accent-ink); background: var(--accent); }
+.game-pop-btn:disabled { opacity: .45; cursor: default; background: none; }
+/* A game popped out into its own window (game-popout.js): just the game, with Put it back and the pin. */
+body.game-pop { display: flex; flex-direction: column; overflow: hidden; }
+body.game-pop > :is(.game-view, .casino-view, .fishing-view) { flex: 1; min-height: 0; }
+body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none; }
 .game-frame { flex: 1; min-height: 0; display: flex; }
 .game-iframe { flex: 1; width: 100%; border: 0; display: block; background: #180f28; }
 .fishing-iframe { background: var(--bg); }

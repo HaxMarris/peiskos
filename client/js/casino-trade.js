@@ -300,7 +300,7 @@ function onTradeClick(t) {
   return false;
 }
 
-document.addEventListener('change', (e) => {
+onDocs('change', (e) => {
   if (!e.target.closest?.('#casino')) return;
   if (e.target.matches('[data-up-wear]')) { upWear = e.target.value; renderUpgrade(); }
   if (e.target.matches('[data-up-st]')) { upStattrak = e.target.checked; renderUpgrade(); }

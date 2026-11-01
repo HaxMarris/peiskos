@@ -33,7 +33,10 @@ let casinoBuilt = false;
 
 // ---- opening and closing it on the fire's stage
 
-const casinoOnScreen = () => casino.channelId !== null && state.stageOpen && state.stageShow === 'casino';
+const casinoOnScreen = () => casino.channelId !== null && (gamePop?.kind === 'casino' ? !gamePop.doc.hidden : state.stageOpen && state.stageShow === 'casino');
+// Animation frames from the window the casino is in: a popped-out casino keeps moving while
+// Peiskos's own window is minimized. The time handed on is this page's, as performance.now() is.
+const casinoFrame = (fn) => (gamePop?.kind === 'casino' && !gamePop.win.closed ? gamePop.win : window).requestAnimationFrame(() => fn(performance.now()));
 
 /** Opens the casino on the stage, on one of its games. */
 function openCasino(tab = casino.tab) {
@@ -59,6 +62,7 @@ function openCasino(tab = casino.tab) {
   buildCasino();
   sendCasino(channelId);
   loadCasino();
+  if (gamePop?.kind === 'casino') return renderCasino(), focusGamePop();
   if (!state.stageOpen) openStage();
   state.stageShow = 'casino';
   renderStage();
@@ -76,6 +80,7 @@ function closeCasino() {
 /** Leaving the fire leaves its table too (the server stands you up). */
 function stopCasino() {
   closeCasino();
+  closeGamePop('casino');
   if (casino.channelId !== null) sendCasino(null);
   casino.channelId = null;
   renderVoicePlaces();
@@ -216,7 +221,7 @@ async function openLeaders(board = 'chips') {
     <p class="small muted">${floats ? 'The cleanest skins anyone here has unboxed. Lower is better.' : "Chips, plus what's in their inventory."}</p>
     <ol class="leaders${floats ? ' float-leaders' : ''}" id="leaders"><li class="muted">Counting…</li></ol>
     <div class="modal-row"><button type="button" class="btn" data-close>Close</button></div>`);
-  document.querySelectorAll('.leader-tabs [data-board]').forEach((b) => b.addEventListener('click', () => b.dataset.board !== board && openLeaders(b.dataset.board)));
+  $('#modal-card').querySelectorAll('.leader-tabs [data-board]').forEach((b) => b.addEventListener('click', () => b.dataset.board !== board && openLeaders(b.dataset.board)));
   const who = (userId) => {
     const av = document.createElement('span');
     av.className = 'avatar xs';
@@ -303,7 +308,7 @@ function onCasinoPoker(ev) {
   const yourTurn = me >= 0 && ev.table.toAct === me;
   const wasYourTurn = before && before.toAct === me && before.handNo === ev.table.handNo;
   if (yourTurn && !wasYourTurn) {
-    if (!casinoOnScreen() || casino.tab !== 'poker' || document.hidden)
+    if (!casinoOnScreen() || casino.tab !== 'poker' || (gamePop?.kind !== 'casino' && document.hidden))
       toast("It's your turn at the poker table.", { action: 'Go', onAction: goToPoker });
     playSound('message');
   }
@@ -392,9 +397,9 @@ function timerRing(deadline) {
     if (!ring.isConnected) return;
     const left = Math.max(0, deadline - Date.now());
     ring.style.setProperty('--left', String(left / Math.max(total, 30000)));
-    if (left > 0) requestAnimationFrame(tick);
+    if (left > 0) casinoFrame(tick);
   };
-  requestAnimationFrame(tick);
+  casinoFrame(tick);
   return ring;
 }
 
@@ -740,9 +745,9 @@ function countUp(el, to) {
   const tick = (now) => {
     const k = Math.min(1, (now - start) / ms);
     el.textContent = chipsText(Math.round(to * k));
-    if (k < 1) requestAnimationFrame(tick);
+    if (k < 1) casinoFrame(tick);
   };
-  requestAnimationFrame(tick);
+  casinoFrame(tick);
 }
 
 function showSlotWins(r, strips) {
@@ -1347,7 +1352,7 @@ function openItem(item, onSold = renderCases) {
 }
 
 // Keys: Space spins the slots when they're on screen.
-document.addEventListener('keydown', (e) => {
+onDocs('keydown', (e) => {
   if (e.key !== ' ' || !casinoOnScreen() || casino.tab !== 'slots') return;
   if (e.target.closest?.('input, textarea, select, button, [contenteditable]') || !$('#modal').classList.contains('hidden')) return;
   e.preventDefault();

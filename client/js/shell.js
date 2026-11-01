@@ -182,7 +182,7 @@ function renderVoicePlaces() {
 }
 // The game you left the fire's stage on, if it's still going.
 function gameToReturnTo() {
-  if (!state.voice) return null;
+  if (!state.voice || gamePop?.kind === state.leftGame) return null; // it's in its own window
   if (state.leftGame === 'game' && gamePlay) return { title: FIRE_GAMES[gamePlay.name]?.title ?? 'the game', open: showGame };
   if (state.leftGame === 'casino' && casino.channelId !== null) return { title: 'the casino', open: () => openCasino() };
   if (state.leftGame === 'fishing' && fishing.play) return { title: 'Fireside Angler', open: openFishing };

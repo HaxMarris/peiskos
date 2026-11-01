@@ -22,7 +22,7 @@ const FIRE_GAMES = {
 const gameMax = (name) => FIRE_GAMES[name]?.maxPlayers ?? 4;
 
 let fireGame = null; // { channelId, game: { name, hostId, players, since } } at your fire
-let gamePlay = null; // { name, frame, ready, queue } while you're playing, on this device
+let gamePlay = null; // { name, frame, ready, queue, snapshot, busy } while you're playing, on this device
 let gameStarting = false; // you asked to start or join, so the game opens once Peiskos says you're in
 
 const sendGame = (msg) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify({ type: 'game', ...msg }));
@@ -132,7 +132,7 @@ function loadGame(name) {
   frame.title = FIRE_GAMES[name]?.title ?? 'Game';
   frame.src = `games/${name}/index.html`;
   frame.allow = 'fullscreen';
-  gamePlay = { name, frame, ready: false, queue: [] };
+  gamePlay = { name, frame, ready: false, queue: [], snapshot: null, busy: false };
   $('#game-frame').replaceChildren(frame);
   $('#game-view-title').textContent = frame.title;
   showGame();
@@ -140,6 +140,7 @@ function loadGame(name) {
 
 function showGame() {
   if (!gamePlay) return;
+  if (gamePop?.kind === 'game') return focusGamePop();
   if (!state.stageOpen) openStage();
   state.stageShow = 'game';
   renderStage();
@@ -150,6 +151,7 @@ function showGame() {
 function closeGame() {
   gamePlay = null;
   $('#game-frame').replaceChildren();
+  closeGamePop('game');
   renderVoicePlaces();
   if (state.stageShow === 'game') {
     state.stageShow = 'fire';
@@ -185,12 +187,20 @@ window.addEventListener('message', (e) => {
     const g = fireGame?.game;
     if (!g) return;
     gamePlay.ready = true;
-    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g) }, '*');
+    // The page loads again when it moves between windows (popping out); the host's game picks up
+    // where it left off from the last snapshot it gave.
+    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g), resume: gamePlay.snapshot }, '*');
     for (const q of gamePlay.queue.splice(0)) postToGame(q);
   } else if (m.kind === 'send') {
     if (m.to === 'all' || Number.isInteger(m.to)) sendGame({ action: 'send', to: m.to, data: m.data });
   } else if (m.kind === 'leave') {
     leaveFireGame();
+  } else if (m.kind === 'snapshot') {
+    gamePlay.snapshot = m.data && typeof m.data === 'object' ? m.data : null;
+  } else if (m.kind === 'busy') {
+    // A round that can't move between windows is going.
+    gamePlay.busy = !!m.on;
+    renderGamePopButtons();
   }
 });
 

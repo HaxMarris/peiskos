@@ -106,7 +106,7 @@ function createWindow({ hidden = false } = {}) {
   });
 
   win.on('closed', () => {
-    popout?.close();
+    for (const child of popouts.values()) child.close();
     ipcMain.removeAllListeners('popout-on-top');
     appAudio.stop();
     drawOverlay.close();
@@ -155,30 +155,41 @@ function createWindow({ hidden = false } = {}) {
     win.webContents.send('pick-screen', sources.map((s) => ({ id: s.id, name: s.name, thumbnail: s.thumbnail.toDataURL() })));
   });
 
-  // Links in messages open in the user's browser, never inside the app. The one window the page
-  // opens itself is a popped-out stream: an ordinary window that goes behind others and resizes
-  // freely, kept on top only while its pin is on.
-  let popout = null;
+  // Links in messages open in the user's browser, never inside the app. The windows the page
+  // opens itself are a popped-out stream and a popped-out game: ordinary windows that go behind
+  // others and resize freely, kept on top only while their pin is on.
+  const POPOUTS = {
+    'peiskos-popout': { minWidth: 200, minHeight: 120, backgroundColor: '#000000' },
+    'peiskos-game': { minWidth: 360, minHeight: 320, backgroundColor: '#f3f1ea' },
+  };
+  const popouts = new Map(); // frame name -> its window
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
-    if (url === 'about:blank' && frameName === 'peiskos-popout') {
+    if (url === 'about:blank' && POPOUTS[frameName]) {
       return {
         action: 'allow',
-        overrideBrowserWindowOptions: { minWidth: 200, minHeight: 120, backgroundColor: '#000000', autoHideMenuBar: true, title: 'Peiskos' },
+        overrideBrowserWindowOptions: { ...POPOUTS[frameName], autoHideMenuBar: true, title: 'Peiskos' },
       };
     }
     if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
   win.webContents.on('did-create-window', (child, { frameName }) => {
-    if (frameName !== 'peiskos-popout') return;
-    popout = child;
+    if (!POPOUTS[frameName]) return;
+    popouts.set(frameName, child);
     child.setMenu(null);
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
     child.webContents.on('will-navigate', (e) => e.preventDefault());
-    child.on('closed', () => { if (popout === child) popout = null; });
+    // A popped-out game is run by this window's page, which has to keep its pace while it's
+    // minimized or hidden behind the game.
+    if (frameName === 'peiskos-game') win.webContents.setBackgroundThrottling(false);
+    child.on('closed', () => {
+      if (popouts.get(frameName) !== child) return;
+      popouts.delete(frameName);
+      if (frameName === 'peiskos-game' && !win.isDestroyed()) win.webContents.setBackgroundThrottling(true);
+    });
   });
-  ipcMain.on('popout-on-top', (_e, on) => popout?.setAlwaysOnTop(!!on));
-  win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) popout?.close(); });
+  ipcMain.on('popout-on-top', (_e, on, which) => popouts.get(which === 'game' ? 'peiskos-game' : 'peiskos-popout')?.setAlwaysOnTop(!!on));
+  win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) for (const child of popouts.values()) child.close(); });
   win.webContents.on('will-navigate', (e, url) => {
     if (!url.startsWith('file://')) {
       e.preventDefault();

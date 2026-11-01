@@ -189,7 +189,22 @@ function showScreen(name){
 // started the game is its host and runs the match, as before.
 // ================================================================
 
-function toPeiskos(msg){ window.parent.postMessage(msg, '*'); }
+// Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
+function peiskos(){ try { return window.parent.peiskosHost || window.parent; } catch(e){ return window.parent; } }
+function toPeiskos(msg){ peiskos().postMessage(msg, '*'); }
+
+// Host: the lobby as it stands, kept by Peiskos so it survives this page loading again (popping
+// the game out into its own window, or back). A round can't be carried over, so Peiskos only
+// lets the game move between rounds, which it hears about from "busy".
+function keepSnapshot(){
+  if(!isHost || !me) return;
+  toPeiskos({kind:'snapshot', data:{lobbyPlayers, scores:lobbyScores, storm:$('stormSelect').value}});
+}
+let lastBusy = false;
+setInterval(()=>{
+  const busy = !!(game && !game.matchOver);
+  if(busy !== lastBusy){ lastBusy = busy; toPeiskos({kind:'busy', on:busy}); }
+}, 400);
 
 // Stands in for a peer connection: sending goes through Peiskos.
 function connFor(uid){
@@ -200,7 +215,8 @@ function connFor(uid){
   };
 }
 
-function hostGame(players){
+function hostGame(players, resume){
+  if(resume && Array.isArray(resume.lobbyPlayers) && $('stormSelect').querySelector('option[value="'+Number(resume.storm)+'"]')) $('stormSelect').value = String(Number(resume.storm));
   readMenuSettings();
   resetScores();
   isHost = true;
@@ -208,6 +224,19 @@ function hostGame(players){
   botMode = false;
   conns = [];
   lobbyPlayers = [{slot:0, name:myName, colorIdx:0, isHost:true, connId:null, uid:me.id, hat:myHat}];
+  // The same lobby as before this page loaded again: seats, hats and round wins.
+  if(resume && Array.isArray(resume.lobbyPlayers)){
+    for(const p of resume.lobbyPlayers){
+      if(!p || !Number.isInteger(p.uid) || p.uid===me.id || !(p.slot>=1 && p.slot<4) || lobbyPlayers.some(q=>q.slot===p.slot)) continue;
+      const conn = connFor(p.uid);
+      conns.push(conn);
+      lobbyPlayers.push({slot:p.slot, name:shortName(p.name), colorIdx:p.slot, isHost:false, connId:conn.peer, uid:p.uid, hat:hatById(p.hat).id});
+    }
+    if(resume.scores && typeof resume.scores === 'object') lobbyScores = {...resume.scores};
+    broadcastToAll({type:'toLobby'});
+    broadcastToAll({type:'scores', scores:lobbyScores});
+    broadcastLobby();
+  }
   syncPlayers(players);
   $('btnQuit').title = 'End the game for everyone';
   renderLobby(true);
@@ -269,6 +298,7 @@ function onHostReceiveData(conn, data){
 }
 
 function broadcastLobby(){
+  keepSnapshot();
   broadcastToAll({type:'lobby', inMatch:matchOn, players: lobbyPlayers.map(p=>({slot:p.slot,name:p.name,colorIdx:p.colorIdx,isHost:p.isHost,hat:p.hat,uid:p.uid}))});
 }
 
@@ -383,6 +413,7 @@ $('hatSelect').addEventListener('change', ()=>{
     hostConn.send({type:'joinInfo', hat:myHat});
   }
 });
+$('stormSelect').addEventListener('change', ()=> keepSnapshot());
 $('btnStartMatch').addEventListener('click', ()=>{
   if(!isHost) return;
   readMenuSettings();
@@ -1348,6 +1379,7 @@ function hostStep(){
         lobbyScores[game.winnerSlot] = (lobbyScores[game.winnerSlot]||0) + 1;
       }
       if(!game.localOnly){ broadcastToAll({type:'scores', scores:lobbyScores}); broadcastLobby(); }
+      else keepSnapshot();
     }
   }
 }
@@ -2455,13 +2487,13 @@ populateHatSelect();
 // PEISKOS
 // ---------------------------------------------------------------
 window.addEventListener('message', e=>{
-  if(e.source !== window.parent) return;
+  if(e.source !== peiskos()) return;
   const m = e.data;
   if(!m || typeof m !== 'object') return;
   if(m.kind==='init'){
     me = {id:m.me.id, name:shortName(m.me.name)};
     hostUid = m.hostId;
-    if(me.id===hostUid) hostGame(m.players || []);
+    if(me.id===hostUid) hostGame(m.players || [], m.resume);
     else joinGame();
   } else if(m.kind==='players'){
     if(isHost && me) syncPlayers(m.players || []);
