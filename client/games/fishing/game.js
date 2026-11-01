@@ -1,4 +1,4 @@
-// Fireside Angler: fish by hand at eleven waters, collect 253 species and 27 hats, and leave idle
+// Fireside Angler: fish by hand at eleven waters, collect 264 species and 28 hats, and leave idle
 // rods fishing while you're away. Peiskos frames this page and keeps the save (see client/js/fishing.js).
 (() => {
 'use strict';
@@ -312,6 +312,45 @@ PONDS.forEach(p => p.fish.sort((a, b) => a.r - b.r || a.base - b.base));
 const FISH = {};
 PONDS.forEach(p => p.fish.forEach(f => { f.pond = p.id; f.w = RARITY_W[f.r - 1]; f.rf = (f.r - 1) / 4; FISH[f.id] = f; }));
 
+// Timed legendaries: one per water that bites only in a 3-hour window each day, on Eastern time
+// (the same clock as Today's best). Hand casts only, at half a legendary's odds. They're a set of
+// their own, so they don't count toward a water's species, bonuses or area hat.
+const TIMED_HOURS = 3;
+const TIMED = [
+  ['mill', 9, F('morningcarp', 'Morning Carp', 50, 110, 225, 5, ['grazer', 'rare'], 2, L('#e8b04a', '#fff0c0', '#d08a2a', .34, { spots: '#fff4d0', glow: '#ffe08a' }))],
+  ['birch', 12, F('sunscalepike', 'Sunscale Pike', 80, 150, 600, 5, ['predator', 'rare'], 3, L('#d8a830', '#fff4c0', '#b08020', .18, { stripes: '#fff0a0', glow: '#ffe08a' }))],
+  ['fjord', 18, F('twilightcod', 'Twilight Cod', 80, 180, 1200, 5, ['sea', 'bottom', 'rare'], 4, L('#5a4a8a', '#d8c8f0', '#3a2a6a', .26, { spots: '#f0a0c0', glow: '#c8a0ff', whiskers: 1 }))],
+  ['frozen', 21, F('starlightchar', 'Starlight Char', 60, 120, 5500, 5, ['cold', 'rare'], 4, L('#1a2a4a', '#e0e8ff', '#3a5a8a', .26, { spots: '#ffffff', glow: '#c8d8ff' }))],
+  ['aurora', 21, F('auroramoonfish', 'Aurora Moonfish', 100, 250, 70000, 5, ['ember', 'deep', 'rare'], 5, L('#c8d0e0', '#ffffff', '#7ff0c8', .5, { stripes: '#7ff0c8', glow: '#e8f0ff' }))],
+  ['river', 9, F('mistwraith', 'Mist Wraith Trout', 50, 110, 180000, 5, ['predator', 'rare'], 6, L('#cfd8d4', '#f4f8f6', '#9ab0a8', .24, { spots: '#ffffff', glow: '#e8f4f0' }))],
+  ['marsh', 18, F('fireflygar', 'Firefly Gar', 150, 300, 630000, 5, ['predator', 'rare'], 6, L('#3a4a2a', '#c8d8a0', '#2a3a1a', .12, { spots: '#f2ff80', glow: '#e8ff60' }))],
+  ['lagoon', 12, F('sunraymarlin', 'Sunray Marlin', 200, 450, 1800000, 5, ['sea', 'rare'], 7, L('#2a6ab0', '#e8f4ff', '#f2c230', .22, { sail: 1, stripes: '#8ad0ff', glow: '#ffe08a' }))],
+  ['harbor', 18, F('lamplighteel', 'Lamplight Eel', 150, 400, 6600000, 5, ['sea', 'deep', 'rare'], 7, L('#2a2a30', '#f0c060', '#c08a30', .08, { shape: 'eel', spots: '#ffe08a', glow: '#ffc46b' }))],
+  ['tarn', 21, F('polarsturgeon', 'Polar Night Sturgeon', 400, 1000, 20000000, 5, ['cold', 'deep', 'rare'], 8, L('#1a2030', '#a8c0e0', '#3a4a6a', .2, { whiskers: 1, stripes: '#c8eaff', glow: '#a0c8ff' }))],
+  ['springs', 0, F('witchingkoi', 'Witching Koi', 80, 160, 70000000, 5, ['ember', 'rare'], 8, L('#2a1030', '#e0a0ff', '#8a2ab0', .36, { spots: '#ff6a2a', glow: '#c860ff', whiskers: 1 }))],
+].map(([pid, from, f]) => { Object.assign(f, { pond: pid, from, timed: true, w: RARITY_W[4] / 2, rf: 1 }); PONDS.find(p => p.id === pid).timed = f; FISH[f.id] = f; return f; });
+// The game opens with the server's time, so a device clock set wrong (or on purpose) changes nothing.
+let clockSkew = 0;
+const serverNow = () => Date.now() + clockSkew;
+function easternClock() {
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: 'numeric', minute: 'numeric', hourCycle: 'h23' }).formatToParts(serverNow());
+  const get = t => +parts.find(x => x.type === t).value;
+  return { h: get('hour') % 24, m: get('minute') };
+}
+/** Minutes left in a timed fish's window, or 0 when it isn't biting. */
+function timedLeft(f) {
+  const { h, m } = easternClock(), at = h * 60 + m, from = f.from * 60;
+  return at >= from && at < from + TIMED_HOURS * 60 ? from + TIMED_HOURS * 60 - at : 0;
+}
+const timedLeftText = f => { const n = timedLeft(f); return n >= 60 ? `${Math.floor(n / 60)}h ${n % 60}m left` : `${n}m left`; };
+/** The window in this device's own time zone, like "9 PM–12 AM". */
+function timedWindowText(f) {
+  const { h, m } = easternClock(), start = serverNow() + (((f.from - h + 24) % 24) * 60 - m) * 60000;
+  const t = d => new Date(d).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }).replace(':00', '');
+  return `${t(start)}–${t(start + TIMED_HOURS * 3600000)}`;
+}
+const timedNow = () => TIMED.filter(timedLeft);
+
 // The map, in the order the angler walks the path: three rows that wind up from Millpond.
 const MAP = [
   { id: 'mill', x: 10, y: 84 },
@@ -390,6 +429,7 @@ const HATS = [
   { id: 'divinghelmet', name: 'Brass Diving Helmet', r: 5, area: 'harbor' },
   { id: 'icecrown', name: 'Glacier Crown', r: 5, area: 'tarn' },
   { id: 'phoenixcrest', name: 'Phoenix Crest', r: 5, area: 'springs' },
+  { id: 'lantern', name: 'Lantern Hat', r: 5, timed: true },
 ];
 const HAT = Object.fromEntries(HATS.map(h => [h.id, h]));
 const SLOT_COSTS = [150, 1200, 8000, 50000, 250000, 1200000];
@@ -499,7 +539,11 @@ const LAND_BY_RARITY = [.9, .8, .65, .5, .35];
 const landChance = (sl, f) => Math.min(.95, LAND_BY_RARITY[f.r - 1] * pondOf(sl.pond).idle + .02 * (sl.lvl - 1));
 
 // ---------- rolling a fish ----------
-function pool(pid) { const tier = rod().tier; return pondOf(pid).fish.filter(f => (f.rod || 1) <= tier); }
+function pool(pid, hand) {
+  const tier = rod().tier, p = pondOf(pid), l = p.fish.filter(f => (f.rod || 1) <= tier);
+  if (hand && p.timed && p.timed.rod <= tier && timedLeft(p.timed)) l.push(p.timed);
+  return l;
+}
 function fishWeights(list, opts) {
   return list.map(f => {
     let w = f.w * Math.exp(opts.luck * f.rf * .8);
@@ -512,7 +556,7 @@ function pick(list, ws) {
   for (let i = 0; i < list.length; i++) { r -= ws[i]; if (r <= 0) return list[i]; }
   return list[list.length - 1];
 }
-const rollFish = (pid, opts) => { const l = pool(pid); return pick(l, fishWeights(l, opts)); };
+const rollFish = (pid, opts, hand) => { const l = pool(pid, hand); return pick(l, fishWeights(l, opts)); };
 function rollStars(luck, perfect) {
   const ws = [50, 28, 14, 6, 2].map((x, i) => x * Math.exp(luck * .3 * i));
   let q = pick([1, 2, 3, 4, 5], ws);
@@ -592,9 +636,11 @@ function record(c, source) {
   const how = source === 'idle' ? ' on an idle rod' : '';
   if (c.g) { S.stats.giants++; post(`Landed a giant ${f.name}${how}: ${cm(c.s)}, size ${c.t}/100, worth ${fmt(c.v)} coins.`); }
   else if (c.q === 5) { S.stats.fives++; post(`Caught a 5-star ${f.name}${how} (${cm(c.s)}), worth ${fmt(c.v)} coins.`); }
+  else if (f.timed) post(`Caught the ${f.name} at ${pondOf(f.pond).name} in its window, worth ${fmt(c.v)} coins.`);
   else if (notes.includes('new') && f.r >= 4) post(`Caught my first ${f.name}${how}, a ${RARITY[f.r - 1].toLowerCase()} fish.`);
   if (notes.includes('new') && pondDone(f.pond)) post(`Caught every species in ${pondOf(f.pond).name}. Fish from there now sell for 5% more.`, true);
   if (c.q === 5) checkAreaHat(f.pond);
+  if (f.timed) checkTimedHat();
   reportBest(c, source);
   return notes;
 }
@@ -638,12 +684,18 @@ function checkAreaHat(pid) {
   addRecent({ chest: true, hat: h.id, area: true });
   post(`Caught every ${pondOf(pid).name} fish at 5 stars and earned the ${h.name}. Fish from there now sell for 10% more.`, true);
 }
+function checkTimedHat() {
+  if (S.hats.includes('lantern') || !TIMED.every(f => S.coll[f.id])) return;
+  S.hats.push('lantern'); S.hatsNew = true;
+  addRecent({ chest: true, hat: 'lantern', area: true });
+  post(`Caught all ${TIMED.length} timed legendaries and earned the Lantern Hat.`, true);
+}
 const CHEST_GOLD = [100, 500, 1000, 2000, 5000, 10000, 25000, 60000, 150000, 400000, 1000000];
 function openChest() {
   S.stats.chests++;
   if (S.stats.chests === 1) S.hatsNew = true;
   const pi = pondIdx(S.pond);
-  const left = HATS.filter(h => !h.area && !S.hats.includes(h.id));
+  const left = HATS.filter(h => !h.area && !h.timed && !S.hats.includes(h.id));
   if (!left.length) {
     const coins = Math.round(300 * Math.pow(6, Math.min(pi, 4)) * Math.pow(3.6, Math.max(0, pi - 4)));
     S.coins += coins; S.stats.earned += coins;
@@ -843,6 +895,21 @@ function drawHat(c, id, x, y, r, T) {
       blob(c, '#8a2a12', () => c.rect(x - r * .95, y - r * .65, r * 1.9, r * .22));
       blob(c, '#ffe08a', () => c.arc(x, y - r * .54, r * .11, 0, 7));
       break; }
+    case 'lantern': {
+      // a dark wool cap with a little brass lantern on top, its flame breathing
+      blob(c, '#3a3450', () => c.arc(x, y - r * .3, r * 1, Math.PI, 0));
+      blob(c, '#2a2540', () => c.rect(x - r * 1.04, y - r * .55, r * 2.08, r * .28));
+      blob(c, '#8a6a2a', () => c.rect(x - r * .06, y - r * 1.55, r * .12, r * .3));
+      blob(c, '#c8962e', () => c.ellipse(x, y - r * 1.62, r * .38, r * .1, 0, 0, 7));
+      const gl = .75 + .25 * Math.sin((T || 0) * 3);
+      c.shadowColor = '#ffc46b'; c.shadowBlur = r * .9 * gl;
+      blob(c, `rgba(255,214,140,${.85 * gl + .15})`, () => c.rect(x - r * .28, y - r * 2.25, r * .56, r * .62));
+      c.shadowBlur = 0;
+      blob(c, '#fff4d0', () => c.ellipse(x, y - r * 1.9, r * .09, r * .18, 0, 0, 7));
+      c.strokeStyle = '#8a6a2a'; c.lineWidth = r * .08; c.strokeRect(x - r * .28, y - r * 2.25, r * .56, r * .62);
+      blob(c, '#c8962e', () => { c.moveTo(x - r * .38, y - r * 2.25); c.lineTo(x, y - r * 2.55); c.lineTo(x + r * .38, y - r * 2.25); });
+      c.strokeStyle = '#c8962e'; c.lineWidth = r * .06; c.beginPath(); c.arc(x, y - r * 2.6, r * .12, Math.PI, 0); c.stroke();
+      break; }
     case 'flamecrown': {
       const fl = Math.sin((T || 0) * 9) * r * .12;
       c.shadowColor = '#ffb35c'; c.shadowBlur = r * .8;
@@ -1009,7 +1076,7 @@ function cast() {
 }
 function startBite() {
   G.opts = handOpts(G.bait);
-  G.fish = rollFish(S.pond, G.opts);
+  G.fish = rollFish(S.pond, G.opts, true);
   // Harder for rarer fish, and more so in later waters: a narrower zone, a faster marker, and rare
   // fish that fight (the marker surges and slows). Better rods and Wide hook gap widen the zone back.
   const r = rod(), pi = pondStep(S.pond), rf = G.fish.rf;
@@ -1162,7 +1229,8 @@ function renderMapNodes() {
     if (n.soon) return `<button class="node soon" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%"><span class="hit"></span><span class="lbl">${n.soon}<small>Coming soon</small></span></button>`;
     const p = pondOf(n.id), own = S.ponds.includes(n.id), here = S.pond === n.id;
     const sub = here ? 'You are here' : own ? `${p.fish.filter(f => S.coll[f.id]).length}/${p.fish.length} found` : `Unlock · ${fmt(p.cost)}`;
-    return `<button class="node${here ? ' here' : ''}" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%" aria-label="${p.name}, ${sub}"><span class="hit"></span><span class="lbl">${p.name}<small>${sub}</small></span></button>`;
+    const tl = p.timed && timedLeft(p.timed) ? `${p.timed.name} biting, ${timedLeftText(p.timed)}` : '';
+    return `<button class="node${here ? ' here' : ''}" type="button" data-node="${n.id}" style="left:${n.x}%;top:${n.y}%" aria-label="${p.name}, ${sub}${tl ? ', ' + tl : ''}"${tl ? ` title="${tl}"` : ''}><span class="hit"></span><span class="lbl">${tl ? '<span class="moon" aria-hidden="true">☾</span>' : ''}${p.name}<small>${sub}</small></span></button>`;
   }).join('');
 }
 const trees = Array.from({ length: 70 }, (_, i) => [((i * 37) % 97) / 97, ((i * 53) % 89) / 89, (i * 7) % 3]);
@@ -1496,7 +1564,8 @@ function renderTop() {
   const b = BAIT[S.baitOn];
   $('baitChip').textContent = b.id === 'worms' ? b.name : `${b.name} ×${S.bait[b.id] || 0}`;
   const p = pondOf(S.pond);
-  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}<span class="mapword">Map</span>`;
+  const tl = p.timed && timedLeft(p.timed) ? `☾ ${p.timed.name} · ${timedLeftText(p.timed)}` : '';
+  $('pondtag').innerHTML = `<b>${p.name}</b>${bonusTag(p.id) ? `<span>${bonusTag(p.id)}</span>` : ''}${tl ? `<span class="timedtag">${tl}</span>` : ''}<span class="mapword">Map</span>`;
   $('pondtag').setAttribute('aria-label', `${p.name}. Open the map`);
   document.querySelectorAll('#tabs button').forEach(bt => {
     bt.setAttribute('aria-selected', bt.dataset.tab === S.tab);
@@ -1572,13 +1641,14 @@ function renderPane() {
     HATS.forEach((ht, i) => {
       const own = S.hats.includes(ht.id), worn = S.hat === ht.id;
       if (ht.area && !HATS[i - 1].area) h += `</div><h2>Area hats</h2><p class="note">Catch every fish in a water at 5 stars. Fish from there also sell for another 5% more.</p><div class="hat-grid">`;
-      h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
+      if (ht.timed && !HATS[i - 1].timed) h += `</div><h2>Timed hat</h2><p class="note">Catch all ${TIMED.length} timed legendaries. Each one bites for ${TIMED_HOURS} hours a day; the Collection shows when.</p><div class="hat-grid">`;
+      h += `<div class="hatcard${worn ? ' worn' : ''}${own ? '' : ' locked'}"><canvas data-hat="${ht.id}"${own ? '' : ' data-locked="1"'}></canvas><div class="name">${own ? ht.name : 'Not found'}</div>${ht.area ? `<span class="rar r5">${pondOf(ht.area).name}</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">All ${pondStarsDone(ht.area)}/${pondOf(ht.area).fish.length} at 5★</span>`}` : ht.timed ? `<span class="rar r5">Timed</span>${own ? '' : `<span class="rar r1" style="text-transform:none;letter-spacing:0">${TIMED.filter(f => S.coll[f.id]).length}/${TIMED.length} caught</span>`}` : rarHtml(ht.r)}${own ? `<button class="buy ${worn ? 'ghost' : ''}" type="button" data-act="hat" data-id="${ht.id}" ${worn ? 'disabled' : ''}>${worn ? 'Wearing' : 'Wear'}</button>` : ''}</div>`;
     });
     h += `</div>`;
   } else if (S.tab === 'board') {
     h += boardHtml();
   } else if (S.tab === 'coll') {
-    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more.</p>`;
+    h += `<p class="note" style="margin:0">Every catch gets 1 to 5 stars for quality and a size score out of 100. Bigger is always better, and the top 2% of a size range is a Giant worth ×3. Catch every species in a water and its fish sell for 5% more. Get a 5-star of every one and they sell for 10% more. Each water also has a timed legendary that bites only ${TIMED_HOURS} hours a day, by hand; times below are yours.</p>`;
     PONDS.forEach(p => {
       const got = p.fish.filter(f => S.coll[f.id]).length;
       h += `<div style="display:flex;flex-direction:column;gap:8px"><h2>${p.name} <small>${got}/${p.fish.length}${bonusTag(p.id) ? ` · ${bonusTag(p.id)} coins` : ''} · ${pondStarsDone(p.id)}/${p.fish.length} at 5★</small></h2><div class="coll-grid">`;
@@ -1587,6 +1657,9 @@ function renderPane() {
         if (e) h += `<div class="fishcard"><canvas data-fish="${f.id}"></canvas><div class="name">${f.name}</div>${rarHtml(f.r)}<div class="meta">${f.min}–${f.max} cm · caught ${e.n}<br>Biggest ${cm(e.best)}<br>Best ${starsHtml(e.bestQ || 1)}</div></div>`;
         else h += `<div class="fishcard unknown"><canvas data-fish="${f.id}" data-sil="1"></canvas><div class="name">Not caught yet</div>${rarHtml(f.r)}<div class="meta">${(f.rod || 1) > 1 ? 'Needs a tier ' + f.rod + ' rod' : '&nbsp;'}<br>&nbsp;<br>&nbsp;</div></div>`;
       });
+      const t = p.timed, te = S.coll[t.id], when = timedLeft(t) ? `<b class="biting">Biting now · ${timedLeftText(t)}</b>` : `Bites ${timedWindowText(t)}`;
+      if (te) h += `<div class="fishcard timed"><canvas data-fish="${t.id}"></canvas><div class="name">${t.name}</div><span class="rar r5">Timed</span><div class="meta">${when}<br>Biggest ${cm(te.best)} · caught ${te.n}<br>Best ${starsHtml(te.bestQ || 1)}</div></div>`;
+      else h += `<div class="fishcard timed unknown"><canvas data-fish="${t.id}" data-sil="1"></canvas><div class="name">Timed legendary</div><span class="rar r5">Timed</span><div class="meta">${when}<br>Needs a tier ${t.rod} rod<br>By hand only</div></div>`;
       h += `</div></div>`;
     });
   }
@@ -1600,7 +1673,7 @@ function renderRecent() {
   const el = $('recent'), list = S.recent.slice(0, 6);
   if (!list.length) { el.innerHTML = `<h2>Recent catches</h2><div class="empty-state">Your last six catches show up here.</div>`; return; }
   el.innerHTML = `<h2>Recent catches <small>last ${list.length}</small></h2><div class="rc-grid">${list.map((r, i) => {
-    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? 'Area hat' : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
+    if (r.chest) { const h = r.hat && HAT[r.hat]; return `<div class="rc chest"><canvas data-rc="${i}"></canvas><h3>${r.area ? (h && h.timed ? 'Timed hat' : 'Area hat') : 'Treasure chest'}</h3><div class="row">${h ? `<span>${h.name}</span>${h.area ? `<span class="rar r5">${pondOf(h.area).name}</span>` : rarHtml(h.r)}` : `<span>Coins</span><span class="val">+${fmt(r.coins)}</span>`}</div><div class="row"><span class="src">${ago(r.at)}</span>${h && r.coins ? `<span class="val">+${fmt(r.coins)}</span>` : ''}</div></div>`; }
     const c = r.c, f = FISH[c.f], tags = [];
     if (c.g) tags.push('<span class="tag gold">Giant ×3</span>');
     if (c.p) tags.push('<span class="tag green">Perfect</span>');
@@ -1681,6 +1754,15 @@ document.addEventListener('keydown', e => {
 document.addEventListener('visibilitychange', () => { if (document.hidden) flushSave(); });
 window.addEventListener('pagehide', flushSave);
 setInterval(flushSave, 30000);
+// Timed windows open and close on the hour; keep the countdowns and the map current.
+let timedOpen = null, timedMinute = -1;
+setInterval(() => {
+  if (!ready || document.hidden) return;
+  const k = timedNow().map(f => f.id).join(), m = easternClock().m;
+  if (k === timedOpen && m === timedMinute) return;
+  const changed = k !== timedOpen; timedOpen = k; timedMinute = m;
+  renderTop(); renderMapNodes(); if (changed && S.tab === 'coll') renderPane();
+}, 20000);
 setInterval(() => { if (ready && S.tab === 'board' && !document.hidden && Date.now() - boardAsked > 55000) askBoard(); }, 5000);
 
 // ---------- boot ----------
@@ -1706,7 +1788,7 @@ window.addEventListener('message', e => {
   if (e.source !== peiskos()) return;
   const m = e.data;
   if (!m || typeof m !== 'object') return;
-  if (m.kind === 'init') start(m.save, m.theme);
+  if (m.kind === 'init') { if (Number.isFinite(m.now)) clockSkew = m.now - Date.now(); start(m.save, m.theme); }
   else if (m.kind === 'reload') { start(m.save); $('catchbox').innerHTML = '<div class="catch"><h3>Picked up your other device</h3><div class="row" style="color:var(--muted)"><span>You saved there more recently, so this is where you left off.</span></div></div>'; G.resultAt = performance.now(); }
   else if (m.kind === 'theme') document.documentElement.dataset.theme = m.theme;
   else if (m.kind === 'flush') flushSave();

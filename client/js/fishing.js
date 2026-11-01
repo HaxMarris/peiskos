@@ -87,7 +87,7 @@ window.addEventListener('message', async (e) => {
       while (play.saving) await new Promise((done) => setTimeout(done, 50)); // that last save first
       const r = await api(fishingApi(play.hearthId));
       play.rev = r.rev;
-      play.frame.contentWindow?.postMessage({ kind: 'init', save: r.save, theme: currentTheme() }, '*');
+      play.frame.contentWindow?.postMessage({ kind: 'init', save: r.save, now: r.now, theme: currentTheme() }, '*');
     } catch (err) {
       toast(`Couldn't open your tackle box: ${err.message}`);
       if (play === fishing.play) stopFishing();

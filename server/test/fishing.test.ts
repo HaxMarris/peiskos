@@ -43,8 +43,10 @@ test('the fishing save is per person per hearth, and an older device cannot over
   const other = (await call('/api/servers', { body: { name: 'Sea' }, token: a.token })).data;
   const path = `/api/servers/${hearth.id}/fishing`;
 
-  // Someone new has no save yet.
-  assert.deepEqual((await call(path, { token: a.token })).data, { save: null, rev: 0, savedAt: 0 });
+  // Someone new has no save yet, and the server's clock comes along for the timed fish.
+  const fresh = (await call(path, { token: a.token })).data;
+  assert.deepEqual({ ...fresh, now: undefined }, { save: null, rev: 0, savedAt: 0, now: undefined });
+  assert.ok(Math.abs(fresh.now - Date.now()) < 5000);
 
   const first = await call(path, { token: a.token, body: { save: { v: 2, coins: 10 }, rev: 0 } });
   assert.equal(first.status, 200);
@@ -74,7 +76,7 @@ test('the fishing save is per person per hearth, and an older device cannot over
 
 test('the game\'s fish are all read from its file', () => {
   const species = loadSpecies();
-  assert.equal(species.size, 253);
+  assert.equal(species.size, 264);
   assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5 });
 });
 

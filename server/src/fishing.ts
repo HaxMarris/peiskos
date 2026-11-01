@@ -13,7 +13,7 @@ import { readFileSync } from 'node:fs';
 import type { Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 
-/** A save is the game's whole state as JSON; 253 fish, 27 hats and six nets of 20 fit in far less. */
+/** A save is the game's whole state as JSON; 264 fish, 28 hats and six nets of 20 fit in far less. */
 export const MAX_SAVE_BYTES = 256 * 1024;
 
 /** The leaderboard's day runs midnight to midnight, Eastern time. */
@@ -76,7 +76,8 @@ export function fishing(ctx: FishingContext) {
     db.prepare('SELECT data, rev, saved_at AS savedAt FROM fishing_saves WHERE user_id = ? AND server_id = ?').get(userId, h) as Row | undefined;
   const view = (row: Row | undefined) => (row ? { save: JSON.parse(row.data), rev: row.rev, savedAt: row.savedAt } : { save: null, rev: 0, savedAt: 0 });
 
-  route('GET', '/api/servers/:id/fishing', ({ user, params }) => view(current(user.id, hearth(params[0], user.id))));
+  // The server's clock comes along so timed fish follow it, not whatever the device's clock says.
+  route('GET', '/api/servers/:id/fishing', ({ user, params }) => ({ ...view(current(user.id, hearth(params[0], user.id))), now: Date.now() }));
 
   route('POST', '/api/servers/:id/fishing', ({ user, params, body }) => {
     const h = hearth(params[0], user.id);
