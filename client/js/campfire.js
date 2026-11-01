@@ -1059,13 +1059,33 @@ const KEYRING_SIZE = 16; // LiveKit keeps this many room keys, so audio sealed w
 const toB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
 const fromB64 = (text) => Uint8Array.from(atob(text), (c) => c.charCodeAt(0));
 
+// Room keys go to the worker as raw bytes and become keys there: the iPhone app can't hand a
+// finished key to a worker ("The object can not be cloned"). Messages keep their order while a
+// key is being made.
+const WORKER_KEY_IMPORT = `;(() => {
+  const handle = self.onmessage;
+  let chain = null;
+  self.onmessage = (e) => {
+    const raw = e.data?.kind === 'setKey' ? e.data.data?.key?.raw : undefined;
+    if (!chain && !raw) return handle(e);
+    const mine = (chain ?? Promise.resolve()).then(async () => {
+      if (raw) {
+        const key = await crypto.subtle.importKey('raw', raw, 'HKDF', false, ['deriveBits', 'deriveKey']);
+        e = { data: { ...e.data, data: { ...e.data.data, key } } };
+      }
+      handle(e);
+    }).catch((err) => console.error('voice key', err));
+    chain = mine.then(() => { if (chain === mine) chain = null; });
+  };
+})();`;
+
 // Started from a Blob, since browsers won't start workers from local files (the desktop app).
 let workerSourceLoading = null;
 async function e2eeWorker() {
   workerSourceLoading ??= new Promise((resolve, reject) => {
     const tag = document.createElement('script');
     tag.src = 'vendor/livekit-client.e2ee.worker.source.js';
-    tag.onload = () => resolve(URL.createObjectURL(new Blob([window.LivekitE2EEWorkerSource], { type: 'text/javascript' })));
+    tag.onload = () => resolve(URL.createObjectURL(new Blob([window.LivekitE2EEWorkerSource, WORKER_KEY_IMPORT], { type: 'text/javascript' })));
     tag.onerror = () => { workerSourceLoading = null; reject(new Error("Couldn't load voice encryption.")); };
     document.head.append(tag);
   });
@@ -1075,7 +1095,7 @@ async function e2eeWorker() {
 async function createVoiceCrypto(LK) {
   class RoomKeys extends LK.BaseKeyProvider {
     constructor() { super({ sharedKey: true, ratchetWindowSize: 0, failureTolerance: -1, keyringSize: KEYRING_SIZE }); }
-    async use(raw, index) { this.onSetEncryptionKey(await LK.createKeyMaterialFromBuffer(raw), undefined, index); }
+    use(raw, index) { this.onSetEncryptionKey({ raw }, undefined, index); } // made into a key in the worker
   }
   const pair = await crypto.subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
   return {
