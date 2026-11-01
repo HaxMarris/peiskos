@@ -357,8 +357,11 @@ function renderChannels() {
   $('#archived-section').classList.toggle('hidden', !archived.length);
   $('#archived-title').textContent = `Archived · ${archived.length}`;
   $('#archived-list').replaceChildren(...archived.flatMap(roomRow));
-  // The first voice room is the burrow's Campfire, shown as a card above the rooms. Any others are "other fires".
-  const voiceRooms = channels.filter((c) => c.kind === 'voice').map((c, i) => {
+  // The fire you pinned (or else the first you can see) is the card above the rooms. Any others are "other fires".
+  const fires = channels.filter((c) => c.kind === 'voice');
+  const pinned = fires.find((c) => c.id === s?.pinnedFireId);
+  if (pinned) fires.splice(fires.indexOf(pinned), 1), fires.unshift(pinned);
+  const voiceRooms = fires.map((c, i) => {
     const li = document.createElement('li');
     const joined = state.voice?.channelId === c.id;
     const ids = c.voiceUsers ?? [];
@@ -370,6 +373,7 @@ function renderChannels() {
     li.innerHTML = i === 0
       ? `<div class="voice-room-name"><span class="fire-badge">${FIRE_ICON}</span><span class="fire-text"><span class="room-name">${escapeHtml(c.name)}</span><span class="fire-sub">${escapeHtml(sub)}</span></span>${c.private ? LOCK_ICON : ''}</div>`
       : `<div class="voice-room-name">${FIRE_ICON.replace('<svg', '<svg class="voice-icon"')}<span class="room-name">${escapeHtml(c.name)}</span>${c.userLimit ? `<span class="seat-count">${ids.length}/${c.userLimit}</span>` : ''}${c.private ? LOCK_ICON : ''}</div>`;
+    if (i > 0) li.firstChild.append(pinFireButton(s, c));
     if (can(s, 'rooms')) li.firstChild.append(roomSettingsButton(c));
     li.title = joined ? 'Open the fire' : 'Join voice';
     li.onclick = () => (joined ? goToVoice() : joinVoice(c.id));
@@ -422,6 +426,23 @@ function renderChannels() {
   $('#voice-section').classList.toggle('hidden', voiceRooms.length < 2);
   renderVoicePlaces();
   renderFire();
+}
+
+// Moves a fire to the card at the top, for you only. The hearth's first fire is the default, so pinning it clears the choice.
+function pinFireButton(s, c) {
+  const b = iconButton('', `Pin ${c.name} to the top`, async (e) => {
+    e.stopPropagation();
+    const first = s.channels.find((r) => r.kind === 'voice');
+    try {
+      const updated = await api(`/api/servers/${s.id}/pinned-fire`, { method: 'PATCH', body: { channelId: c.id === first?.id ? null : c.id } });
+      state.servers.set(updated.id, updated);
+      renderChannels();
+    } catch (err) { alertError(err); }
+  });
+  b.classList.add('room-gear', 'fire-pin');
+  b.setAttribute('aria-label', b.title);
+  b.innerHTML = PIN_ICON;
+  return b;
 }
 
 // Opens a room or thread. With `around`, it opens at that message instead of the newest;

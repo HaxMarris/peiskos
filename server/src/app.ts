@@ -371,12 +371,15 @@ export function createApp(opts: AppOptions): Server {
          WHERE m.server_id = ? ORDER BY u.username`,
       )
       .all(serverId) as (User & { voiceMuted: number; timeoutUntil: number | null; deleted: number; bot: number })[];
-    const accepted = (db.prepare('SELECT rules_accepted_at FROM members WHERE server_id = ? AND user_id = ?').get(serverId, viewerId) as
-      | { rules_accepted_at: number | null }
-      | undefined)?.rules_accepted_at;
+    const mine = db.prepare('SELECT rules_accepted_at, pinned_fire_id FROM members WHERE server_id = ? AND user_id = ?').get(serverId, viewerId) as
+      | { rules_accepted_at: number | null; pinned_fire_id: number | null }
+      | undefined;
+    const accepted = mine?.rules_accepted_at;
     return {
       ...server,
       rulesAccepted: !server.rules || !!accepted,
+      // The fire this person keeps at the top. One they can no longer see falls back to the first they can.
+      pinnedFireId: channels.some((c) => c.id === mine?.pinned_fire_id && c.kind === 'voice') ? mine!.pinned_fire_id : null,
       notify: prefs.get(0) ?? null,
       channels,
       groups: db.prepare('SELECT id, name FROM room_groups WHERE server_id = ? ORDER BY position, id').all(serverId),
@@ -4370,6 +4373,22 @@ export function createApp(opts: AppOptions): Server {
     db.prepare('UPDATE members SET shown_role_id = ? WHERE server_id = ? AND user_id = ?').run(roleId, serverId, user.id);
     sendServerUpdate(serverId);
     return serverSummary(serverId, user.id);
+  });
+
+  // The fire you keep at the top of a hearth's sidebar. Null goes back to the first one you can see.
+  route('PATCH', '/api/servers/:id/pinned-fire', ({ user, params, body }) => {
+    const serverId = Number(params[0]);
+    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    const channelId = body.channelId == null ? null : Number(body.channelId);
+    if (channelId !== null) {
+      const channel = channelById(channelId);
+      if (!channel || channel.serverId !== serverId || channel.kind !== 'voice' || !canSee(channel, user.id)) throw new HttpError(404, 'Fire not found');
+    }
+    db.prepare('UPDATE members SET pinned_fire_id = ? WHERE server_id = ? AND user_id = ?').run(channelId, serverId, user.id);
+    const summary = serverSummary(serverId, user.id);
+    // Your other devices follow along.
+    sendTo([user.id], { type: 'server_updated', server: summary });
+    return summary;
   });
 
   // ---- friends and blocking -----------------------------------------------

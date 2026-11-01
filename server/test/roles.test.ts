@@ -153,3 +153,37 @@ test('picking the role you show in the member list', async () => {
   assert.equal(annOf((await call('/api/servers', { token: host.token })).data.find((s: any) => s.id === sid)).shownRoleId, friendsId);
   assert.equal(annOf((await pick(null)).data).shownRoleId, null);
 });
+
+test('picking the fire you keep at the top, and fires only some roles can see', async () => {
+  const reg = async (username: string) => (await call('/api/register', { body: { username, password: 'password1' } })).data;
+  const host = await reg('firehost');
+  const ann = await reg('annfire');
+  const burrow = (await call('/api/servers', { body: { name: 'Fires' }, token: host.token })).data;
+  await call('/api/join', { body: { inviteCode: burrow.inviteCode }, token: ann.token });
+  const sid = burrow.id;
+  const gamers = (await call(`/api/servers/${sid}/roles`, { body: { name: 'Gamers', color: '#336699', perms: [] }, token: host.token })).data;
+  const gamersId = gamers.roles.find((r: any) => r.name === 'Gamers').id;
+  const made = (await call(`/api/servers/${sid}/channels`, { body: { name: 'gamers-only', kind: 'voice', private: true, roleIds: [gamersId] }, token: host.token })).data;
+  const secret = made.channels.find((c: any) => c.name === 'gamers-only').id;
+  const open = (await call(`/api/servers/${sid}/channels`, { body: { name: 'everyone', kind: 'voice' }, token: host.token })).data;
+  const everyone = open.channels.find((c: any) => c.name === 'everyone').id;
+  const pin = (channelId: number | null, token = ann.token) => call(`/api/servers/${sid}/pinned-fire`, { method: 'PATCH', body: { channelId }, token });
+  const annView = async () => (await call('/api/servers', { token: ann.token })).data.find((s: any) => s.id === sid);
+
+  // Without the role, the fire isn't there and can't be pinned.
+  assert.ok(!(await annView()).channels.some((c: any) => c.id === secret));
+  assert.equal((await pin(secret)).status, 404);
+  const pinned = await pin(everyone);
+  assert.equal(pinned.status, 200);
+  assert.equal(pinned.data.pinnedFireId, everyone);
+  // Your pick is yours alone.
+  assert.equal((await call('/api/servers', { token: host.token })).data.find((s: any) => s.id === sid).pinnedFireId, null);
+
+  // With the role, it can be pinned; losing the role drops back to the first fire you can see.
+  await call(`/api/servers/${sid}/members/${ann.user.id}/roles`, { body: { roleIds: [gamersId] }, token: host.token });
+  assert.equal((await pin(secret)).data.pinnedFireId, secret);
+  await call(`/api/servers/${sid}/members/${ann.user.id}/roles`, { body: { roleIds: [] }, token: host.token });
+  assert.equal((await annView()).pinnedFireId, null);
+  assert.equal((await pin(null)).status, 200);
+  assert.equal((await pin(burrow.id)).status, 404);
+});
