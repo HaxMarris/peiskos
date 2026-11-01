@@ -350,15 +350,15 @@ const UPGRADES = [
 
 const BAITS = [
   { id: 'worms', name: 'Garden worms', cost: 0, pack: 0, desc: 'Free and endless. Fish anything.', luck: 0, size: 0, likes: [] },
-  { id: 'bread', name: 'Bread paste', cost: 25, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
-  { id: 'minnows', name: 'Live minnows', cost: 150, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
-  { id: 'shrimp', name: 'Shrimp', cost: 500, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
-  { id: 'glow', name: 'Glow grubs', cost: 2500, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
-  { id: 'emberfly', name: 'Ember fly', cost: 10000, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
-  // These three show up once their water is unlocked.
-  { id: 'crayfish', name: 'Crayfish', cost: 3000, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
-  { id: 'squid', name: 'Squid strips', cost: 6000, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
-  { id: 'larvae', name: 'Golden larvae', cost: 12000, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
+  { id: 'bread', name: 'Bread paste', cost: 25, gain: .02, pack: 20, desc: 'Grazers love it: roach, carp, bream, tench.', luck: 0, size: .05, likes: ['grazer'] },
+  { id: 'minnows', name: 'Live minnows', cost: 150, gain: .06, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
+  { id: 'shrimp', name: 'Shrimp', cost: 500, gain: .18, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
+  { id: 'glow', name: 'Glow grubs', cost: 2500, gain: .35, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
+  // Crayfish, squid and larvae show up once their water is unlocked.
+  { id: 'crayfish', name: 'Crayfish', cost: 3000, gain: .5, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
+  { id: 'squid', name: 'Squid strips', cost: 6000, gain: .75, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
+  { id: 'emberfly', name: 'Ember fly', cost: 10000, gain: 1.3, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  { id: 'larvae', name: 'Golden larvae', cost: 12000, gain: 2, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
 ];
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
 
@@ -538,10 +538,13 @@ function expectedLand(sl) {
 // and carried there). At that water, a typical player there (its rod, upgrades around level 10)
 // earns back about 1.5x a pack's price on average. Most of that comes from the odd rare fish, so
 // roughly half of all packs still lose money. A pack never costs less than the bait's listed cost.
+// Bait prices scale with what a plain worm catch is worth at your furthest water, times how
+// much each bait adds on average (its gain). Every bait shares that scale, so the stronger
+// bait always costs more. A pack earns back about 1.5x on average, and plenty of packs lose.
 const REF_TIER = [1, 2, 3, 4, 5, 6, 6, 7, 7, 8, 8];
 const BAIT_PAYBACK = 1.5;
-function refCatchValue(i, b) {
-  const tier = REF_TIER[i], r = RODS.find(x => x.tier === tier), opts = { luck: r.luck + .5 + b.luck, size: r.size + .3 + b.size, likes: b.likes };
+function wormCatchValue(i) {
+  const tier = REF_TIER[i], r = RODS.find(x => x.tier === tier), opts = { luck: r.luck + .5, size: r.size + .3, likes: [] };
   const l = PONDS[i].fish.filter(f => (f.rod || 1) <= tier), ws = fishWeights(l, opts), W = ws.reduce((a, c) => a + c, 0);
   // Expected (.5 + t) with giants at 3x, where t = U^(1/k); and the expected star multiplier.
   const k = 1 + opts.size, pg = 1 - Math.pow(.98, k), size = .5 + k / (k + 1) + 2 * pg * (.5 + k / (k + 1) * (1 - Math.pow(.98, k + 1)) / pg);
@@ -549,15 +552,11 @@ function refCatchValue(i, b) {
   return l.reduce((a, f, j) => a + ws[j] / W * f.base, 0) * size * sw.reduce((a, w, j) => a + w / SW * STAR_MUL[j], 0);
 }
 const roundPrice = x => { const p = Math.pow(10, Math.max(0, Math.floor(Math.log10(x)) - 1)); return Math.round(x / p) * p; };
-const baitPrices = {};
-/** A pack's price once water i is the furthest you've opened. Never cheaper than at an earlier water. */
+const wormValues = [];
+/** A pack's price once water i is the furthest you've opened. */
 function baitPriceAt(b, i) {
-  const key = b.id + i;
-  if (!(key in baitPrices)) {
-    const fair = (refCatchValue(i, b) - refCatchValue(i, BAIT.worms)) * b.pack / BAIT_PAYBACK;
-    baitPrices[key] = Math.max(i ? baitPriceAt(b, i - 1) : 0, roundPrice(Math.max(b.cost, fair)));
-  }
-  return baitPrices[key];
+  if (wormValues[i] === undefined) wormValues[i] = wormCatchValue(i);
+  return Math.max(b.cost, roundPrice(wormValues[i] * b.gain * b.pack / BAIT_PAYBACK));
 }
 const baitCost = b => b.cost ? baitPriceAt(b, Math.max(...S.ponds.map(pondIdx))) : 0;
 const baitShown = b => !b.from || S.ponds.includes(b.from);
