@@ -846,6 +846,7 @@ function formatContent(text) {
   const link = (u) => stash(`<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
   const inline = (t) => t
     .replace(/&lt;:(\w{2,32}):(\d+)&gt;/g, (_, name, id) => stash(customEmojiImg(name, Number(id))))
+    .replace(EMOJI_RE, (e) => stash(emojiImg(e)))
     .replace(/&lt;(https?:\/\/[^\s<]+?)&gt;/g, (_, u) => link(u))
     .replace(LINK_RE, link)
     .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
