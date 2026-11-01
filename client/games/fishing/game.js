@@ -428,7 +428,9 @@ function load(d) {
 // ---------- talking to Peiskos ----------
 // Peiskos keeps the save on its server (one per person in each hearth) and posts brags in the
 // fireside chat. This page only talks to it through messages, so it works the same in the desktop app.
-const toPeiskos = msg => window.parent.postMessage(msg, '*');
+// Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
+const peiskos = () => { try { return window.parent.peiskosHost || window.parent; } catch { return window.parent; } };
+const toPeiskos = msg => peiskos().postMessage(msg, '*');
 let ready = false, saveTimer = 0, lastSent = '';
 /** Saves soon; a burst of changes becomes one save. */
 function save() {
@@ -1697,7 +1699,7 @@ function start(data, theme) {
   if (!running) { running = true; requestAnimationFrame(frame); }
 }
 window.addEventListener('message', e => {
-  if (e.source !== window.parent) return;
+  if (e.source !== peiskos()) return;
   const m = e.data;
   if (!m || typeof m !== 'object') return;
   if (m.kind === 'init') start(m.save, m.theme);

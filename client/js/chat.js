@@ -508,6 +508,7 @@ function modal(html, kind = '') {
     html = settingsFrameHtml() + `<div class="settings-pane">${html}</div>`;
     kind = `${kind} side-tabs`;
   }
+  placeLayer('#modal');
   $('#modal-card').className = 'modal-card' + (kind ? ' ' + kind : '');
   $('#modal-card').innerHTML = `<button type="button" class="icon-btn modal-x" data-close title="Close (Esc)" aria-label="Close">×</button>` + html;
   $('#modal').classList.remove('hidden');
@@ -567,7 +568,7 @@ function closeModal() {
   closing?.();
 }
 $('#modal').addEventListener('click', (e) => { if (e.target.id === 'modal') closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+onDocs('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
 
 // ---- questions: Peiskos's own yes/no and fill-in dialogs, in a layer above any open modal, so
 // confirming something on the admin page doesn't close it. Each resolves once, however it's answered.
@@ -575,6 +576,8 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal
 let answerAsk = null;
 function ask({ title, text = '', ok = 'OK', cancel = 'Cancel', danger = false, field = null, typeToConfirm = '', copy = '' }) {
   answerAsk?.(null);
+  placeLayer('#ask');
+  const keys = $('#ask').ownerDocument; // a popped-out game's window, when it's asking there
   return new Promise((resolve) => {
     const card = $('#ask-card');
     card.innerHTML = `<h2 id="ask-title"></h2>${text ? '<p id="ask-text"></p>' : ''}
@@ -599,7 +602,7 @@ function ask({ title, text = '', ok = 'OK', cancel = 'Cancel', danger = false, f
     const done = (value) => {
       answerAsk = null;
       $('#ask').classList.add('hidden');
-      document.removeEventListener('keydown', onKey, true);
+      keys.removeEventListener('keydown', onKey, true);
       resolve(value);
     };
     answerAsk = done;
@@ -607,7 +610,7 @@ function ask({ title, text = '', ok = 'OK', cancel = 'Cancel', danger = false, f
       if (e.key === 'Escape') { e.stopImmediatePropagation(); done(field ? null : false); }
       else if (e.key === 'Enter' && input && e.target === input && !yes.disabled) { e.preventDefault(); yes.click(); }
     };
-    document.addEventListener('keydown', onKey, true);
+    keys.addEventListener('keydown', onKey, true);
     yes.onclick = () => done(field ? input.value : true);
     if (cancel) $('#ask-no').onclick = () => done(field ? null : false);
     $('#ask').onclick = (e) => { if (e.target.id === 'ask') done(field ? null : false); };

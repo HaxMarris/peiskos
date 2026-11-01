@@ -12,7 +12,16 @@ for (const [name, fn] of Object.entries({
   findLast(fn) { for (let i = this.length - 1; i >= 0; i--) if (fn(this[i], i, this)) return this[i]; },
 })) if (!Array.prototype[name]) Object.defineProperty(Array.prototype, name, { value: fn, writable: true, configurable: true });
 
-const $ = (sel) => document.querySelector(sel);
+// A game popped out into its own window (game-popout.js) takes its part of the page along, so
+// lookups find it there too, and page-wide listeners added with onDocs hear that window as well.
+let gamePop = null; // { kind, win, doc, ... } while one is out
+const $ = (sel) => document.querySelector(sel) ?? gamePop?.doc.querySelector(sel) ?? null;
+const docListeners = [];
+function onDocs(type, fn, options) {
+  docListeners.push([type, fn, options]);
+  document.addEventListener(type, fn, options);
+  gamePop?.doc.addEventListener(type, fn, options);
+}
 const isDesktop = location.protocol === 'file:';
 // The Android and iPhone apps carry their own copy of this page too, so like the desktop app
 // they talk to a server somewhere else.

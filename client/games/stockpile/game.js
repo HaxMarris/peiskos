@@ -29,7 +29,9 @@ const DISCARDS = 4;
 const MAX_PLAYERS = 8;
 const DECK = 162;       // 12 of each number and 18 wilds
 
-function toPeiskos(msg){ window.parent.postMessage(msg, '*'); }
+// Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
+function peiskos(){ try { return window.parent.peiskosHost || window.parent; } catch(e){ return window.parent; } }
+function toPeiskos(msg){ peiskos().postMessage(msg, '*'); }
 
 let me = null;          // {id, name}
 let hostUid = null;
@@ -184,6 +186,8 @@ function publish(){
     toPeiskos({kind:'send', to:p.id, data:viewFor(p.id)});
   }
   show(viewFor(me.id));
+  // Kept by Peiskos, so the round carries on if this page has to load again (popping it out).
+  toPeiskos({kind:'snapshot', data:{present, G, phase, stockSetting, round}});
 }
 
 // Peiskos says who's in the game now.
@@ -588,7 +592,7 @@ $('table').addEventListener('click', (e)=>{
 // PEISKOS
 // ================================================================
 window.addEventListener('message', e=>{
-  if(e.source !== window.parent) return;
+  if(e.source !== peiskos()) return;
   const m = e.data;
   if(!m || typeof m !== 'object') return;
   if(m.kind === 'init'){
@@ -596,6 +600,11 @@ window.addEventListener('message', e=>{
     hostUid = m.hostId;
     isHost = me.id === hostUid;
     $('btnQuit').title = isHost ? 'End the game for everyone' : 'Leave this game';
+    const r = m.resume;
+    if(isHost && r && Array.isArray(r.present) && ['lobby','play','over'].includes(r.phase)){
+      ({present, G, phase, stockSetting, round} = r);
+      $('stockSelect').value = stockSetting;
+    }
     if(isHost) syncPlayers(m.players || []);
     else { showScreen('lobbyScreen'); $('lobbyStatus').textContent = 'Joining…'; toPeiskos({kind:'send', to:hostUid, data:{type:'hello'}}); }
   } else if(m.kind === 'players'){

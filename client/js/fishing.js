@@ -15,6 +15,7 @@ function openFishing() {
   if (hearthId === null) return;
   // Each hearth has its own save, so a fire in another hearth opens another game.
   if (fishing.play && fishing.play.hearthId !== hearthId) stopFishing();
+  if (fishing.play && gamePop?.kind === 'fishing') return focusGamePop();
   if (!fishing.play) {
     const frame = document.createElement('iframe');
     frame.className = 'game-iframe fishing-iframe';
@@ -47,7 +48,7 @@ function stopFishing() {
   // Off the dock for everyone else at the fire.
   if (state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fishing', status: null }));
   play.frame.contentWindow?.postMessage({ kind: 'flush' }, '*');
-  setTimeout(() => { play.frame.remove(); fishingClosing.delete(play); }, 400);
+  setTimeout(() => { play.frame.remove(); fishingClosing.delete(play); if (!fishing.play) closeGamePop('fishing'); }, 400);
 }
 
 /** One save at a time; whatever comes in meanwhile waits, and only the newest is sent. */
@@ -76,12 +77,14 @@ async function saveFishing(play, data) {
 }
 
 window.addEventListener('message', async (e) => {
-  const play = [fishing.play, ...fishingClosing].find((p) => p && e.source === p.frame.contentWindow);
+  // A frame that moved between windows loads again, and its last save comes from the page it left.
+  const play = [fishing.play, ...fishingClosing].find((p) => p && (e.source === p.frame.contentWindow || (e.source && e.source === p.before)));
   if (!play) return;
   const m = e.data;
   if (!m || typeof m !== 'object') return;
   if (m.kind === 'ready') {
     try {
+      while (play.saving) await new Promise((done) => setTimeout(done, 50)); // that last save first
       const r = await api(fishingApi(play.hearthId));
       play.rev = r.rev;
       play.frame.contentWindow?.postMessage({ kind: 'init', save: r.save, theme: currentTheme() }, '*');

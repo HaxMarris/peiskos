@@ -344,6 +344,7 @@ function toast(text, { action, onAction, timeout = 5000, kind = '' } = {}) {
   x.textContent = '×';
   x.onclick = () => t.remove();
   t.append(x);
+  placeLayer('#toasts');
   $('#toasts').append(t);
   if (timeout) setTimeout(() => t.remove(), timeout);
 }
