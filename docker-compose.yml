@@ -27,6 +27,8 @@ services:
       LIVEKIT_URL: ${LIVEKIT_URL:-}
       # Largest file someone can share, in MB.
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
+      UPLOAD_DAILY_MB: ${UPLOAD_DAILY_MB:-2048}
+      MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-2048}
       # GIF picker (see README).
       KLIPY_API_KEY: ${KLIPY_API_KEY:-}
       GIF_RATING: ${GIF_RATING:-}

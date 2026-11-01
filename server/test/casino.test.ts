@@ -162,7 +162,8 @@ test('chips: slots, cases, blackjack and free chips', async () => {
   const lobby = (await call(C, { token: t })).data;
   assert.equal(lobby.wallet.chips, START_CHIPS);
   assert.equal(lobby.wallet.freeAt, 0);
-  assert.equal(lobby.cases.length, 3);
+  assert.equal(lobby.cases.length, CASES.length);
+  assert.ok(CASES.every((c, i) => i === 0 || c.price > CASES[i - 1].price), "cases go cheapest first");
 
   // Free chips once, then not again for a while.
   const free = await call(`${C}/free`, { token: t, body: {} });

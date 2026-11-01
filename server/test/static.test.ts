@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { request } from 'node:http';
@@ -13,6 +13,8 @@ const dir = mkdtempSync(join(tmpdir(), 'burrow-static-'));
 const script = 'console.log("hello burrow");\n'.repeat(200);
 writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Burrow</title>');
 writeFileSync(join(dir, 'app.js'), script);
+mkdirSync(join(dir, 'vendor', 'noto-emoji'), { recursive: true });
+writeFileSync(join(dir, 'vendor', 'noto-emoji', '1f525.webp'), Buffer.from('RIFF\0\0\0\0WEBP'));
 const app = createApp({ db: openDb(':memory:'), publicDir: dir });
 let port = 0;
 
@@ -137,4 +139,11 @@ test('games at the fire can be framed by Peiskos itself, and the app by nobody',
   assert.equal(game.headers['x-frame-options'], 'SAMEORIGIN');
   assert.match(game.headers['content-security-policy'], /frame-ancestors 'self'/);
   assert.doesNotMatch(game.headers['content-security-policy'], /frame-ancestors 'none'/);
+});
+
+test('emoji pictures are sent as WebP and kept by the browser for a week', async () => {
+  const res = await get('/vendor/noto-emoji/1f525.webp');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['content-type'], 'image/webp');
+  assert.equal(res.headers['cache-control'], 'public, max-age=604800');
 });

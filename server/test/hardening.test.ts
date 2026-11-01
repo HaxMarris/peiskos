@@ -28,16 +28,25 @@ async function call(path: string, opts: { method?: string; body?: unknown; token
   return { status: res.status, headers: res.headers, data: (await res.json().catch(() => null)) as any };
 }
 
-test('wrong passwords are limited per person', async () => {
+test('wrong passwords lock out the address they came from, not the person', async () => {
   const reg = await call('/api/register', { body: { username: 'pat', password: 'password1', registrationCode: 'secret-code' } });
   assert.equal(reg.status, 200);
   const login = (password: string, ip = '203.0.113.1') =>
     call('/api/login', { body: { username: 'Pat', password }, headers: { 'x-forwarded-for': ip } });
+  // Pat logs in at home first.
+  assert.equal((await login('password1', '203.0.113.50')).status, 200);
   for (let i = 0; i < 10; i++) assert.equal((await login('nope')).status, 401);
-  // Locked, even with the right password and from somewhere else.
-  const locked = await login('password1', '203.0.113.2');
+  // That address is locked, even with the right password.
+  const locked = await login('password1');
   assert.equal(locked.status, 429);
   assert.match(locked.data.error, /Too many tries/);
+  // Pat, somewhere else, still gets in.
+  assert.equal((await login('password1', '203.0.113.2')).status, 200);
+  // Strangers on many addresses guessing together are stopped after 100 tries in all...
+  for (let i = 0; i < 100; i++) await login('nope', `198.18.${Math.floor(i / 9)}.${i % 9}`);
+  assert.equal((await login('password1', '198.18.200.1')).status, 429);
+  // ...but not where Pat has logged in before.
+  assert.equal((await login('password1', '203.0.113.50')).status, 200);
 });
 
 test('a good login clears earlier mistakes', async () => {

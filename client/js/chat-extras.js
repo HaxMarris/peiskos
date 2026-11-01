@@ -27,8 +27,40 @@ function customEmojiImg(name, id) {
 /** A reaction or recent emoji: a plain emoji, or a custom one written <:name:id>. */
 function emojiHtml(text) {
   const m = /^<:(\w{2,32}):(\d+)>$/.exec(text);
-  return m ? customEmojiImg(m[1], Number(m[2])) : escapeHtml(text);
+  return m ? customEmojiImg(m[1], Number(m[2])) : emojiArt(escapeHtml(text));
 }
+
+// Every emoji is drawn with Google's Noto pictures (vendor/noto-emoji, one small file each, fetched
+// when first shown), so everyone sees the same ones whatever their device. The message box can only
+// draw with the device's own emoji font, so it keeps those while typing.
+const EMOJI_RE = (() => {
+  try { return new RegExp('\\p{RGI_Emoji}', 'gv'); } catch { /* older Safari: close enough */ }
+  return /[\u{1F1E6}-\u{1F1FF}]{2}|[#*0-9]\uFE0F?\u20E3|\u{1F3F4}[\u{E0061}-\u{E007A}]+\u{E007F}|(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F)[\uFE0F\u{1F3FB}-\u{1F3FF}]*(?:\u200D(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}\uFE0F?)[\uFE0F\u{1F3FB}-\u{1F3FF}]*)*/gu;
+})();
+const emojiFile = (e) => [...e].map((c) => c.codePointAt(0)).filter((c) => c !== 0xfe0f).map((c) => c.toString(16).padStart(4, '0')).join('-');
+const emojiImg = (e) => `<img class="emoji" src="vendor/noto-emoji/${emojiFile(e)}.webp" alt="${e}" draggable="false" loading="lazy" />`;
+/** Swaps the emoji in already-escaped text (never inside a tag) for Noto pictures. */
+const emojiArt = (html) => html.replace(EMOJI_RE, emojiImg);
+// An emoji Noto hasn't drawn yet shows as the device's own instead.
+document.addEventListener('error', (e) => {
+  if (e.target instanceof HTMLImageElement && e.target.classList.contains('emoji')) e.target.replaceWith(e.target.alt);
+}, true);
+// Copied text keeps its emoji (pictures copy as nothing otherwise).
+document.addEventListener('copy', (e) => {
+  const sel = getSelection();
+  if (!sel?.rangeCount || e.target.closest?.('input, textarea')) return;
+  const frag = sel.getRangeAt(0).cloneContents();
+  const pics = frag.querySelectorAll('img.emoji, img.cemoji');
+  if (!pics.length) return;
+  pics.forEach((img) => img.replaceWith(img.alt));
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;left:-9999px;top:0;white-space:pre-wrap';
+  box.append(frag);
+  document.body.append(box);
+  e.clipboardData.setData('text/plain', box.innerText);
+  box.remove();
+  e.preventDefault();
+});
 // In the message box, custom emoji are written :name:, and turned into <:name:id> when sent.
 const emojiToNames = (text) => text.replace(/<:(\w{2,32}):\d+>/g, ':$1:');
 const namesToEmoji = (text) => text.replace(/(?<![\w<]):(\w{2,32}):(?!\w)/g, (all, name) => {
@@ -89,8 +121,7 @@ async function openEmojiPanel(anchor, onPick) {
     const b = document.createElement('button');
     b.type = 'button';
     b.title = name ? `:${name.replace(/ /g, '_')}:` : '';
-    if (custom || text.startsWith('<:')) b.innerHTML = emojiHtml(text);
-    else b.textContent = text;
+    b.innerHTML = emojiHtml(text);
     b.onclick = (e) => {
       rememberEmoji(text);
       onPick(text);
@@ -130,8 +161,8 @@ async function openEmojiPanel(anchor, onPick) {
     b.title = title;
     const first = list[0];
     if (title === 'Recent') b.textContent = '🕘';
-    else if (first?.[2]) b.innerHTML = emojiHtml(first[0]);
-    else b.textContent = first?.[0] ?? '?';
+    else if (first) b.innerHTML = emojiHtml(first[0]);
+    else b.textContent = '?';
     b.onclick = () => { search.value = ''; render(''); panel.querySelector(`#emoji-sec-${i}`)?.scrollIntoView(); };
     return b;
   }));
