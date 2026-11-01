@@ -26,6 +26,13 @@ import { codeEmail, type CodeEmail } from './mail-template.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
 
+// Characters that flip the direction of the text after them, which can disguise a link or a name.
+const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069]/g;
+/** Text with direction overrides taken out. */
+export const withoutBidi = (text: string) => text.replace(BIDI_CONTROLS, '');
+/** Nothing anyone could see: only spaces and invisible characters. */
+export const looksBlank = (text: string) => !text.replace(/[\s\u200B-\u200D\u2060\uFEFF\u180E\u3164\u115F\u1160\uFFA0]/g, '').length;
+
 export interface AppOptions {
   db: Db;
   publicDir: string;
@@ -416,8 +423,8 @@ export function createApp(opts: AppOptions): Server {
   };
 
   const cleanName = (value: unknown, field: string, max = 64) => {
-    if (typeof value !== 'string' || !value.trim()) throw new HttpError(400, `${field} is required`);
-    const v = value.trim();
+    const v = typeof value === 'string' ? withoutBidi(value).trim() : '';
+    if (!v || looksBlank(v)) throw new HttpError(400, `${field} is required`);
     if (v.length > max) throw new HttpError(400, `${field} must be at most ${max} characters`);
     return v;
   };
@@ -651,7 +658,7 @@ export function createApp(opts: AppOptions): Server {
     dmBlockCheck(channel.serverId, user.id);
     if (!extras.scheduled && !extras.webhook && !postAllowance.take(user.id))
       throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
-    const flagged = filterCheck(channel, user.id, typeof input.content === 'string' ? input.content : '');
+    const flagged = filterCheck(channel, user.id, typeof input.content === 'string' ? withoutBidi(input.content) : '');
     // Slow mode: people who manage rooms or messages aren't held back, and nor are scheduled messages.
     if (channel.slow && !extras.scheduled && !can(channel.serverId, user.id, 'rooms') && !can(channel.serverId, user.id, 'messages')) {
       const last = (db.prepare('SELECT MAX(created_at) AS t FROM messages WHERE channel_id = ? AND author_id = ?').get(channelId, user.id) as { t: number | null }).t;
@@ -660,7 +667,7 @@ export function createApp(opts: AppOptions): Server {
     }
     const raw = input.content ?? '';
     if (typeof raw !== 'string') throw new HttpError(400, 'Message is empty');
-    let content = raw;
+    let content = withoutBidi(raw);
     if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
     if (content.startsWith('/') && !extras.forwarded && !extras.webhook) {
       const command = slashCommand(content);
@@ -689,7 +696,7 @@ export function createApp(opts: AppOptions): Server {
       if (!sticker || !isMember(sticker.server_id, user.id)) throw new HttpError(400, "That sticker isn't available");
       stickerId = Number(input.stickerId);
     }
-    if (!content.trim() && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Message is empty');
+    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Message is empty');
     let replyId: number | null = null;
     const replyTo = input.replyTo;
     if (replyTo != null) {
@@ -771,6 +778,30 @@ export function createApp(opts: AppOptions): Server {
     false,
   );
 
+  // ---- usernames nobody new can take
+  // Names that read like the server itself, or like a removed account, unless ADMIN_USERS names one.
+  const RESERVED_NAMES = new Set(['admin', 'administrator', 'peiskos', 'support', 'system', 'deleted', 'moderator', 'staff', 'everyone', 'here']);
+  // A name someone gave up (by deleting the account or renaming) waits this long before anyone else can take it.
+  const NAME_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
+  const heldNameKey = (name: string) => `held_name:${name.toLowerCase()}`;
+  const holdName = (name: string, userId: number) =>
+    db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(heldNameKey(name), JSON.stringify({ until: now() + NAME_HOLD_MS, userId }));
+  /** Throws unless `username` is free for this person (or a new one) to take. */
+  const checkNameFree = (username: string, userId?: number) => {
+    const lower = username.toLowerCase();
+    if (RESERVED_NAMES.has(lower) && !(opts.hosting?.admins ?? []).some((n) => n.toLowerCase() === lower))
+      throw new HttpError(409, 'That username is reserved');
+    const taken = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number } | undefined;
+    if (taken && taken.id !== userId) throw new HttpError(409, 'That username is taken');
+    const row = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(heldNameKey(username)) as { value: string } | undefined;
+    if (!row) return;
+    let held: { until?: number; userId?: number } = {};
+    try { held = JSON.parse(row.value); } catch {}
+    if ((held.until ?? 0) <= now()) db.prepare('DELETE FROM app_settings WHERE key = ?').run(heldNameKey(username));
+    else if (held.userId !== userId) throw new HttpError(409, 'That username is taken');
+  };
+
   /** Somewhere this person has a login from now: their own home or phone, not a stranger's. */
   const knownAddress = (userId: number | undefined, ip: string) =>
     userId !== undefined && !!db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND ip = ?').get(userId, ip);
@@ -799,8 +830,7 @@ export function createApp(opts: AppOptions): Server {
       // forgotten password can be reset from day one without confirming it first.
       const email = opts.mail && typeof body.email === 'string' ? body.email.trim() : '';
       if (opts.mail && !looksLikeEmail(email)) throw new HttpError(400, "Enter your email, so you can reset a forgotten password");
-      if (db.prepare('SELECT 1 FROM users WHERE username = ?').get(username))
-        throw new HttpError(409, 'That username is taken');
+      checkNameFree(username);
       const r = db
         .prepare('INSERT INTO users (username, password_hash, created_at, email, email_verified) VALUES (?, ?, ?, ?, ?)')
         .run(username, hashPassword(body.password), now(), email || null, email ? 1 : 0);
@@ -1038,6 +1068,8 @@ export function createApp(opts: AppOptions): Server {
     const serverId = Number(r.lastInsertRowid);
     db.prepare('INSERT INTO members (server_id, user_id, joined_at) VALUES (?, ?, ?)').run(serverId, user.id, t);
     db.prepare('INSERT INTO channels (server_id, name, created_at) VALUES (?, ?, ?)').run(serverId, 'general', t);
+    // Every hearth starts with its fire, when this server has voice.
+    if (opts.voice) db.prepare("INSERT INTO channels (server_id, name, kind, created_at) VALUES (?, 'Campfire', 'voice', ?)").run(serverId, t);
     addModeratorRole(db, serverId);
     return serverSummary(serverId, user.id);
   });
@@ -1070,7 +1102,7 @@ export function createApp(opts: AppOptions): Server {
 
   /** A host leaving deletes the burrow, with its files, pictures and emoji. */
   const deleteBurrow = (serverId: number) => {
-    broadcastToServer(serverId, { type: 'server_deleted', serverId });
+    broadcastToServer(serverId, { type: 'server_deleted', serverId, reason: 'deleted' });
     // Its bots belong to it alone, so their tokens stop working with it.
     for (const { id } of db.prepare('SELECT id FROM users WHERE bot = 1 AND bot_server_id = ? AND deleted_at IS NULL').all(serverId) as { id: number }[]) {
       db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id);
@@ -1252,7 +1284,8 @@ export function createApp(opts: AppOptions): Server {
     // A bot can't come back, so removing it is the same as deleting it: its token and webhook stop too.
     if (isBotUser(targetId)) removeBot(serverId, targetId);
     else removeMember(serverId, targetId);
-    sendTo([targetId], { type: 'server_deleted', serverId });
+    // Their app says so, rather than the hearth just vanishing.
+    sendTo([targetId], { type: 'server_deleted', serverId, reason: body.ban ? 'banned' : 'removed' });
     return { ok: true };
   });
 
@@ -1671,7 +1704,8 @@ export function createApp(opts: AppOptions): Server {
     const left = timeoutLeft(channel.serverId, user.id);
     if (left) throw new HttpError(403, `You're timed out for ${left}`);
     const hasFiles = !!db.prepare('SELECT 1 FROM attachments WHERE message_id = ?').get(id);
-    if (typeof body.content !== 'string' || (!body.content.trim() && !hasFiles)) throw new HttpError(400, 'Message is empty');
+    if (typeof body.content === 'string') body.content = withoutBidi(body.content);
+    if (typeof body.content !== 'string' || (looksBlank(body.content) && !hasFiles)) throw new HttpError(400, 'Message is empty');
     if (body.content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
     const before = db.prepare('SELECT content, COALESCE(edited_at, created_at) AS at FROM messages WHERE id = ?').get(id) as { content: string; at: number };
     if (before.content === body.content) return messageById(id);
@@ -3216,8 +3250,8 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/channels/:id/scheduled', ({ user, params, body }) => {
     const channel = visibleRoom(Number(params[0]), user.id);
     if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
-    const content = typeof body.content === 'string' ? body.content : '';
-    if (!content.trim()) throw new HttpError(400, 'Message is empty');
+    const content = typeof body.content === 'string' ? withoutBidi(body.content) : '';
+    if (looksBlank(content)) throw new HttpError(400, 'Message is empty');
     if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
     const sendAt = Math.floor(Number(body.sendAt));
     if (!(sendAt > now() + 10_000 && sendAt < now() + 366 * 86400_000)) throw new HttpError(400, 'Pick a time in the next year');
@@ -4372,7 +4406,8 @@ export function createApp(opts: AppOptions): Server {
   const updateProfile = (user: User, body: Json) => {
     let changed = false;
     if (body.displayName !== undefined) {
-      const name = typeof body.displayName === 'string' ? body.displayName.replace(/\s+/g, ' ').trim() : '';
+      let name = typeof body.displayName === 'string' ? withoutBidi(body.displayName).replace(/\s+/g, ' ').trim() : '';
+      if (looksBlank(name)) name = '';
       if (name.length > 32) throw new HttpError(400, 'Keep your display name to 32 characters');
       db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name || null, user.id);
       changed = true;
@@ -4427,7 +4462,8 @@ export function createApp(opts: AppOptions): Server {
   route('PATCH', '/api/servers/:id/nickname', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
-    const nick = typeof body.nickname === 'string' ? body.nickname.replace(/\s+/g, ' ').trim() : '';
+    let nick = typeof body.nickname === 'string' ? withoutBidi(body.nickname).replace(/\s+/g, ' ').trim() : '';
+    if (looksBlank(nick)) nick = '';
     if (nick.length > 32) throw new HttpError(400, 'Keep your nickname to 32 characters');
     db.prepare('UPDATE members SET nickname = ? WHERE server_id = ? AND user_id = ?').run(nick || null, serverId, user.id);
     sendServerUpdate(serverId);
@@ -4618,8 +4654,11 @@ export function createApp(opts: AppOptions): Server {
     confirmIdentity(user, body);
     const username = cleanName(body.username, 'Username', 32);
     if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Username may only use letters, numbers, _ . -');
-    const taken = db.prepare('SELECT id FROM users WHERE username = ?').get(username) as { id: number } | undefined;
-    if (taken && taken.id !== user.id) throw new HttpError(409, 'That username is taken');
+    // Keeping your own name in a different case is fine, reserved or not.
+    if (username.toLowerCase() !== user.username.toLowerCase()) {
+      checkNameFree(username, user.id);
+      holdName(user.username, user.id);
+    }
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run(username, user.id);
     return userChanged(user.id);
   });
@@ -4944,6 +4983,7 @@ export function createApp(opts: AppOptions): Server {
          email = NULL, email_verified = 0, email_code = NULL, reset_code = NULL, reset_link = NULL, totp_secret = NULL, totp_pending = NULL,
          recovery_codes = '[]', status_text = NULL, status_emoji = NULL, deleted_at = ? WHERE id = ?`,
     ).run(`deleted-${user.id}-${randomBytes(4).toString('hex')}`, now(), user.id);
+    holdName(user.username, -1);
     for (const p of places) if (p.kind === 'dm' && p.dm_key) sendServerUpdate(p.id);
     userChanged(user.id);
   };
@@ -5211,8 +5251,8 @@ export function createApp(opts: AppOptions): Server {
           if (channelId === undefined) throw new HttpError(400, 'Join the fire to talk there');
           const left = timeoutLeft(channelById(channelId)!.serverId, user.id);
           if (left) throw new HttpError(403, `You're timed out for ${left}`);
-          const content = typeof msg.content === 'string' ? msg.content.trim() : '';
-          if (!content) throw new HttpError(400, 'Message is empty');
+          const content = typeof msg.content === 'string' ? withoutBidi(msg.content).trim() : '';
+          if (looksBlank(content)) throw new HttpError(400, 'Message is empty');
           if (content.length > 1000) throw new HttpError(400, 'Message is too long');
           if (!postAllowance.take(user.id)) throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
           const author = nameIn(channelById(channelId)!.serverId, user.id);

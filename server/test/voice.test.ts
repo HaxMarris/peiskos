@@ -78,8 +78,9 @@ test('voice rooms', async () => {
   await call(base, '/api/join', { body: { inviteCode: server.inviteCode }, token: sam.token });
 
   const withVoice = (await call(base, `/api/servers/${server.id}/channels`, { body: { name: 'Game Night', kind: 'voice' }, token: max.token })).data;
-  const room = withVoice.channels.find((c: any) => c.kind === 'voice');
-  assert.equal(room.name, 'Game Night');
+  // Every new hearth starts with its Campfire; Game Night is the second fire.
+  assert.deepEqual(withVoice.channels.filter((c: any) => c.kind === 'voice').map((c: any) => c.name), ['Campfire', 'Game Night']);
+  const room = withVoice.channels.find((c: any) => c.name === 'Game Night');
   assert.deepEqual(room.voiceUsers, []);
   const general = withVoice.channels.find((c: any) => c.kind === 'text');
 

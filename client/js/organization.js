@@ -590,7 +590,7 @@ function inviteCardHtml(p) {
     <div class="invite-body">
       <span class="invite-tile"></span>
       <div><div class="muted small">You're invited to</div><b>${escapeHtml(p.name)}</b>
-      <div class="muted small">${p.members} member${p.members === 1 ? '' : 's'} · ${p.online} around</div></div>
+      <div class="muted small">${p.members} member${p.members === 1 ? '' : 's'} · ${p.online} online</div></div>
     </div>
     ${p.description ? `<p class="small">${escapeHtml(p.description)}</p>` : ''}`;
 }

@@ -611,7 +611,7 @@ function renderMembers() {
     return [h, ul];
   };
   $('#member-list').replaceChildren(
-    ...section('Around the fire', members.filter((m) => m.online)),
+    ...section('Online', members.filter((m) => m.online)),
     ...section('Offline', members.filter((m) => !m.online)),
   );
   renderChannelSub();
@@ -633,11 +633,11 @@ function renderChannelSub() {
     sub.append(back);
     return;
   }
-  if (s.group) return ($('#channel-sub').textContent = `Group · ${s.members.length} people, ${s.members.filter((m) => m.online).length} around`);
-  if (isDm(s)) return ($('#channel-sub').textContent = `Direct message · ${partner(s).online ? 'around' : 'away'}`);
+  if (s.group) return ($('#channel-sub').textContent = `Group · ${s.members.length} people, ${s.members.filter((m) => m.online).length} online`);
+  if (isDm(s)) return ($('#channel-sub').textContent = `Direct message · ${partner(s).online ? 'online' : 'offline'}`);
   const people = roomMembers(s);
   const here = people.filter((m) => m.online).length;
   const topic = where?.c.topic;
-  $('#channel-sub').textContent = topic || `${s.name} · ${here} of ${people.length} around`;
+  $('#channel-sub').textContent = topic || `${s.name} · ${here} of ${people.length} online`;
   $('#channel-sub').title = topic || '';
 }

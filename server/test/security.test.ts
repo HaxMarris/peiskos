@@ -233,8 +233,8 @@ test("an admin name in ADMIN_USERS stays with its account when they change their
     assert.match(admin.data.checks.find((c: any) => c.key === 'admins').text, /later/);
     // Boss renames; whoever takes "boss" next isn't an admin, and nor is boss under the new name.
     assert.equal((await req('/api/me/username', boss.token, { username: 'chief', password: 'password1' })).status, 200);
-    const sneaky = (await req('/api/register', undefined, { username: 'Boss', password: 'password1' })).data;
-    assert.equal((await req('/api/admin', sneaky.token)).status, 403);
+    // The old name is held for a while, so nobody can sign up as "boss" straight away.
+    assert.equal((await req('/api/register', undefined, { username: 'Boss', password: 'password1' })).status, 409);
     assert.equal((await req('/api/admin', boss.token)).status, 403);
   } finally {
     hosted.closeAllConnections();
