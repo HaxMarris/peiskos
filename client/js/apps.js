@@ -77,8 +77,13 @@ function wireAppSettings() {
 }
 
 // No "install this site" offer: the browser version installs as a bare browser window, not the
-// real app. The desktop and Android apps are downloaded from peiskos.app instead.
+// real app. "Get the app" in your menu opens the real desktop and Android downloads instead
+// (iPhones get the app through TestFlight, so it's hidden there).
 window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
+if (!isApp && !/iPhone|iPad/.test(navigator.userAgent) && !(/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)) {
+  $('#get-app-btn').classList.remove('hidden');
+  $('#get-app-btn').onclick = () => window.open('https://github.com/HaxMarris/peiskos/releases/latest', '_blank', 'noopener');
+}
 
 // A newer desktop app: a green button in the top bar, as in Discord, that restarts into it once
 // you confirm. (An unsigned Mac build can't install it itself, so the button opens the download.)
