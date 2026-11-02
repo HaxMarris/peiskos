@@ -398,8 +398,7 @@ through Apple's TestFlight. Like the desktop app they connect to `https://peisko
 otherwise, and keep a voice call going with the screen off. Setting them up (a signing key for
 Android, an Apple developer account for iPhones) is in [mobile/README.md](mobile/README.md).
 
-**Or from the browser:** on Android, open the server address in Chrome and pick *Install the app* from your menu
-(your picture, top right) or Chrome's own *Install app*; Peiskos then has its own icon, opens without
+**Or from the browser:** on Android, open the server address in Chrome and pick Chrome's own *Install app*; Peiskos then has its own icon, opens without
 the browser around it, shows up in the share menu of other apps, and can send alerts while closed.
 On an iPhone or iPad, use Safari's Share › *Add to Home Screen*. Both need Peiskos on `https://`.
 
