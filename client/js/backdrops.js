@@ -195,7 +195,7 @@ const BACKDROP_SCENES = {
       ${bdGrad('mt', [[0, '#9a6a9a'], [1, '#6a4270']])}${bdGrad('h1', [[0, '#5a3462'], [1, '#43264a']])}${bdGrad('h2', [[0, '#3a1f40'], [1, '#2a1430']])}${bdVignette(0.5)}</defs>
     <rect width="1600" height="900" fill="url(#s)"/>
     <circle cx="820" cy="470" r="300" fill="url(#sun)"/>
-    <path d="M520 600 760 330Q800 300 840 330L1080 600Z" fill="url(#mt)"/>
+    <path d="M253 900 760 330Q800 300 840 330L1347 900Z" fill="url(#mt)"/>
     <path d="M760 330Q800 300 840 330L900 400 860 390 830 410 800 385 770 405 740 392 700 400Z" fill="#f4e6f0"/>
     ${bdRidge(81, 640, 70, 7, 'url(#h1)')}
     ${bdRidge(83, 740, 60, 6, 'url(#h2)')}
@@ -204,11 +204,16 @@ const BACKDROP_SCENES = {
       const tree = (x, dir, seed) => {
         const rnd = bdRandom(seed);
         let out = `<path d="M${x} 900C${x + dir * 20} 760 ${x + dir * 10} 640 ${x + dir * 80} 520S${x + dir * 260} 380 ${x + dir * 380} 300M${x + dir * 60} 600C${x + dir * 140} 560 ${x + dir * 200} 520 ${x + dir * 260} 420M${x + dir * 120} 470C${x + dir * 80} 380 ${x + dir * 40} 300 ${x + dir * 10} 200" stroke="#2a1420" stroke-width="22" fill="none" stroke-linecap="round"/>`;
-        for (let i = 0; i < 160; i++) {
-          const cx = x + dir * (rnd() * 420);
-          const cy = 140 + rnd() * 420;
+        // Clouds of blossom round the branch ends, thicker in the middle of each.
+        const clumps = [[380, 300, 120], [260, 420, 110], [10, 200, 110], [170, 290, 130], [90, 470, 100], [300, 190, 100]];
+        for (let i = 0; i < 190; i++) {
+          const [kx, ky, kr] = clumps[i % clumps.length];
+          const a = rnd() * Math.PI * 2;
+          const d = Math.sqrt(rnd()) * kr;
+          const cx = x + dir * (kx + Math.cos(a) * d);
+          const cy = ky + Math.sin(a) * d * 0.75;
           const c = ['#ffc8d8', '#f7a6c0', '#ffe2ea'][Math.floor(rnd() * 3)];
-          out += `<circle cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${(10 + rnd() * 22).toFixed(0)}" fill="${c}" opacity="${(0.65 + rnd() * 0.35).toFixed(2)}"/>`;
+          out += `<circle cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" r="${(8 + rnd() * 18).toFixed(0)}" fill="${c}" opacity="${(0.7 + rnd() * 0.3).toFixed(2)}"/>`;
         }
         return out;
       };
