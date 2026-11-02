@@ -9,7 +9,7 @@ import { inTransaction, type Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 import { PokerTable, MAX_SEATS, shuffledDeck, type Action, type Card } from './poker.ts';
 import {
-  CASES, PETS, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
+  BACKDROPS, CASES, PETS, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
   linePays, type Rarity, type Skin,
 } from './casino-items.ts';
 
@@ -57,6 +57,8 @@ export interface CasinoContext {
   serverMemberIds: (serverId: number) => number[];
   isOnline: (userId: number) => boolean;
   sendTo: (userIds: Iterable<number>, event: Json) => void;
+  can: (serverId: number, userId: number, perm: 'burrow') => boolean;
+  sendServerUpdate: (serverId: number) => void;
   /** Shorter waits, for tests. */
   timing?: { turnMs: number; awayTurnMs: number; pauseMs: number; dealMs: number; battleRoundMs?: number };
   deck?: () => Card[];
@@ -429,10 +431,54 @@ export function casino(ctx: CasinoContext) {
   const petChanged = (userId: number, h: number, pet: string | null) =>
     ctx.sendTo(ctx.serverMemberIds(h), { type: 'casino_pet', serverId: h, userId, pet });
 
+  // ---- backdrops: bought with chips. You see yours behind this hearth's fires, and someone who can edit
+  // the hearth can put one they own up for everyone (yours still shows for you).
+  const ownsBackdrop = (userId: number, h: number, id: string) =>
+    !!db.prepare('SELECT 1 FROM casino_backdrops WHERE user_id = ? AND server_id = ? AND backdrop_id = ?').get(userId, h, id);
+  const backdropsView = (userId: number, h: number) => ({
+    backdrops: BACKDROPS,
+    myBackdrops: (db.prepare('SELECT backdrop_id AS id FROM casino_backdrops WHERE user_id = ? AND server_id = ?').all(userId, h) as { id: string }[]).map((r) => r.id),
+    backdrop: (db.prepare('SELECT backdrop FROM casino_wallets WHERE user_id = ? AND server_id = ?').get(userId, h) as { backdrop: string | null } | undefined)?.backdrop ?? null,
+    hearthBackdrop: (db.prepare('SELECT backdrop FROM servers WHERE id = ?').get(h) as { backdrop: string | null }).backdrop,
+    canPutUp: ctx.can(h, userId, 'burrow'),
+  });
+  const backdropChanged = (userId: number, h: number, backdrop: string | null) => ctx.sendTo([userId], { type: 'casino_backdrop', serverId: h, backdrop });
+
+  route('POST', '/api/servers/:id/casino/backdrops/:code', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    const bd = BACKDROPS.find((b) => b.id === params[1]);
+    if (!bd) throw fail(404, 'No such backdrop');
+    inTransaction(db, () => {
+      if (ownsBackdrop(user.id, h, bd.id)) throw fail(400, 'You already have that one');
+      take(user.id, h, bd.price);
+      db.prepare('INSERT INTO casino_backdrops (user_id, server_id, backdrop_id, bought_at) VALUES (?, ?, ?, ?)').run(user.id, h, bd.id, Date.now());
+      db.prepare('UPDATE casino_wallets SET backdrop = ? WHERE user_id = ? AND server_id = ?').run(bd.id, user.id, h);
+    });
+    backdropChanged(user.id, h, bd.id);
+    return { wallet: walletView(user.id, h), ...backdropsView(user.id, h) };
+  });
+
+  /** Which of your backdrops you see here, or none. With { hearth: true }, what everyone sees instead. */
+  route('PUT', '/api/servers/:id/casino/backdrop', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    const id = typeof body.backdrop === 'string' ? body.backdrop : null;
+    if (id !== null && !ownsBackdrop(user.id, h, id)) throw fail(400, "That backdrop isn't yours");
+    if (body.hearth === true) {
+      if (!ctx.can(h, user.id, 'burrow')) throw fail(403, 'Only people who can edit the hearth can put one up for everyone');
+      db.prepare('UPDATE servers SET backdrop = ? WHERE id = ?').run(id, h);
+      ctx.sendServerUpdate(h);
+    } else {
+      wallet(user.id, h);
+      db.prepare('UPDATE casino_wallets SET backdrop = ? WHERE user_id = ? AND server_id = ?').run(id, user.id, h);
+      backdropChanged(user.id, h, id);
+    }
+    return backdropsView(user.id, h);
+  });
+
   /** For the fire settings picker: the pets, which you have here, the one out, and your chips here. */
   route('GET', '/api/servers/:id/casino/pets', ({ user, params }) => {
     const h = hearth(params[0], user.id);
-    return { ...petsView(user.id, h), chips: wallet(user.id, h).chips };
+    return { ...petsView(user.id, h), ...backdropsView(user.id, h), chips: wallet(user.id, h).chips };
   });
 
   route('POST', '/api/servers/:id/casino/pets/:code', ({ user, params }) => {

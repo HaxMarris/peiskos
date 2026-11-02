@@ -324,12 +324,13 @@ export function createApp(opts: AppOptions): Server {
       .prepare(
         `SELECT id, name, kind, owner_id AS ownerId, invite_code AS inviteCode, dm_key AS dmKey, description, rules,
                 welcome_channel_id AS welcomeChannelId, afk_channel_id AS afkChannelId, afk_minutes AS afkMinutes, live_channel_id AS liveChannelId,
-                COALESCE(fire_look, 'classic') AS fireLook, COALESCE(sky_look, 'evening') AS skyLook,
+                COALESCE(fire_look, 'classic') AS fireLook, COALESCE(sky_look, 'evening') AS skyLook, backdrop,
+                (SELECT cw.backdrop FROM casino_wallets cw WHERE cw.user_id = ? AND cw.server_id = servers.id) AS myBackdrop,
                 CASE WHEN icon IS NULL THEN NULL ELSE '/api/burrow-pictures/' || icon END AS icon,
                 CASE WHEN banner IS NULL THEN NULL ELSE '/api/burrow-pictures/' || banner END AS banner
          FROM servers WHERE id = ?`,
       )
-      .get(serverId) as Json;
+      .get(viewerId, serverId) as Json;
     // A conversation with no pair key is a group DM, which can have a name.
     if (server.kind === 'dm') {
       delete server.inviteCode;
@@ -1637,7 +1638,7 @@ export function createApp(opts: AppOptions): Server {
 
   const casinoTables = casino({
     db, route, fail: (status, message) => new HttpError(status, message),
-    channelById, inVoice, usersInVoice, isMember, serverMemberIds, sendTo,
+    channelById, inVoice, usersInVoice, isMember, serverMemberIds, sendTo, can, sendServerUpdate,
     isOnline: (userId) => sockets.has(userId),
     ...opts.casino,
   });
