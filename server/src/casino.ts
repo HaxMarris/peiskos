@@ -24,8 +24,8 @@ const FLOAT_STEPS = 2 ** 47; // randomInt takes ranges up to 2^48
 /** How many cases can be opened at once. */
 const CASE_COUNTS = [1, 2, 5, 10, 20];
 const BLACKJACK_MIN = 10;
-const BLACKJACK_MAX = 10_000;
-export const POKER = { smallBlind: 10, bigBlind: 20, minBuyIn: 400, maxBuyIn: 4000 };
+const BLACKJACK_MAX = 250_000;
+export const POKER = { smallBlind: 10, bigBlind: 20, minBuyIn: 400, maxBuyIn: 100_000 };
 const AWAY_STAND_MS = 2 * 60_000; // offline this long at a table, and you get up (with your chips)
 const SITTING_OUT_STAND_MS = 10 * 60_000;
 export const BATTLE_MAX_ROUNDS = 10;
@@ -137,6 +137,7 @@ export function casino(ctx: CasinoContext) {
       wears: WEARS,
       slots: { strips: SLOT_STRIPS, lines: SLOT_LINES, pays: SLOT_PAYS, twoCherries: SLOT_TWO_CHERRIES, bets: SLOT_BETS },
       poker: POKER,
+      blackjackBets: { min: BLACKJACK_MIN, max: BLACKJACK_MAX },
       caseCounts: CASE_COUNTS,
       tradeUp: { count: TRADE_UP_COUNT, next: TRADE_UP_NEXT },
       upgrade: { maxItems: UPGRADE_MAX_ITEMS, edge: UPGRADE_EDGE, maxChance: UPGRADE_MAX_CHANCE },
@@ -662,7 +663,7 @@ export function casino(ctx: CasinoContext) {
       const other = atTable(user.id);
       if (other !== undefined) throw fail(400, other === channel.id ? "You're already at this table" : "You're already at a table at another fire");
       const chips = wholeChips(body.buyIn, 'A buy-in');
-      if (chips < POKER.minBuyIn || chips > POKER.maxBuyIn) throw fail(400, `Buy in for ${POKER.minBuyIn} to ${POKER.maxBuyIn} chips`);
+      if (chips < POKER.minBuyIn || chips > POKER.maxBuyIn) throw fail(400, `Buy in for ${POKER.minBuyIn} to ${POKER.maxBuyIn.toLocaleString('en')} chips`);
       const seat = Number(body.seat);
       const t = tableOf(channel.id);
       if (!Number.isInteger(seat) || seat < 0 || seat >= MAX_SEATS || t.seats[seat]) throw fail(400, 'That seat is taken');
@@ -681,7 +682,7 @@ export function casino(ctx: CasinoContext) {
       const s = t?.seats[t.seatOf(user.id)];
       if (!t || !s) throw fail(400, "You aren't at this table");
       const chips = wholeChips(body.chips, 'Chips');
-      if (s.stack + chips > POKER.maxBuyIn) throw fail(400, `You can have up to ${POKER.maxBuyIn} chips at the table`);
+      if (s.stack + chips > POKER.maxBuyIn) throw fail(400, `You can have up to ${POKER.maxBuyIn.toLocaleString('en')} chips at the table`);
       if (t.hand && !t.hand.done && s.inHand) throw fail(400, 'Wait for this hand to finish');
       take(user.id, channel.serverId, chips);
       tableRule(() => t.addChips(user.id, chips));
