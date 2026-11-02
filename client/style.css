@@ -259,7 +259,6 @@ ul { list-style: none; margin: 0; padding: 0; }
 #channel-list li.active { background: var(--accent-soft); color: var(--text-strong); }
 #channel-list li.unread { color: var(--text-strong); font-weight: 800; }
 #channel-list li.unread::after { content: ""; margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--cloudberry); flex: none; }
-#channel-list li.unread .room-gear { margin-left: 4px; }
 #channel-list li .ping-count + .dm-close { margin-left: 4px; }
 #channel-list li.dm.unread { font-weight: 800; }
 #channel-list li.hint { cursor: default; font-weight: 400; font-size: 13px; }
@@ -374,10 +373,21 @@ ul { list-style: none; margin: 0; padding: 0; }
 .room-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lock-icon { width: 13px; height: 13px; fill: currentColor; opacity: .6; flex: none; }
 .room-gear { margin-left: auto; padding: 2px; opacity: 0; }
-.room-gear svg { width: 15px; height: 15px; }
+.room-gear svg { width: 16px; height: 16px; }
 .fire-pin + .room-gear { margin-left: 0; }
-#channel-list li:hover .room-gear, #voice-list li:hover .room-gear, .room-gear:focus-visible { opacity: 1; }
-@media (hover: none) { .room-gear { opacity: 1 !important; } }
+#voice-list li:hover .room-gear, .room-gear:focus-visible { opacity: 1; }
+/* In the room list the gear only shows on the room you hover or are in, and takes the unread dot's or
+   @ count's spot while it does. Phones reach it by holding the room instead. */
+:is(#channel-list, #archived-list) li .room-gear { display: none; opacity: 1; }
+:is(#channel-list, #archived-list) li:is(:hover, :focus-within, .active) .room-gear { display: grid; }
+#channel-list li:is(:hover, :focus-within, .active):has(.room-gear) .ping-count { display: none; }
+#channel-list li:is(:hover, :focus-within, .active):has(.room-gear)::after { display: none; }
+@media (hover: none) {
+  :is(#channel-list, #archived-list) li:not(.active) .room-gear { display: none; }
+  .fire-card .room-gear, #voice-list .room-gear:not(.fire-pin) { display: none; }
+  .fire-pin { opacity: 1; }
+  #channel-list li, #voice-list li, .fire-card { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+}
 label.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 600; cursor: pointer; }
 label.check input { width: auto; }
 .report-reasons { display: flex; flex-direction: column; gap: 10px; margin: 4px 0 12px; }
@@ -467,7 +477,7 @@ label.check input { width: auto; }
   .side-head { display: none; }
   .switch-foot { flex-wrap: wrap; }
   .switch-foot .settings { flex-basis: 100%; }
-  .room-gear { opacity: .85 !important; }
+  .fire-pin { opacity: .85 !important; }
   .me-btn { display: none; }
   .app.switching .sidebar { filter: brightness(.6); pointer-events: none; }
   .star { width: 44px; height: 44px; }
@@ -476,7 +486,6 @@ label.check input { width: auto; }
   .sidebar { padding: 6px 10px 10px; border-right: 0; border-radius: 0; }
   .side-head { padding: 10px 2px 0 10px; }
   #channel-list li { min-height: 48px; font-size: 16px; padding-left: 14px; }
-  .room-gear { opacity: 1; }
   #voice-list li { padding: 12px 14px; }
 
   .tabbar { grid-area: tabs; display: flex; background: var(--sidebar); border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
@@ -1147,7 +1156,6 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -.25em; }
 #archived-list li { min-height: 34px; padding: 0 8px 0 10px; border-radius: 10px; color: var(--muted); cursor: pointer; display: flex; align-items: center; gap: 9px; margin: 1px 0; font-weight: 600; font-size: 14px; opacity: .7; }
 #archived-list li:hover { background: var(--hover); opacity: 1; }
 #archived-list li.active { background: var(--accent-soft); color: var(--text-strong); opacity: 1; }
-#archived-list li:hover .room-gear { opacity: 1; }
 .arrange-list { display: flex; flex-direction: column; gap: 2px; margin: 4px 0 8px; }
 .arrange-list li { display: flex; align-items: center; gap: 4px; padding: 4px 6px; border-radius: 10px; }
 .arrange-list li:hover { background: var(--hover); }
