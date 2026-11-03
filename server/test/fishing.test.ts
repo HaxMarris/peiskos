@@ -179,18 +179,19 @@ test('derby entries count only this week\'s fish by hand, and a finished week pa
   assert.deepEqual((await enter(a.token, fish(40, 3))).data, { best: true, perfect: false, place: 1, lead: false });
   assert.deepEqual((await enter(b.token, fish(60, 1))).data, { best: true, perfect: false, place: 1, lead: true });
   assert.deepEqual((await enter(b.token, fish(10, 2))).data, { best: false, perfect: false, place: 1, lead: false }, 'shorter never replaces');
-  // A perfect one counts even when it's shorter, and puts a back in front (no second post within the hour).
-  assert.deepEqual((await enter(a.token, fish(30, 5))).data, { best: false, perfect: true, place: 1, lead: false });
+  // A perfect one (5 stars, size 100) puts a back in front (no second post within the hour).
+  assert.deepEqual((await enter(a.token, fish(100, 5))).data, { best: true, perfect: true, place: 1, lead: false });
   assert.equal((await enter(a.token, fish(90, 2, { idle: true }))).status, 400, 'idle rods do not count');
   const other = [...loadSpecies().keys()].find((k) => k !== now.derby.fish)!;
   assert.equal((await enter(a.token, { f: other, s: 1, t: 0, q: 1 })).status, 400);
-  // Two perfect ones beat one, however long the fish.
-  await enter(b.token, fish(20, 5));
-  assert.deepEqual((await enter(b.token, fish(25, 5))).data, { best: false, perfect: true, place: 1, lead: false });
-  assert.deepEqual((await enter(a.token, fish(80, 2))).data, { best: true, perfect: false, place: 2, lead: false });
+  // Only both together count; two perfect ones beat one.
+  assert.deepEqual((await enter(b.token, fish(99, 5))).data, { best: true, perfect: false, place: 2, lead: false }, '5 stars alone is not perfect');
+  assert.deepEqual((await enter(b.token, fish(100, 5))).data, { best: true, perfect: true, place: 2, lead: false }, 'one each: a got there first');
+  assert.deepEqual((await enter(b.token, fish(100, 4))).data, { best: false, perfect: false, place: 2, lead: false }, 'size 100 alone is not perfect');
+  assert.deepEqual((await enter(b.token, fish(100, 5))).data, { best: false, perfect: true, place: 1, lead: false });
   const board = (await call(`${path}/derby`, { token: a.token })).data;
   assert.deepEqual(board.rows.map((r: any) => [r.name, r.perfect]), [['derby_b', 2], ['derby_a', 1]]);
-  assert.deepEqual(board.me, { place: 2, perfect: 1, size: fish(80, 2).s, stars: 2 });
+  assert.deepEqual(board.me, { place: 2, perfect: 1, size: fish(100, 5).s, stars: 5 });
 
   // Last week's derby, never settled: the next look settles it and hands out places.
   const last = '2000-01-03';

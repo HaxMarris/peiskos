@@ -11,7 +11,7 @@
 // that matches its score within that species' range.
 //
 // Each hearth also runs a weekly derby: one rare-or-better species at one water, Monday to Sunday
-// Eastern. Whoever lands the most perfect (5-star) ones by hand wins, and the server settles the
+// Eastern. Whoever lands the most perfect ones (5 stars, size 100) by hand wins, and the server settles the
 // places once the week is over. The game pays its own prizes from those places, as it does every other coin.
 import { readFileSync } from 'node:fs';
 import type { Db } from './db.ts';
@@ -105,7 +105,7 @@ export function pickDerby(ponds: ReturnType<typeof loadPonds>, opened: string[][
 }
 type Entry = { userId: number; perfect: number; perfectAt: number; size: number; stars: number; caughtAt: number };
 /**
- * Most perfect (5-star) catches first, and whoever reached that many first. With none (or the same
+ * Most perfect catches (5 stars and a size score of 100) first, and whoever reached that many first. With none (or the same
  * count at the same moment), the longest one, then more stars, then whoever landed theirs first.
  */
 export const derbyOrder = (a: Entry, b: Entry) =>
@@ -286,7 +286,7 @@ export function fishing(ctx: FishingContext) {
     const before = entriesOf(h, week);
     const had = before.find((e) => e.userId === user.id);
     // Every perfect one adds to your count; any catch longer than your longest replaces it.
-    const perfect = stars === 5;
+    const perfect = stars === 5 && score === 100;
     const longer = !had || size > had.size || (size === had.size && stars > had.stars);
     if (!perfect && !longer) return { best: false, perfect: false, place: before.indexOf(had!) + 1, lead: false };
     if (!had) {
