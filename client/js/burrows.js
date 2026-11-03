@@ -653,6 +653,7 @@ function renderMembers() {
         } else li.title = 'Your profile and nickname';
         li.classList.add('can-dm');
         li.onclick = () => openPerson(s, m);
+        li.dataset.hoverUser = m.id;
         if (canActOn(s, m)) {
           const more = iconButton('⋯', `Manage ${nameOfPerson(m)}`, (e) => { e.stopPropagation(); openMemberMenu(s, m); });
           more.classList.add('member-more');

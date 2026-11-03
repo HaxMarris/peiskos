@@ -119,6 +119,7 @@ function addMessageNodes(parent, m, prev, body) {
     // Their name and picture open their card.
     av.classList.add('opens-card');
     av.onclick = body.querySelector('.author').onclick = () => openPersonById(m.authorId);
+    av.dataset.hoverUser = body.querySelector('.author').dataset.hoverUser = m.authorId;
     group.append(av, body);
     parent.append(group);
   }
@@ -140,7 +141,12 @@ function appendMessage(m, { stick = false } = {}) {
     return renderMessages({ stick: true });
   }
   if (!prev || !tailBody?.isConnected) return renderMessages({ stick });
+  const groupBefore = tailBody;
   tailBody = addMessageNodes(messagesEl, m, prev, tailBody);
+  // Someone else's new message eases in: the whole group when it starts one, otherwise just its line.
+  const line = messagesEl.querySelector(`.line[data-id="${m.id}"]`);
+  // Your own were already showing (faded) while sending, so they just settle in place.
+  if (m.authorId !== state.me.id) (tailBody !== groupBefore ? line?.closest('.group') ?? line : line)?.classList.add('arrive');
   if (stick || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -247,7 +253,16 @@ function startEdit(m, contentEl, value = emojiToNames(m.content), focus = true) 
       e.preventDefault();
       const content = namesToEmoji(ta.value.trim());
       if (!content && !m.attachments?.length && !m.sticker) return confirmDelete(m);
-      if (content !== m.content) await api(`/api/messages/${m.id}`, { method: 'PATCH', body: { content } }).catch(alertError);
+      // The new text shows at once; if the server turns it down, the old text comes back.
+      const before = { content: m.content, editedAt: m.editedAt };
+      if (content !== m.content) {
+        Object.assign(m, { content, editedAt: m.editedAt ?? Date.now() });
+        api(`/api/messages/${m.id}`, { method: 'PATCH', body: { content } }).catch((err) => {
+          Object.assign(m, before);
+          refreshLine(m.id);
+          alertError(err);
+        });
+      }
       done();
     }
   };
@@ -601,8 +616,23 @@ function wireSettingsFrame() {
     $('#modal-card .settings-pane').prepend(back);
   }
 }
+// Something closing fades away: a copy of it, with no ids and no clicks, plays the exit while the
+// real one is already gone, so nothing that checks whether it's open has to wait.
+function fadeOut(el, kind = 'layer') {
+  if (!el || el.classList.contains('hidden') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const ghost = el.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  ghost.classList.add('leaving', `leaving-${kind}`);
+  el.after(ghost);
+  setTimeout(() => ghost.remove(), 200);
+}
+
 function closeModal() {
   settingsFrame = null;
+  fadeOut($('#modal'));
   $('#modal').classList.add('hidden');
   const closing = onModalClose;
   onModalClose = null;

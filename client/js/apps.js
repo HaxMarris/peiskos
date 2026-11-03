@@ -250,22 +250,22 @@ async function openPlace(s, c) {
  * A search box over a list of places. Arrows move, Enter opens, and with nothing typed the
  * unread ones come first. `pick` gets the chosen place; `only` narrows what's listed.
  */
-function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true }) {
+function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true, actions = [] }) {
   modal(`<h2>${escapeHtml(title)}</h2>
     <input id="place-search" class="place-search" placeholder="Where to?" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="place-list" aria-autocomplete="list" />
     <ul id="place-list" class="place-list" role="listbox" aria-label="Places"></ul>
     <p class="small muted">${escapeHtml(hint)}</p>`, 'place-modal');
-  const all = switcherPlaces().filter(only);
+  const all = [...switcherPlaces().filter(only), ...actions];
   const box = $('#place-search');
   let shown = [];
   let at = 0;
-  const unread = (p) => (p.c ? isUnread(p.c) : serverUnread(p.s));
+  const unread = (p) => (p.kind === 'action' ? false : p.c ? isUnread(p.c) : serverUnread(p.s));
   const render = () => {
     const q = box.value.trim().toLowerCase().replace(/^[#@]/, '');
     shown = q
       ? all.filter((p) => p.label.toLowerCase().includes(q) || p.sub.toLowerCase().includes(q))
         .sort((a, b) => b.label.toLowerCase().startsWith(q) - a.label.toLowerCase().startsWith(q) || unread(b) - unread(a))
-      : [...all].sort((a, b) => unread(b) - unread(a) || (b.c?.id === state.channelId) - (a.c?.id === state.channelId));
+      : all.filter((p) => p.kind !== 'action').sort((a, b) => unread(b) - unread(a) || (b.c?.id === state.channelId) - (a.c?.id === state.channelId));
     shown = shown.slice(0, 40);
     at = Math.min(at, Math.max(0, shown.length - 1));
     $('#place-list').replaceChildren(...shown.map((p, i) => {
@@ -274,7 +274,8 @@ function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true 
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(i === at));
       li.className = (i === at ? 'active' : '') + (unread(p) ? ' unread' : '');
-      const mark = p.kind === 'dm' ? '@' : p.kind === 'burrow' ? '' : '#';
+      const mark = p.kind === 'dm' ? '@' : p.kind === 'burrow' || p.kind === 'action' ? '' : '#';
+      if (p.kind === 'action') li.classList.add('place-action');
       li.innerHTML = `<span class="place-label">${mark}${escapeHtml(p.label)}</span><span class="small muted">${escapeHtml(p.sub)}</span>`;
       li.onclick = () => { closeModal(); pick(p); };
       return li;
@@ -299,12 +300,32 @@ function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true 
   render();
   box.focus();
 }
-const openQuickSwitcher = () => openPlacePicker({ title: 'Go to', hint: 'Type part of a room, conversation or hearth. Unread ones come first.' });
+// Things you can do from Ctrl+K as well as places to go. They show once you start typing.
+function quickActions() {
+  const s = state.servers.get(state.serverId);
+  const hearth = s && !isDm(s) ? s : null;
+  const fire = hearth?.channels.find((c) => c.kind === 'voice');
+  const act = (label, go) => ({ kind: 'action', label, sub: 'Action', go });
+  return [
+    act('New message', () => openNewDm()),
+    act('Search messages', () => openSearch()),
+    s && serverUnread(s) && act(`Mark ${hearth ? hearth.name : 'this conversation'} as read`, () => markServerRead(s)),
+    hearth && act(`Invite people to ${hearth.name}`, () => openInvites(hearth.id)),
+    hearth && act(`${hearth.name} settings`, () => openHearthSettings(hearth.id)),
+    state.voice && act(state.voice.muted ? 'Unmute' : 'Mute', () => toggleMute()),
+    state.voice && act('Leave the fire', () => leaveVoice()),
+    !state.voice && fire && state.voiceEnabled && act(`Join the fire in ${hearth.name}`, () => joinVoice(fire.id)),
+    act('Your account', () => openAccount()),
+    act('Start or join a hearth', () => openAddServer('create')),
+    act('Keyboard shortcuts', () => openShortcuts()),
+  ].filter(Boolean);
+}
+const openQuickSwitcher = () => openPlacePicker({ title: 'Go to', hint: 'Type part of a room, conversation or hearth, or something to do. Unread ones come first.', actions: quickActions() });
 
 // ---------------------------------------------------------------- keyboard shortcuts
 
 const SHORTCUTS = [
-  ['Ctrl+K', 'Go to a room, conversation or hearth'],
+  ['Ctrl+K', 'Go to a room, conversation or hearth, or do something'],
   ['Ctrl+F', 'Search messages'],
   ['Alt+↑ / Alt+↓', 'Previous or next room'],
   ['Alt+Shift+↑ / ↓', 'Previous or next unread room, in any hearth'],

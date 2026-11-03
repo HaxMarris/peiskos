@@ -1014,6 +1014,7 @@ function renderReactions(m) {
   for (const r of m.reactions) {
     const b = document.createElement('button');
     b.className = 'reaction' + (r.userIds.includes(state.me.id) ? ' mine' : '');
+    if (popReaction?.id === m.id && popReaction.emoji === r.emoji) { b.classList.add('pop'); popReaction = null; }
     const server = state.servers.get(state.serverId);
     b.title = r.userIds.map((id) => nameOfPerson(server?.members.find((x) => x.id === id))).join(', ');
     b.innerHTML = `<span class="r-emoji">${emojiHtml(r.emoji)}</span><span class="r-count">${r.userIds.length}</span>`;
@@ -1029,12 +1030,24 @@ function renderReactions(m) {
   return row;
 }
 
+// The reaction changes at once; the server's answer (or an error) settles it.
 function toggleReaction(m, emoji) {
   haptic();
+  const before = m.reactions ?? [];
+  const me = state.me.id;
+  const had = before.find((r) => r.emoji === emoji)?.userIds.includes(me);
+  m.reactions = had
+    ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: r.userIds.filter((id) => id !== me) } : r)).filter((r) => r.userIds.length)
+    : before.some((r) => r.emoji === emoji)
+      ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: [...r.userIds, me] } : r))
+      : [...before, { emoji, userIds: [me] }];
+  popReaction = had ? null : { id: m.id, emoji };
+  refreshLine(m.id);
   api(`/api/messages/${m.id}/reactions`, { method: 'POST', body: { emoji } })
     .then(({ reactions }) => { m.reactions = reactions; refreshLine(m.id); })
-    .catch(alertError);
+    .catch((err) => { m.reactions = before; refreshLine(m.id); alertError(err); });
 }
+let popReaction = null; // the reaction you just added, which pops once
 
 function openEmojiPicker(anchor, m) {
   closeEmojiPicker();

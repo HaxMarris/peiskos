@@ -5,6 +5,7 @@
       "id": 3,
       "items": [
         "Going back to a room shows it at once, right where you were reading.",
+        "Point at someone's name for a moment to see who they are and message them. Ctrl+K can now do things too, like inviting people or joining the fire.",
         "Messages show up the moment you send them, faded until they're delivered, with Try again if one doesn't go through.",
         "When two friends sit down at a fire, the rest of the hearth gets a note with a Join button. Set a hearth to only @mentions to turn it off.",
         "Right-click a hearth to mark it as read, or press Shift+Esc. Alt+Shift+↓ now jumps to the next unread room in any hearth.",

@@ -364,6 +364,7 @@ function openMenu(anchor, items) {
 }
 function outsideMenu(e) { if (!e.target.closest('#pop-menu')) closeMenu(); }
 function closeMenu() {
+  fadeOut($('#pop-menu'), 'menu');
   $('#pop-menu')?.remove();
   document.removeEventListener('mousedown', outsideMenu);
 }
