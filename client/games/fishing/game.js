@@ -393,10 +393,10 @@ const BAITS = [
   { id: 'minnows', name: 'Live minnows', cost: 150, gain: .06, pack: 20, desc: 'Triples the odds of predators. No extra luck or size.', luck: 0, size: 0, likes: ['predator'] },
   { id: 'shrimp', name: 'Shrimp', cost: 500, gain: .18, pack: 20, desc: 'For salt water and bottom feeders. A bit luckier.', luck: .3, size: .1, likes: ['sea', 'bottom'] },
   { id: 'glow', name: 'Glow grubs', cost: 2500, gain: .35, pack: 20, desc: 'Draws up deep and cold-water fish. Much luckier.', luck: .6, size: .15, likes: ['deep', 'cold'] },
-  // Crayfish, squid and larvae show up once their water is unlocked.
+  // Crayfish, ember fly, squid and larvae show up once their water is unlocked.
   { id: 'crayfish', name: 'Crayfish', cost: 3000, gain: .5, pack: 20, desc: 'Predators and bottom feeders go for it, like the river and marsh giants. Much luckier.', luck: .8, size: .2, likes: ['predator', 'bottom'], from: 'river' },
   { id: 'squid', name: 'Squid strips', cost: 6000, gain: .75, pack: 20, desc: 'For the reef and the wreck: salt water and deep fish. Luckier and bigger.', luck: 1.2, size: .35, likes: ['sea', 'deep'], from: 'lagoon' },
-  { id: 'emberfly', name: 'Ember fly', cost: 10000, gain: 1.3, pack: 20, desc: 'Ember fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'] },
+  { id: 'emberfly', name: 'Ember fly', cost: 3000, gain: .65, pack: 20, desc: 'Ember fish and rare fish rise to it. Very lucky, and bigger fish.', luck: 1, size: .3, likes: ['ember', 'rare'], from: 'marsh' },
   { id: 'larvae', name: 'Golden larvae', cost: 12000, gain: 2, pack: 20, desc: 'Rare fish of every kind rise to it. The luckiest bait there is.', luck: 1.6, size: .45, likes: ['rare'], from: 'tarn' },
 ];
 const BAIT = Object.fromEntries(BAITS.map(b => [b.id, b]));
