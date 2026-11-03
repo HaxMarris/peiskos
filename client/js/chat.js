@@ -25,6 +25,11 @@ function renderMessages({ stick = false } = {}) {
     } else start.innerHTML = isDm(server)
       ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
       : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
+    // Nobody else here yet: the next step is getting friends in.
+    if (!isDm(server) && !where.thread && (server.members?.length ?? 0) < 2) {
+      start.insertAdjacentHTML('beforeend', '<div class="history-start-actions"><button type="button" class="btn" data-invite>Invite friends</button><span class="muted small">It\'s just you here so far.</span></div>');
+      start.querySelector('[data-invite]').addEventListener('click', () => openInvites(server.id));
+    }
     start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
     frag.append(start);
   }
@@ -40,6 +45,7 @@ function renderMessages({ stick = false } = {}) {
   if (stick || (nearBottom && state.reachedEnd)) messagesEl.scrollTop = messagesEl.scrollHeight;
   else messagesEl.scrollTop = scrollTop;
   renderSeen();
+  renderOutbox();
 }
 
 // While a room's messages load: a few grey rows shaped like messages.
@@ -548,7 +554,7 @@ function settingsFrameHtml() {
   const rows = settingsFrame.items.map((i) => {
     const heading = i.group !== group ? `<span class="nav-group">${escapeHtml(i.group ?? '')}</span>` : '';
     group = i.group;
-    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}</button>`;
+    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}${i.value ? `<span class="nav-value">${escapeHtml(i.value)}</span>` : ''}</button>`;
   });
   return `<h2 class="frame-title">${escapeHtml(settingsFrame.title)}</h2><nav class="tabs" role="tablist" aria-label="${escapeHtml(settingsFrame.title)}">${rows.join('')}</nav>`;
 }
@@ -732,7 +738,7 @@ function openHearthSettings(serverId, first) {
       renderBans(s, true);
     } },
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
-    { id: 'notify', group: 'You', label: `Notifications: ${notifyLabel}`, action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
+    { id: 'notify', group: 'You', label: 'Notifications', value: notifyLabel.charAt(0).toUpperCase() + notifyLabel.slice(1), action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
     { id: 'review', group: 'You', label: 'Year in review', run: () => openYearReview(s.id) },
     { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
   ], first);
@@ -787,6 +793,8 @@ function wireBurrowPicture(s) {
     catch (err) { $('#burrow-picture-error').textContent = err.message; }
   };
 }
+
+$('#dm-empty-new').onclick = () => openNewDm();
 
 $('#add-channel').onclick = () => {
   if (state.inDms) return openNewDm();

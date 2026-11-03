@@ -334,8 +334,7 @@ async function openBots(serverId) {
       <input id="bot-name" maxlength="32" placeholder="Name, e.g. Dice bot" required />
       <button type="submit" class="btn">Add bot</button>
     </form>
-    <div id="bot-secret" class="bot-secret hidden"></div>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'bots-modal');
+    <div id="bot-secret" class="bot-secret hidden"></div>`, 'bots-modal');
   const showSecret = (title, value, note) => {
     const box = $('#bot-secret');
     box.classList.remove('hidden');

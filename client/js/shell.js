@@ -160,11 +160,21 @@ $('#scheduled-btn').onclick = () => openScheduledList();
 document.addEventListener('click', closeMeMenu);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMeMenu(); });
 
+// A short drop goes unnoticed; one that lasts a few seconds gets a strip at the top.
+let connBarTimer = null;
 function setConnected(ok, text) {
   $('#conn-status').classList.toggle('ok', ok);
   $('#conn-status').textContent = text;
   $('#me-btn').classList.toggle('offline', !ok);
+  if (ok || text !== 'Reconnecting…') {
+    clearTimeout(connBarTimer);
+    connBarTimer = null;
+    return $('#conn-bar').classList.add('hidden');
+  }
+  // Each failed retry lands here again; the first one starts the clock.
+  connBarTimer ??= setTimeout(() => $('#conn-bar').classList.toggle('hidden', !state.token || offline), 3000);
 }
+$('#conn-retry').onclick = () => { clearTimeout(wsTimer); connect(); };
 
 // Where you can get back to the voice room from: the chip in the top bar, and the pill above a phone's chat.
 function renderVoicePlaces() {
@@ -281,8 +291,7 @@ function openPerson(s, m) {
         <input type="range" id="pv-voice" min="0" max="200" step="5" value="${Math.round(volumeFor(m.id) * 100)}" /></label>
       <span class="small muted">Only changes it for you.</span>
     </div>` : ''}
-    <div class="person-actions" id="person-actions"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`, 'sheet profile-modal');
+    <div class="person-actions" id="person-actions"></div>`, 'sheet profile-modal');
   const card = $('#profile-card');
   let profile = { ...m };
   const draw = () => card.replaceChildren(profileHeader(profile, s));
@@ -469,8 +478,7 @@ function openFriends(tab) {
     <div class="error" id="add-friend-error"></div>
     <div class="tabs" role="tablist" id="friends-tabs"></div>
     <ul class="friend-list" id="friend-list"></ul>
-  </div>
-  <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'sheet');
+  </div>`, 'sheet');
   $('#add-friend').onsubmit = async (e) => {
     e.preventDefault();
     $('#add-friend-error').textContent = '';

@@ -2,6 +2,13 @@
   "about": "What changed, in words for friends, newest first. Add a line to the top entry as things merge; start a new entry (the next id) after a release. Each release's notes start with the entries it adds, and the app shows people the ones they haven't seen.",
   "entries": [
     {
+      "id": 3,
+      "items": [
+        "If you lose your connection for more than a few seconds, a bar at the top says so, with a button to try again. Messages waiting to send show greyed out in the chat.",
+        "Messages has a proper empty screen until you start a conversation, and a new hearth has an Invite friends button."
+      ]
+    },
+    {
       "id": 2,
       "items": [
         "In the desktop app, the update button lists what the new version brings, and \"What's new\" waits until you've updated."

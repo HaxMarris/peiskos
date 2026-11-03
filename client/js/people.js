@@ -201,8 +201,7 @@ function openMemberMenu(s, m) {
     ${removable && can(s, 'remove') ? '<button class="btn secondary" id="member-remove">Remove from hearth</button>' : ''}
     ${removable && can(s, 'ban') ? '<button class="btn danger" id="member-ban">Ban from hearth</button>' : ''}
     ${removable && (can(s, 'remove') || can(s, 'ban')) ? `<p class="small muted">Removed people can come back with the invite code. Banned people can't, until they're unbanned in the hearth's settings.</p>` : ''}
-    <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div class="error" id="modal-error"></div>`);
   const act = async (path, body) => {
     try { await api(`/api/servers/${s.id}/members/${m.id}/${path}`, { method: 'POST', body }); closeModal(); }
     catch (err) { $('#modal-error').textContent = err.message; }
@@ -251,7 +250,7 @@ function openRoles(serverId) {
     }).join('')}</ul>
     ${s.roles.length ? '' : '<p class="muted">No roles yet.</p>'}
     <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button><button class="btn" id="role-new">New role</button></div>`);
+    <div class="modal-row"><button class="btn" id="role-new">New role</button></div>`);
   const refresh = (updated) => { state.servers.set(updated.id, updated); openRoles(serverId); };
   $('#modal-card').querySelectorAll('[data-move]').forEach((b) => (b.onclick = async () => {
     try { refresh(await api(`/api/roles/${b.dataset.id}`, { method: 'PATCH', body: { move: b.dataset.move } })); }

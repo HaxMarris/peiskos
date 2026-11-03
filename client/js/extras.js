@@ -280,8 +280,7 @@ async function openFireDecor() {
       <p class="small muted">Everyone's time around ${escapeHtml(hearth.name)}'s fires together: <b>${hoursText(fire.hours)}</b>. ${fire.canChange ? 'Pick how its fires burn.' : 'People who can edit the hearth pick how its fires burn.'}</p>
       <div class="decor-grid" id="decor-looks">${fire.looks.map(look).join('')}</div>
       <h3>The sky above</h3>
-      <div class="decor-grid" id="decor-skies">${fire.skies.map(sky).join('')}</div>` : ''}
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'decor-modal');
+      <div class="decor-grid" id="decor-skies">${fire.skies.map(sky).join('')}</div>` : ''}`, 'decor-modal');
   /** Puts a premium pet out in this hearth (or away, with null). */
   const setPet = (id) => {
     const me = hearth.members?.find((m) => m.id === state.me.id);
@@ -471,8 +470,7 @@ function openMotd(serverId) {
         ${state.maxUploadBytes ? '<button type="button" class="btn secondary" id="motd-photo">Add with a photo</button><input type="file" id="motd-file" accept="image/png,image/jpeg,image/gif,image/webp" hidden />' : ''}
       </div>
       <div class="error" id="motd-error"></div>
-    </form>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'motd-modal');
+    </form>`, 'motd-modal');
   const done = (r) => { s.motd = r.motd; renderToday(state.servers.get(state.serverId) === s ? s : null); openMotd(serverId); };
   const fail = (err) => { $('#motd-error').textContent = err.message; };
   $('#motd-new').onsubmit = async (e) => {
@@ -535,8 +533,7 @@ async function openYearReview(serverId, year = new Date().getFullYear()) {
     </div>
     ${r.mostLoved ? `<section class="review-loved"><h3>Most loved message</h3><blockquote>${escapeHtml(r.mostLoved.content)}</blockquote><span class="small muted">${escapeHtml(r.mostLoved.author)} · ${n(r.mostLoved.reactions)} reactions</span></section>` : ''}
     ${day ? `<p class="small muted">The busiest day was ${escapeHtml(day)}, with ${n(r.busiestDay.n)} messages.</p>` : ''}
-    <section class="review-you"><h3>You</h3><p>${n(r.you.messages)} messages, ${n(r.you.reactions)} reactions and ${hoursText(r.you.fireHours)} at the fire.</p></section>`}
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'review-modal');
+    <section class="review-you"><h3>You</h3><p>${n(r.you.messages)} messages, ${n(r.you.reactions)} reactions and ${hoursText(r.you.fireHours)} at the fire.</p></section>`}`, 'review-modal');
   $('#review-year')?.addEventListener('change', (e) => openYearReview(serverId, Number(e.target.value)));
 }
 

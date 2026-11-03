@@ -552,6 +552,8 @@ async function loadServers() {
   state.favorites = favs.serverIds;
   [...list, ...dms].forEach(rememberAvatars);
   state.servers = new Map([...list, ...dms].map((s) => [s.id, s]));
+  // The list can be fetched a moment before this device's connection counts you as online.
+  for (const s of state.servers.values()) for (const m of s.members ?? []) if (m.id === state.me?.id) m.online = true;
   state.serverOrder = list.map((s) => s.id);
   state.dmOrder = dms.map((s) => s.id);
   if (state.servers.has(state.serverId)) state.inDms = isDm(state.servers.get(state.serverId));

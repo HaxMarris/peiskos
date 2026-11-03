@@ -181,7 +181,6 @@ function openServers() {
     <p class="muted small">Each server is a different host's Peiskos. Switching keeps you logged in to all of them.</p>
     <ul class="server-accounts" id="server-accounts"></ul>
     <div class="modal-row">
-      <button type="button" class="btn secondary" data-close>Close</button>
       <button type="button" class="btn" id="add-account">Add a server</button>
     </div>`);
   const rows = list.map((a) => {
@@ -828,7 +827,37 @@ function queueMessage(channelId, body) {
 }
 
 function renderOutbox() {
-  const list = readOutbox();
+  const all = readOutbox();
+  // This room's waiting messages show greyed out at the end of the chat; the box below lists the rest.
+  const here = all.filter((q) => q.channelId === state.channelId);
+  const list = all.filter((q) => q.channelId !== state.channelId);
+  const cancelButton = (q) => {
+    const cancel = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
+    cancel.setAttribute('aria-label', "Don't send");
+    cancel.onclick = () => { saveOutbox(readOutbox().filter((x) => x.id !== q.id)); renderOutbox(); };
+    return cancel;
+  };
+  const log = $('#messages');
+  log.querySelector('.waiting-lines')?.remove();
+  if (here.length) {
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    const wrap = document.createElement('div');
+    wrap.className = 'waiting-lines';
+    wrap.append(...here.map((q) => {
+      const row = document.createElement('div');
+      row.className = 'waiting-line';
+      const text = document.createElement('span');
+      text.className = 'waiting-text';
+      text.textContent = q.body.content;
+      const note = document.createElement('span');
+      note.className = 'waiting-note';
+      note.textContent = 'Waiting to send';
+      row.append(text, note, cancelButton(q));
+      return row;
+    }));
+    log.append(wrap);
+    if (nearBottom) log.scrollTop = log.scrollHeight;
+  }
   const box = $('#outbox');
   box.classList.toggle('hidden', !list.length);
   if (!list.length) return box.replaceChildren();
@@ -842,9 +871,7 @@ function renderOutbox() {
     const label = document.createElement('span');
     label.className = 'outbox-text';
     label.textContent = (where ? `${isDm(where.s) ? dmTitle(where.s) : '#' + where.c.name}: ` : '') + q.body.content;
-    const cancel = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
-    cancel.onclick = () => { saveOutbox(readOutbox().filter((x) => x.id !== q.id)); renderOutbox(); };
-    row.append(label, cancel);
+    row.append(label, cancelButton(q));
     return row;
   }));
 }

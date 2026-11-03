@@ -122,6 +122,7 @@
   <div id="app" class="app hidden" data-view="rooms">
     <a class="skip-link" href="#composer-input">Skip to the message box</a>
     <div id="offline-bar" class="offline-bar hidden" role="status">You're offline. Showing what was saved on this device; messages you write go out when you're back.</div>
+    <div id="conn-bar" class="offline-bar conn-bar hidden" role="status"><span>Reconnecting…</span><button type="button" class="link-btn" id="conn-retry">Try now</button></div>
     <header class="topbar">
       <div class="brand"><span class="logo-mark"></span><span class="brand-name">Peiskos</span><span class="season-mark" aria-hidden="true"></span></div>
       <nav class="burrow-nav" id="burrow-nav" aria-label="Your hearths"></nav>
@@ -469,6 +470,11 @@
         <div class="error" id="empty-error"></div>
         <div class="or">or</div>
         <button id="empty-add" class="btn secondary">Start a hearth</button>
+      </div>
+      <div id="dm-empty" class="empty-state hidden">
+        <h2>No conversations yet</h2>
+        <p class="muted">Message a friend directly, or start a group with a few of them.</p>
+        <button id="dm-empty-new" class="btn">New message</button>
       </div>
     </main>
 

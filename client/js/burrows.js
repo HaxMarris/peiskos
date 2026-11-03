@@ -83,6 +83,10 @@ function renderServers() {
   $('#empty-state').classList.toggle('hidden', !empty);
   // With no hearth yet, the room list and member list have nothing to show, so they step aside.
   $('#app').classList.toggle('no-hearth', empty);
+  // Messages with no conversation open: an empty screen instead of the last room's header and box.
+  const noDm = state.inDms && !state.servers.get(state.serverId);
+  $('#dm-empty').classList.toggle('hidden', !noDm);
+  $('#app').classList.toggle('no-dm', noDm);
 }
 
 // The burrow's picture, or its initials on a forest color.
