@@ -200,9 +200,11 @@ test('removing, leaving or deleting disconnects people from LiveKit', async () =
   kimWs.ws.send(JSON.stringify({ type: 'voice_join', channelId: room.id }));
   await hostWs.next((e) => e.type === 'voice_state' && e.userIds.includes(kim.user.id));
 
+  // Only calls for this test's room: a slow call left over from an earlier test can name the same user id.
+  const ours = (c: any) => c.body.room === `room-${room.id}` || c.claims?.video?.room === `room-${room.id}`;
   const waitForCall = async (method: string, identity?: string) => {
     for (let i = 0; i < 100; i++) {
-      const i2 = liveKitCalls.findIndex((c) => c.method === method && (identity === undefined || c.body.identity === identity));
+      const i2 = liveKitCalls.findIndex((c) => c.method === method && ours(c) && (identity === undefined || c.body.identity === identity));
       if (i2 >= 0) return liveKitCalls.splice(i2, 1)[0];
       await new Promise((r) => setTimeout(r, 20));
     }
