@@ -41,6 +41,7 @@ function renderServers() {
     if (on) b.setAttribute('aria-current', 'true');
     if (favs.includes(id)) b.classList.add('fav');
     b.onclick = () => selectServer(id);
+    b.oncontextmenu = (e) => { e.preventDefault(); openNotifyMenu(b, srv); };
     return b;
   });
 

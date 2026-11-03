@@ -46,7 +46,9 @@ function openNotifyMenu(anchor, s, c = null) {
     { label: tick(level === 'none', 'Nothing'), run: () => set({ level: 'none' }) },
   ];
   const later = (ms) => Date.now() + ms;
+  const unread = !c && [...s.channels, ...(s.threads ?? [])].some((x) => x.kind !== 'voice' && (x.unread || x.mentions));
   openMenu(anchor, [
+    unread && { label: 'Mark as read', run: () => markServerRead(s) },
     ...levels,
     muted
       ? { label: `Unmute (muted ${muteLabel(pref.mutedUntil)})`, run: () => set({ mutedUntil: null }) }

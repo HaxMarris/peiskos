@@ -307,7 +307,8 @@ const SHORTCUTS = [
   ['Ctrl+K', 'Go to a room, conversation or hearth'],
   ['Ctrl+F', 'Search messages'],
   ['Alt+↑ / Alt+↓', 'Previous or next room'],
-  ['Alt+Shift+↑ / ↓', 'Previous or next unread room'],
+  ['Alt+Shift+↑ / ↓', 'Previous or next unread room, in any hearth'],
+  ['Shift+Esc', 'Mark this hearth or conversation as read'],
   ['Esc', 'Close a window or menu, or stop replying'],
   ['↑ in an empty message box', 'Edit your last message'],
   ['Shift+Enter', 'New line in a message'],
@@ -339,6 +340,22 @@ function stepRoom(step, unreadOnly) {
     requestAnimationFrame(() => { if (!isPhone()) $('#composer-input').focus(); });
     return;
   }
+  // Nothing unread left here: on to the next hearth or conversation that has some.
+  if (unreadOnly) nextUnreadElsewhere(step);
+}
+
+async function nextUnreadElsewhere(step) {
+  const order = [...state.serverOrder, ...state.dmOrder];
+  const at = order.indexOf(state.serverId);
+  for (let i = 1; i < order.length; i++) {
+    const s = state.servers.get(order[(at + step * i + order.length * i) % order.length]);
+    if (!serverUnread(s)) continue;
+    const room = [...s.channels, ...(s.threads ?? [])].find((c) => isUnread(c) && roomLoud(s, c));
+    await selectServer(s.id, false, room ? { channelId: room.id } : null);
+    showView('chat');
+    requestAnimationFrame(() => { if (!isPhone()) $('#composer-input').focus(); });
+    return;
+  }
 }
 
 document.addEventListener('keydown', (e) => {
@@ -355,6 +372,9 @@ document.addEventListener('keydown', (e) => {
   } else if (mod && (e.key === '/' || e.key === '?')) {
     e.preventDefault();
     openShortcuts();
+  } else if (e.shiftKey && !mod && !e.altKey && e.key === 'Escape' && $('#modal').classList.contains('hidden')) {
+    const s = state.servers.get(state.serverId);
+    if (s) { e.preventDefault(); markServerRead(s); }
   } else if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     e.preventDefault();
     stepRoom(e.key === 'ArrowUp' ? -1 : 1, e.shiftKey);
@@ -839,22 +859,45 @@ function renderOutbox() {
   };
   const log = $('#messages');
   log.querySelector('.waiting-lines')?.remove();
-  if (here.length) {
+  const going = sending.filter((x) => x.channelId === state.channelId);
+  if (here.length || going.length) {
     const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
     const wrap = document.createElement('div');
     wrap.className = 'waiting-lines';
-    wrap.append(...here.map((q) => {
+    // Under someone else's message, your name goes above so it doesn't read as theirs.
+    if (state.messages.at(-1)?.authorId !== state.me.id) {
+      const head = document.createElement('div');
+      head.className = 'waiting-head';
+      head.textContent = nameOfPerson(state.me);
+      wrap.append(head);
+    }
+    const line = (content, noteText, buttons) => {
       const row = document.createElement('div');
       row.className = 'waiting-line';
       const text = document.createElement('span');
       text.className = 'waiting-text';
-      text.textContent = q.body.content;
-      const note = document.createElement('span');
-      note.className = 'waiting-note';
-      note.textContent = 'Waiting to send';
-      row.append(text, note, cancelButton(q));
+      text.textContent = content;
+      row.append(text);
+      if (noteText) {
+        const note = document.createElement('span');
+        note.className = 'waiting-note';
+        note.textContent = noteText;
+        row.append(note);
+      }
+      row.append(...buttons);
       return row;
-    }));
+    };
+    wrap.append(...going.map((x) => {
+      if (!x.failed) return line(x.content, '', []);
+      const retry = Object.assign(document.createElement('button'), { type: 'button', className: 'link-btn small', textContent: 'Try again' });
+      retry.onclick = () => { dropSending(x.key); sendMessage(x.channelId, x.body, alertError).catch(alertError); };
+      const drop = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
+      drop.setAttribute('aria-label', "Don't send");
+      drop.onclick = () => dropSending(x.key);
+      const row = line(x.content, 'Not sent', [retry, drop]);
+      row.classList.add('failed');
+      return row;
+    }), ...here.map((q) => line(q.body.content, 'Waiting to send', [cancelButton(q)])));
     log.append(wrap);
     if (nearBottom) log.scrollTop = log.scrollHeight;
   }

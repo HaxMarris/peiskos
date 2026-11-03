@@ -523,6 +523,7 @@ export function createApp(opts: AppOptions): Server {
       listen.joined(channelId);
       games.joined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
+      if (usersInVoice(channelId).length === 2) nudgeGathered(channel);
     }
   };
   // Going live: sharing your screen posts "is live" in the burrow's go-live room, with a way to
@@ -2883,6 +2884,34 @@ export function createApp(opts: AppOptions): Server {
         silent: inQuietHours(id),
         badge: badgeCount(id),
       });
+    }
+  };
+
+  /**
+   * A second person sat down at a hearth's fire: the rest of the hearth hears that friends are
+   * gathering, once every two hours per fire. In the app it's a note with a Join button; away from
+   * it, a push. Muted hearths, ones set to only @mentions or nothing, and do not disturb stay quiet.
+   */
+  const lastNudge = new Map<number, number>();
+  const nudgeGathered = (channel: Channel) => {
+    if (serverKind(channel.serverId) === 'dm') return;
+    if ((lastNudge.get(channel.id) ?? 0) > now() - 2 * 3600e3) return;
+    lastNudge.set(channel.id, now());
+    const there = usersInVoice(channel.id);
+    const names = there.map((id) => nameIn(channel.serverId, id));
+    const hearth = (db.prepare('SELECT name FROM servers WHERE id = ?').get(channel.serverId) as { name: string } | undefined)?.name ?? '';
+    const text = `${names.join(' and ')} are at the fire in ${hearth}`;
+    for (const id of channelAudience(channel)) {
+      if (there.includes(id) || inVoice.has(id)) continue;
+      if (there.some((u) => blocked(id, u))) continue;
+      const prefs = notifyPrefsOf(id, channel.serverId);
+      const burrowPref = prefs.get(0), roomPref = prefs.get(channel.id);
+      if (burrowPref?.mutedUntil || roomPref?.mutedUntil) continue;
+      const level = roomPref?.level ?? burrowPref?.level ?? null;
+      if (level === 'none' || level === 'mentions') continue;
+      if (statusRow(id)?.status === 'dnd') continue;
+      if (online.has(id) && !userIdle(id)) sendTo([id], { type: 'fire_gathered', serverId: channel.serverId, channelId: channel.id, text });
+      else pushTo(id, { title: hearth, body: text, tag: `fire-${channel.id}`, silent: inQuietHours(id) });
     }
   };
 

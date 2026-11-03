@@ -4,6 +4,10 @@
     {
       "id": 3,
       "items": [
+        "Messages show up the moment you send them, faded until they're delivered, with Try again if one doesn't go through.",
+        "When two friends sit down at a fire, the rest of the hearth gets a note with a Join button. Set a hearth to only @mentions to turn it off.",
+        "Right-click a hearth to mark it as read, or press Shift+Esc. Alt+Shift+↓ now jumps to the next unread room in any hearth.",
+        "Deleting your own message no longer asks first. You get a few seconds to undo it instead.",
         "If you lose your connection for more than a few seconds, a bar at the top says so, with a button to try again. Messages waiting to send show greyed out in the chat.",
         "Messages has a proper empty screen until you start a conversation, and a new hearth has an Invite friends button."
       ]

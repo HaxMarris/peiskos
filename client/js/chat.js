@@ -45,6 +45,7 @@ function renderMessages({ stick = false } = {}) {
   if (stick || (nearBottom && state.reachedEnd)) messagesEl.scrollTop = messagesEl.scrollHeight;
   else messagesEl.scrollTop = scrollTop;
   renderSeen();
+  hideDeleting();
   renderOutbox();
 }
 
@@ -252,7 +253,37 @@ function startEdit(m, contentEl, value = emojiToNames(m.content), focus = true) 
   };
 }
 
+// Your own messages go at once, with a few seconds to undo; anyone else's still asks first.
+const deleting = new Set();
+function hideDeleting() {
+  for (const id of deleting) messagesEl.querySelector(`.line[data-id="${id}"]`)?.classList.add('deleting');
+}
 function confirmDelete(m) {
+  if (m.authorId === state.me.id) {
+    deleting.add(m.id);
+    hideDeleting();
+    let undone = false;
+    const go = () => {
+      if (undone || !deleting.delete(m.id)) return;
+      api(`/api/messages/${m.id}`, { method: 'DELETE' }).catch((err) => {
+        messagesEl.querySelector(`.line[data-id="${m.id}"]`)?.classList.remove('deleting');
+        alertError(err);
+      });
+    };
+    const timer = setTimeout(go, 6000);
+    // Leaving the page before then still deletes it.
+    addEventListener('pagehide', go, { once: true });
+    toast('Message deleted.', {
+      action: 'Undo', timeout: 6000,
+      onAction: () => {
+        undone = true;
+        clearTimeout(timer);
+        deleting.delete(m.id);
+        messagesEl.querySelector(`.line[data-id="${m.id}"]`)?.classList.remove('deleting');
+      },
+    });
+    return;
+  }
   modal(`<h2>Delete message</h2><p>Are you sure you want to delete this message?</p>
     <div class="modal-row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" id="confirm-del">Delete</button></div>`);
   $('#confirm-del').onclick = async () => {
@@ -739,6 +770,7 @@ function openHearthSettings(serverId, first) {
     } },
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
     { id: 'notify', group: 'You', label: 'Notifications', value: notifyLabel.charAt(0).toUpperCase() + notifyLabel.slice(1), action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
+    serverUnread(s) && { id: 'read', group: 'You', label: 'Mark as read', action: 'do', run: () => { markServerRead(s); closeModal(); } },
     { id: 'review', group: 'You', label: 'Year in review', run: () => openYearReview(s.id) },
     { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
   ], first);
