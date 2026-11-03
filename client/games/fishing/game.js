@@ -679,19 +679,24 @@ const bestBait = () => BAITS.filter(b => b.cost && baitShown(b)).reduce((a, b) =
 const champBoost = () => serverNow() < S.derby.boost ? 1.1 : 1;
 const derbyName = d => `${FISH[d.fish] ? FISH[d.fish].name : 'Mystery fish'} week at ${pondOf(d.pond) ? pondOf(d.pond).name : 'the lake'}`;
 const placeWord = n => n + (n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th');
-/** A hand catch of this week's fish: sent when it beats your best, and marked on the catch card. */
+const fiveStars = n => `${n} five-star${n === 1 ? '' : 's'}`;
+/**
+ * A hand catch of this week's fish: every 5-star one counts toward your total, and a longer one
+ * replaces your longest (the tiebreak). Either is sent, and marked on the catch card.
+ */
 function derbyCatch(c) {
   const d = derby && derby.derby;
   if (!d || c.f !== d.fish) return null;
-  const me = derby.me;
-  if (me && (c.s < me.size || (c.s === me.size && c.q <= me.stars))) return 'derby';
-  derby.me = Object.assign({}, me, { size: c.s, stars: c.q });
+  const me = derby.me || { perfect: 0, size: 0, stars: 0 };
+  const five = c.q === 5, longer = !derby.me || c.s > me.size || (c.s === me.size && c.q > me.stars);
+  if (!five && !longer) return 'derby';
+  derby.me = Object.assign({}, me, { perfect: (me.perfect || 0) + (five ? 1 : 0) }, longer ? { size: c.s, stars: c.q } : {});
   toPeiskos({ kind: 'derbyEntry', c: { f: c.f, s: c.s, t: c.t, q: c.q, g: c.g } });
-  return 'derbybest';
+  return five ? 'derbyfive' : 'derbybest';
 }
 function onDerbyEntry(r) {
   if (!r || r.error || !derby || !derby.derby) return;
-  if (r.lead) post(`Took the lead in the derby (${derbyName(derby.derby)}) with ${cm(derby.me.size)}.`, true);
+  if (r.lead) post(`Took the lead in the derby (${derbyName(derby.derby)}) with ${derby.me.perfect ? fiveStars(derby.me.perfect) : cm(derby.me.size)}.`, true);
   askDerby();
 }
 /** Prizes for weeks that have finished since you last looked, each paid once. */
@@ -704,12 +709,12 @@ function payDerby() {
     const coins = derbyPrize(a.place), b = bestBait(), name = derbyName(a);
     total += coins; S.coins += coins;
     S.bait[b.id] = (S.bait[b.id] || 0) + b.pack;
-    lines.push(`<div><span>${name}: ${placeWord(a.place)}, ${cm(a.size)}</span><b>${coins ? '+' + fmt(coins) : ''}</b></div><div><span>Entry prize</span><b>${b.pack} ${b.name}</b></div>`);
+    lines.push(`<div><span>${name}: ${placeWord(a.place)}${a.perfect ? ', ' + fiveStars(a.perfect) : ''}</span><b>${coins ? '+' + fmt(coins) : ''}</b></div><div><span>Entry prize</span><b>${b.pack} ${b.name}</b></div>`);
     if (a.place === 1) {
       S.derby.trophy = { f: a.fish, s: a.size, week: a.week };
       // Champion's week: +10% on every catch until the next derby ends.
       S.derby.boost = Math.max(S.derby.boost, Date.parse(a.week + 'T05:00:00Z') + 14 * 86400000);
-      post(`Won the derby: ${name}, with ${cm(a.size)}.`, true);
+      post(`Won the derby: ${name}, with ${a.perfect ? fiveStars(a.perfect) : cm(a.size)}.`, true);
     }
   });
   S.derby.paid = S.derby.paid.slice(-12);
@@ -726,19 +731,20 @@ function onDerby(d) {
   renderMapNodes();
 }
 const timeLeftText = ms => { const h = Math.floor(ms / 3600000); return h >= 48 ? `${Math.floor(h / 24)} days left` : h >= 1 ? `${h}h ${Math.floor(ms / 60000) % 60}m left` : `${Math.max(1, Math.floor(ms / 60000))}m left`; };
+const derbyScore = r => `<b>${r.perfect || 0}<small> × 5★</small></b><span class="sub">longest ${cm(r.size)}</span>`;
 function derbyHtml() {
-  let h = `<h2>Derby <small>Monday to Sunday, Eastern</small></h2><p class="note" style="margin:0">One fish, one water, all week. Your longest one caught by hand counts; idle rods don't. Ties go to more stars, then whoever landed theirs first. The top three win coins (about an hour, 30 minutes and 15 minutes of fishing at your furthest water), everyone who enters gets a pack of your best bait, and the winner's fish is mounted on their dock with +10% on catches for a week.</p>`;
+  let h = `<h2>Derby <small>Monday to Sunday, Eastern</small></h2><p class="note" style="margin:0">One fish, one water, all week. Whoever lands the most 5-star ones by hand wins; idle rods don't count. A tie goes to whoever reached that many first, then to the longest one. The top three win coins (about an hour, 30 minutes and 15 minutes of fishing at your furthest water), everyone who enters gets a pack of your best bait, and the winner's fish is mounted on their dock with +10% on catches for a week.</p>`;
   if (!derby) return h + `<div class="empty-state">Loading the derby…</div>`;
   if (derby.error) return h + `<div class="empty-state">Couldn't load the derby. ${esc(derby.error)}</div>`;
   const d = derby.derby;
   if (!d) h += `<div class="empty-state">No derby this week. It needs at least two people fishing in this hearth.</div>`;
   else {
     const f = FISH[d.fish], own = S.ponds.includes(d.pond), can = f && (f.rod || 1) <= rod().tier;
-    h += `<div class="derby-head"><canvas data-fish="${d.fish}"></canvas><div><b>${f ? f.name : d.fish}</b> ${f ? rarHtml(f.r) : ''}<span>at ${pondOf(d.pond).name} · ${timeLeftText(derby.endsAt - serverNow())}</span>${!own ? `<span class="warn">You haven't opened ${pondOf(d.pond).name} yet.</span>` : !can ? `<span class="warn">Needs a tier ${f.rod} rod.</span>` : ''}${derby.me ? `<span>You: <b>${placeWord(derby.me.place)}</b> with ${cm(derby.me.size)} ${starsHtml(derby.me.stars)}</span>` : ''}</div></div>`;
+    h += `<div class="derby-head"><canvas data-fish="${d.fish}"></canvas><div><b>${f ? f.name : d.fish}</b> ${f ? rarHtml(f.r) : ''}<span>at ${pondOf(d.pond).name} · ${timeLeftText(derby.endsAt - serverNow())}</span>${!own ? `<span class="warn">You haven't opened ${pondOf(d.pond).name} yet.</span>` : !can ? `<span class="warn">Needs a tier ${f.rod} rod.</span>` : ''}${derby.me ? `<span>You: <b>${placeWord(derby.me.place)}</b> with ${fiveStars(derby.me.perfect || 0)}, longest ${cm(derby.me.size)}</span>` : ''}</div></div>`;
     if (!derby.rows.length) h += `<div class="empty-state">Nobody has landed one yet.</div>`;
-    else h += `<ol class="board derbyboard">${derby.rows.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${starsHtml(r.stars)}<b>${cm(r.size)}</b></div></li>`).join('')}</ol>`;
+    else h += `<ol class="board derbyboard">${derby.rows.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${derbyScore(r)}</div></li>`).join('')}</ol>`;
   }
-  if (derby.last && derby.last.top.length) h += `<h2>Last week <small>${derbyName(derby.last)}</small></h2><ol class="board derbyboard">${derby.last.top.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${starsHtml(r.stars)}<b>${cm(r.size)}</b></div></li>`).join('')}</ol>`;
+  if (derby.last && derby.last.top.length) h += `<h2>Last week <small>${derbyName(derby.last)}</small></h2><ol class="board derbyboard">${derby.last.top.map((r, i) => `<li${r.me ? ' class="me"' : ''}><span class="rank">${i + 1}</span><div class="who"><b>${esc(r.name)}</b><span>${r.wins ? `${r.wins} derby win${r.wins > 1 ? 's' : ''}` : '&nbsp;'}</span></div><div class="score">${derbyScore(r)}</div></li>`).join('')}</ol>`;
   return h;
 }
 function boardHtml() {
@@ -1275,7 +1281,8 @@ function showCatch(c, notes) {
   if (c.p) tags.push('<span class="tag green">Perfect hook</span>');
   if (notes.includes('new')) tags.push('<span class="tag">New species</span>');
   if (notes.includes('record')) tags.push('<span class="tag">Size record</span>');
-  if (notes.includes('derbybest')) tags.push('<span class="tag gold">Derby: your best this week</span>');
+  if (notes.includes('derbyfive')) tags.push(`<span class="tag gold">Derby: 5-star, ${derby && derby.me ? fiveStars(derby.me.perfect) : ''} this week</span>`);
+  else if (notes.includes('derbybest')) tags.push('<span class="tag gold">Derby: your longest this week</span>');
   else if (notes.includes('derby')) tags.push('<span class="tag">Derby fish</span>');
   $('catchbox').innerHTML = `<div class="catch"><canvas id="catchCv"></canvas><div class="row"><h3>${f.name}</h3></div><div class="row">${rarHtml(f.r)}${starsHtml(c.q)}</div><div class="row"><span>${cm(c.s)} <small style="color:var(--muted)">(${f.min}–${f.max})</small></span><span class="val">+${fmt(c.v)}</span></div>${sizeHtml(c.t)}${tags.length ? '<div class="tags">' + tags.join('') + '</div>' : ''}</div>`;
   paintFishCanvas($('catchCv'), f, false, c.t / 100);
