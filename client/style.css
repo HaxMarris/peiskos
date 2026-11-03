@@ -1992,3 +1992,21 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 /* A message you just deleted, during the few seconds you can undo it. */
 .line.deleting { display: none; }
 .group:has(.line):not(:has(.line:not(.deleting))) { display: none; }
+
+/* An error line takes no room until there's something in it. */
+.auth-card .error:empty { display: none; }
+
+/* One focus ring for keyboard users, wherever a control doesn't draw its own. */
+:where(button, a, summary, [tabindex], [role="button"]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* Buttons give a little when pressed, so a tap feels answered. */
+.icon-btn, .pill, .link-btn, .switch-row, #channel-list li { transition: background .15s, color .15s, transform .08s; }
+.icon-btn:active, .pill:active { transform: scale(.92); }
+.link-btn:active, .switch-row:active, #channel-list li:active { transform: scale(.98); }
+.btn:active { transform: translateY(1px) scale(.98); }
+.btn.secondary:active { background: var(--hover); }
+@media (prefers-reduced-motion: reduce) { .icon-btn:active, .pill:active, .link-btn:active, .switch-row:active, #channel-list li:active, .btn:active { transform: none; } }
+
+.empty-note { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 28px 12px; text-align: center; }
+.empty-note b { color: var(--text-strong); font-size: 15px; }
+.empty-note span { color: var(--muted); font-size: 13px; max-width: 320px; }

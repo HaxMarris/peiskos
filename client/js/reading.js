@@ -334,6 +334,9 @@ async function sendMessage(channelId, body, onFail) {
   }
 }
 
+/** What an empty list says: a short title and how to fill it. */
+const emptyNote = (title, text) => `<div class="empty-note"><b>${escapeHtml(title)}</b><span>${escapeHtml(text)}</span></div>`;
+
 // ---- small pop-up menus and notes
 
 function openMenu(anchor, items) {
@@ -492,7 +495,7 @@ $('#pins-btn').onclick = async () => {
     const pins = await api(`/api/channels/${channelId}/pins`);
     const list = $('#pin-list');
     if (!list) return;
-    if (!pins.length) return (list.innerHTML = '<p class="muted">Nothing pinned yet. Pin a message from its ⋯ menu so everyone can find it again.</p>');
+    if (!pins.length) return (list.innerHTML = emptyNote('Nothing pinned yet', 'Pin a message from its ⋯ menu so everyone in the room can find it again.'));
     list.replaceChildren(...pins.map((m) => messageCard(m, null, {
       onOpen: () => jumpTo(channelId, m.id),
       buttons: [['Unpin', (b) => { b.disabled = true; api(`/api/messages/${m.id}/pin`, { method: 'POST', body: { pinned: false } }).then(() => b.closest('.msg-card').remove()).catch(alertError); }]],
@@ -643,7 +646,7 @@ async function openSaved() {
     const items = await api('/api/me/saved');
     const list = $('#saved-list');
     if (!list) return;
-    if (!items.length) return (list.innerHTML = '<p class="muted">Nothing saved yet.</p>');
+    if (!items.length) return (list.innerHTML = emptyNote('Nothing saved yet', 'Save a message from its ⋯ menu to keep it here for later.'));
     list.replaceChildren(...items.map((it) => messageCard(it.message, it.place, {
       note: it.remindAt ? (it.reminded ? `Reminded ${new Date(it.remindAt).toLocaleString()}` : `Reminder ${new Date(it.remindAt).toLocaleString()}`) : '',
       onOpen: () => jumpTo(it.message.channelId, it.message.id),

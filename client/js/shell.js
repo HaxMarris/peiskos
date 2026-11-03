@@ -540,3 +540,7 @@ function renderFriendsPanel() {
 if (resetLinkToken && !isApp) showAuth();
 else if (state.token && state.serverUrl) resolveServerUrl().then(enterApp).catch((err) => startOffline(err) || showAuth());
 else showAuth();
+
+// Buttons with a keyboard shortcut say so when you point at them.
+$('#search-btn').title = withKey('Search messages', 'Ctrl+F');
+$('#burrow-switch').title = withKey('Go to a room, conversation or hearth', 'Ctrl+K');

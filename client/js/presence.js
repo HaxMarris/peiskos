@@ -395,6 +395,8 @@ function wireNotificationSettings() {
 // a game, but only while you're in a voice room.
 
 const isMac = /Mac/.test(navigator.platform);
+/** A button's tooltip with its keyboard shortcut: "Search messages (Ctrl+F)", or ⌘F on a Mac. */
+const withKey = (label, keys) => (isPhone() ? label : `${label} (${isMac ? keys.replace(/Ctrl\+/g, '⌘').replace(/Shift\+/g, '⇧').replace(/Alt\+/g, '⌥') : keys})`);
 const KEY_NAMES = {
   Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'",
   Comma: ',', Period: '.', Slash: '/', Space: 'Space', CapsLock: 'Caps Lock', Mouse4: 'Mouse back', Mouse5: 'Mouse forward',

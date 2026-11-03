@@ -729,7 +729,7 @@ function openSearch() {
       else list.replaceChildren(...cards);
       $('#search-more').classList.toggle('hidden', !hasMore);
       const count = list.children.length;
-      $('#search-status').textContent = count ? `${count}${hasMore ? '+' : ''} message${count === 1 ? '' : 's'}, newest first` : 'Nothing found.';
+      $('#search-status').textContent = count ? `${count}${hasMore ? '+' : ''} message${count === 1 ? '' : 's'}, newest first` : 'Nothing found. Try fewer words, or a different spelling.';
     } catch (err) {
       if (mine === seq) $('#search-status').textContent = err.message;
     }

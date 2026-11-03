@@ -427,9 +427,9 @@ function renderVoiceBar(status) {
   $('#voice-lock').classList.toggle('hidden', !!status || !sealed);
   $('#voice-room-name').textContent = fireName(ch);
   $('#voice-mute').classList.toggle('on', voice.muted);
-  $('#voice-mute').title = voice.serverMuted ? 'A moderator muted you' : voice.muted ? 'Unmute' : 'Mute';
+  $('#voice-mute').title = voice.serverMuted ? 'A moderator muted you' : withKey(voice.muted ? 'Unmute' : 'Mute', 'Ctrl+Shift+M');
   $('#voice-deafen').classList.toggle('on', voice.deafened);
-  $('#voice-deafen').title = voice.deafened ? 'Undeafen' : 'Deafen (hear nobody, and mute)';
+  $('#voice-deafen').title = withKey(voice.deafened ? 'Undeafen' : 'Deafen: hear nobody, and mute', 'Ctrl+Shift+D');
   $('#voice-deafen').innerHTML = voice.deafened ? HEADPHONES_OFF : HEADPHONES_ON;
   const lp = voice.room?.localParticipant;
   const camera = !!lp?.isCameraEnabled, screen = !!lp?.isScreenShareEnabled;
