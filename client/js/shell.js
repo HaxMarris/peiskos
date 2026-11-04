@@ -293,6 +293,7 @@ function openPerson(s, m) {
       ${presenceLine(m) ? `<span class="person-custom">${presenceLine(m, true)}</span>` : ''}
       ${isHost(s, m.id) ? '<span class="owner-badge">host</span>' : top ? `<span class="owner-badge role" style="--role:${escapeHtml(top.color)}">${escapeHtml(top.name)}</span>` : ''}
       <span class="small muted" id="profile-extra"></span>
+      <div class="achievements hidden" id="profile-badges"></div>
     </div>
     ${sharing?.screen || sharing?.camera ? `<button class="btn" id="person-watch">${sharing.screen ? 'Watch stream' : 'See camera'}</button>` : ''}
     ${inVoice && !me ? `<div class="person-sliders">
@@ -361,6 +362,13 @@ function openPerson(s, m) {
     if (p.joinedAt && !p.deleted) extra.push(`On Peiskos since ${formatDay(p.joinedAt)}`);
     if (p.mutualBurrows?.length) extra.push(`Hearths you share: ${p.mutualBurrows.map((b) => b.name).join(', ')}`);
     $('#profile-extra').textContent = extra.join(' · ');
+    const badges = p.achievements ?? [];
+    if (badges.length && $('#profile-badges')) {
+      const got = badges.filter((b) => b.earned).length;
+      $('#profile-badges').innerHTML = `${me ? `<span class="small muted achievements-count">${got} of ${badges.length} achievements</span>` : ''}${badges.map((b) =>
+        `<span class="achievement${b.earned ? '' : ' locked'}" tabindex="0" role="img" aria-label="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}" title="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}">${emojiHtml(b.icon)}</span>`).join('')}`;
+      $('#profile-badges').classList.remove('hidden');
+    }
     redraw();
   }).catch(() => {});
 }

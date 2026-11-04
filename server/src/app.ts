@@ -4783,6 +4783,38 @@ export function createApp(opts: AppOptions): Server {
   route('DELETE', '/api/me/banner', ({ user }) => setBannerFile(user, null));
 
   /** Someone's card: who they are, what you share, and whether you're friends. */
+  // ---- achievements: little badges on profiles, worked out from what people have done ----
+
+  const ACHIEVEMENTS: { id: string; icon: string; title: string; how: string; earned: (id: number) => boolean }[] = [
+    { id: 'chatter', icon: '💬', title: 'Chatterbox', how: 'Send 1,000 messages',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM messages WHERE author_id = ? LIMIT 1000)').get(id) as { n: number }).n >= 1000 },
+    { id: 'storyteller', icon: '📜', title: 'Storyteller', how: 'Send 10,000 messages',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM messages WHERE author_id = ? LIMIT 10000)').get(id) as { n: number }).n >= 10000 },
+    { id: 'regular', icon: '🔥', title: 'Regular at the fire', how: 'Spend 10 hours at fires',
+      earned: (id) => (db.prepare('SELECT COALESCE(SUM(ended_at - started_at), 0) AS ms FROM voice_time WHERE user_id = ?').get(id) as { ms: number }).ms >= 10 * 3600_000 },
+    { id: 'keeper', icon: '🪵', title: 'Fire keeper', how: 'Spend 100 hours at fires',
+      earned: (id) => (db.prepare('SELECT COALESCE(SUM(ended_at - started_at), 0) AS ms FROM voice_time WHERE user_id = ?').get(id) as { ms: number }).ms >= 100 * 3600_000 },
+    { id: 'favourite', icon: '⭐', title: 'Crowd favourite', how: 'Have a message make Best of',
+      earned: (id) => !!db.prepare(`SELECT 1 FROM messages m JOIN reactions r ON r.message_id = m.id AND r.emoji = '🔥' AND r.user_id != m.author_id
+                                    WHERE m.author_id = ? GROUP BY m.id HAVING COUNT(*) >= 2 LIMIT 1`).get(id) },
+    { id: 'planner', icon: '📅', title: 'Party planner', how: 'Plan 5 events',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM events WHERE created_by = ?').get(id) as { n: number }).n >= 5 },
+    { id: 'host', icon: '🏕️', title: 'Host', how: 'Host a hearth with 5 or more people in it',
+      earned: (id) => !!db.prepare(`SELECT 1 FROM servers s WHERE s.owner_id = ? AND s.kind = 'burrow' AND (SELECT COUNT(*) FROM members WHERE server_id = s.id) >= 5`).get(id) },
+    { id: 'friendly', icon: '🤝', title: 'Good company', how: 'Have 5 friends',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM friends WHERE (user_a = ? OR user_b = ?) AND accepted_at IS NOT NULL').get(id, id) as { n: number }).n >= 5 },
+    { id: 'perfect', icon: '🐟', title: 'Perfect catch', how: 'Land a 5-star fish',
+      earned: (id) => !!db.prepare('SELECT 1 FROM fishing_best WHERE user_id = ? AND stars >= 5 LIMIT 1').get(id) },
+    { id: 'derby', icon: '🏆', title: 'Derby champion', how: 'Win a fishing derby',
+      earned: (id) => !!db.prepare('SELECT 1 FROM fishing_derby_entries WHERE user_id = ? AND place = 1 LIMIT 1').get(id) },
+    { id: 'year', icon: '🎂', title: 'Old flame', how: 'Be on Peiskos for a year',
+      earned: (id) => !!db.prepare('SELECT 1 FROM users WHERE id = ? AND created_at <= ?').get(id, now() - 365 * 86400_000) },
+  ];
+  /** What someone has earned, and for yourself the ones still to go. */
+  const achievementsOf = (id: number, self: boolean) =>
+    ACHIEVEMENTS.map(({ id: key, icon, title, how, earned }) => ({ id: key, icon, title, how, earned: earned(id) }))
+      .filter((a) => self || a.earned);
+
   route('GET', '/api/users/:id', ({ user, params }) => {
     const id = Number(params[0]);
     const u = userById(id);
@@ -4795,7 +4827,10 @@ export function createApp(opts: AppOptions): Server {
       )
       .all(user.id, id);
     const deleted = !!(db.prepare('SELECT deleted_at FROM users WHERE id = ?').get(id) as { deleted_at: number | null }).deleted_at;
-    return { ...u, ...profileOf(id), deleted, friend: friendState(user.id, id), blocked: blocked(user.id, id), mutualBurrows: id === user.id ? [] : mutual };
+    return {
+      ...u, ...profileOf(id), deleted, friend: friendState(user.id, id), blocked: blocked(user.id, id), mutualBurrows: id === user.id ? [] : mutual,
+      achievements: deleted ? [] : achievementsOf(id, id === user.id),
+    };
   });
 
   // Your name in one burrow. Empty goes back to your display name.

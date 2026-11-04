@@ -2135,3 +2135,9 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .event-pill-open > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .event-pill-open svg { width: 18px; height: 18px; flex: none; fill: var(--accent-text); }
 .event-pill .icon-btn { padding: 4px 8px; font-size: 18px; line-height: 1; }
+/* Achievements on a person's card. Ones still to go (only on your own) are faded. */
+.achievements { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: center; }
+.achievements-count { width: 100%; text-align: center; }
+.achievement { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); font-size: 18px; cursor: default; }
+.achievement img { width: 20px; height: 20px; }
+.achievement.locked { filter: grayscale(1); opacity: .4; }
