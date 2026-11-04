@@ -65,7 +65,6 @@ function appSettings() {
     <span class="small muted">Messages and voice keep going, and a dot on the icon shows when something's unread. Quit from the icon's menu.</span>
     <label class="check"><input type="checkbox" id="app-login" ${d.openAtLogin ? 'checked' : ''} /> Start Peiskos when the computer starts</label>
     <span class="small muted">It opens quietly in the ${mac ? 'menu bar' : 'tray'}.</span>` : ''}
-    ${installPrompt ? '<div><button type="button" class="btn secondary" id="app-install">Install Peiskos on this device</button></div>' : ''}
     <div><button type="button" class="btn secondary" id="app-shortcuts">Keyboard shortcuts</button></div>`;
 }
 function wireAppSettings() {
@@ -74,31 +73,48 @@ function wireAppSettings() {
     $('#app-tray').onchange = (e) => desktop.set({ closeToTray: e.target.checked });
     $('#app-login').onchange = (e) => desktop.set({ openAtLogin: e.target.checked });
   }
-  if ($('#app-install')) $('#app-install').onclick = () => { closeModal(); installApp(); };
   $('#app-shortcuts').onclick = openShortcuts;
 }
 
-// Android (and Chrome or Edge on a computer) can install Burrow as an app of its own. The browser
-// says when it's possible; then "Install the app" shows in your menu.
-let installPrompt = null;
-window.addEventListener('beforeinstallprompt', (e) => {
-  e.preventDefault();
-  installPrompt = e;
-  $('#install-btn').classList.remove('hidden');
-});
-window.addEventListener('appinstalled', () => {
-  installPrompt = null;
-  $('#install-btn').classList.add('hidden');
-  toast('Peiskos is installed. Open it from your home screen or app list.');
-});
-async function installApp() {
-  if (!installPrompt) return;
-  installPrompt.prompt();
-  await installPrompt.userChoice.catch(() => {});
-  installPrompt = null;
-  $('#install-btn').classList.add('hidden');
+// No "install this site" offer: the browser version installs as a bare browser window, not the
+// real app. "Get the app" in your menu shows the real desktop and Android downloads instead
+// (iPhones get the app through TestFlight, so it's hidden there).
+window.addEventListener('beforeinstallprompt', (e) => e.preventDefault());
+if (!isApp && !/iPhone|iPad/.test(navigator.userAgent) && !(/Mac/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)) {
+  $('#get-app-btn').classList.remove('hidden');
+  $('#get-app-btn').onclick = openGetApp;
 }
-$('#install-btn').onclick = installApp;
+function openGetApp() {
+  const releases = 'https://github.com/HaxMarris/peiskos/releases/latest';
+  const ua = navigator.userAgent;
+  const android = /Android/.test(ua);
+  const mine = android ? 'android' : /Windows/.test(ua) ? 'win' : /Mac/.test(ua) ? 'mac' : /Linux/.test(ua) ? 'linux' : null;
+  const names = { win: 'Windows', mac: 'Mac', linux: 'Linux', android: 'Android' };
+  // The logos are the ones on the login screen's download buttons.
+  const icon = (os) => $(`#get-desktop a[data-os="${os}"] svg`)?.outerHTML ?? '';
+  const link = (os, label, cls) => `<a class="btn ${cls}" data-os="${os}" href="${releases}" target="_blank" rel="noopener">${icon(os)}${label}</a>`;
+  modal(`<h2>Get the app</h2>
+    <div class="get-desktop">
+      ${mine ? link(mine, `Download for ${names[mine]}`, 'get-mine') : ''}
+      ${android ? '<p class="muted small">Your phone may ask you to allow installing apps from your browser.</p>' : ''}
+      ${android ? '' : `<div class="get-desktop-row">${['win', 'mac', 'linux'].map((os) => link(os, names[os], 'secondary')).join('')}</div>
+      <p class="muted small get-intel hidden">Older Mac with an Intel chip? <a data-os="intel" href="${releases}" target="_blank" rel="noopener">Get the Intel version</a></p>
+      <p class="muted small">On an Android phone? <a data-os="android" href="${releases}" target="_blank" rel="noopener">Get the Android app</a></p>`}
+    </div>`, 'get-app');
+  const card = $('#modal-card');
+  fetch('https://api.github.com/repos/HaxMarris/peiskos/releases/latest')
+    .then((r) => (r.ok ? r.json() : null))
+    .then((release) => {
+      const ends = { win: '.exe', mac: '-arm64.dmg', intel: '-x64.dmg', linux: '.AppImage', android: '.apk' };
+      const find = (os) => release?.assets?.find((f) => f.name.endsWith(ends[os])) ?? (os === 'mac' ? release?.assets?.find((f) => f.name.endsWith('.dmg')) : null);
+      for (const a of card.querySelectorAll('a[data-os]')) {
+        const file = find(a.dataset.os);
+        if (file) a.href = file.browser_download_url;
+      }
+      card.querySelector('.get-intel')?.classList.toggle('hidden', !find('intel') || mine !== 'mac');
+    })
+    .catch(() => {});
+}
 
 // A newer desktop app: a green button in the top bar, as in Discord, that restarts into it once
 // you confirm. (An unsigned Mac build can't install it itself, so the button opens the download.)

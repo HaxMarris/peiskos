@@ -11,8 +11,8 @@
 // that matches its score within that species' range.
 //
 // Each hearth also runs a weekly derby: one rare-or-better species at one water, Monday to Sunday
-// Eastern. Everyone's longest hand-caught one counts, and the server settles the places once the
-// week is over. The game pays its own prizes from those places, as it does every other coin.
+// Eastern. Whoever lands the most perfect ones (5 stars, size 100) by hand wins, and the server settles the
+// places once the week is over. The game pays its own prizes from those places, as it does every other coin.
 import { readFileSync } from 'node:fs';
 import type { Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
@@ -103,9 +103,13 @@ export function pickDerby(ponds: ReturnType<typeof loadPonds>, opened: string[][
   const pool = pond.fish.filter((f) => f.rarity === tier);
   return { pond: pond.id, fish: pool[Math.floor(rand() * pool.length)].id };
 }
-type Entry = { userId: number; size: number; stars: number; caughtAt: number };
-/** Longest first; then more stars; then whoever landed theirs first. */
-export const derbyOrder = (a: Entry, b: Entry) => b.size - a.size || b.stars - a.stars || a.caughtAt - b.caughtAt;
+type Entry = { userId: number; perfect: number; perfectAt: number; size: number; stars: number; caughtAt: number };
+/**
+ * Most perfect catches (5 stars and a size score of 100) first, and whoever reached that many first. With none (or the same
+ * count at the same moment), the longest one, then more stars, then whoever landed theirs first.
+ */
+export const derbyOrder = (a: Entry, b: Entry) =>
+  b.perfect - a.perfect || (a.perfect ? a.perfectAt - b.perfectAt : 0) || b.size - a.size || b.stars - a.stars || a.caughtAt - b.caughtAt;
 
 type User = { id: number };
 type Handler = (ctx: { user: User; params: string[]; body: Json; url: URL }) => unknown;
@@ -128,7 +132,7 @@ export function fishing(ctx: FishingContext) {
   const starMul = loadStarMul();
   const ponds = loadPonds();
   const clock = ctx.now ?? Date.now;
-  const derbyEntries = allowance(20, 1);
+  const derbyEntries = allowance(60, 1); // every perfect one counts, so a lucky streak sends a few
   const firstPond = species.values().next().value?.pond ?? '';
   const worthOf = (r: { fish: string; score: number; stars: number; giant: number }) => {
     const sp = species.get(r.fish);
@@ -220,7 +224,7 @@ export function fishing(ctx: FishingContext) {
   const derbyAt = (h: number, week: string) =>
     db.prepare('SELECT week, pond, fish, settled, lead_said AS leadSaid FROM fishing_derby WHERE server_id = ? AND week = ?').get(h, week) as DerbyRow | undefined;
   const entriesOf = (h: number, week: string) => (db.prepare(
-    `SELECT e.user_id AS userId, COALESCE(m.nickname, u.display_name, u.username) AS name, e.size, e.stars, e.caught_at AS caughtAt, e.place
+    `SELECT e.user_id AS userId, COALESCE(m.nickname, u.display_name, u.username) AS name, e.perfect, e.perfect_at AS perfectAt, e.size, e.stars, e.caught_at AS caughtAt, e.place
      FROM fishing_derby_entries e JOIN users u ON u.id = e.user_id LEFT JOIN members m ON m.server_id = e.server_id AND m.user_id = e.user_id
      WHERE e.server_id = ? AND e.week = ?`,
   ).all(h, week) as (Entry & { name: string; place: number | null })[]).sort(derbyOrder);
@@ -255,17 +259,17 @@ export function fishing(ctx: FishingContext) {
     const rows = d ? entriesOf(h, week) : [];
     const mine = rows.findIndex((r) => r.userId === user.id);
     const prev = db.prepare('SELECT week, pond, fish FROM fishing_derby WHERE server_id = ? AND week < ? ORDER BY week DESC LIMIT 1').get(h, week) as { week: string; pond: string; fish: string } | undefined;
-    const row = (r: Entry & { name: string }) => ({ userId: r.userId, name: r.name, size: r.size, stars: r.stars, wins: wins.get(r.userId) ?? 0 });
+    const row = (r: Entry & { name: string }) => ({ userId: r.userId, name: r.name, perfect: r.perfect, size: r.size, stars: r.stars, wins: wins.get(r.userId) ?? 0 });
     // Where you finished in recent weeks: the game pays each one once and remembers which it paid.
     const awards = db.prepare(
-      `SELECT e.week, e.place, e.size, d.pond, d.fish FROM fishing_derby_entries e JOIN fishing_derby d ON d.server_id = e.server_id AND d.week = e.week
+      `SELECT e.week, e.place, e.perfect, e.size, d.pond, d.fish FROM fishing_derby_entries e JOIN fishing_derby d ON d.server_id = e.server_id AND d.week = e.week
        WHERE e.server_id = ? AND e.user_id = ? AND e.place IS NOT NULL AND e.week >= ? ORDER BY e.week`,
     ).all(h, user.id, addDays(week, -56));
     return {
       week, endsAt: easternMidnight(addDays(week, 7)), now,
       derby: d ? { pond: d.pond, fish: d.fish } : null,
       rows: rows.slice(0, 10).map(row),
-      me: mine >= 0 ? { place: mine + 1, size: rows[mine].size, stars: rows[mine].stars } : null,
+      me: mine >= 0 ? { place: mine + 1, perfect: rows[mine].perfect, size: rows[mine].size, stars: rows[mine].stars } : null,
       last: prev ? { week: prev.week, pond: prev.pond, fish: prev.fish, top: entriesOf(h, prev.week).slice(0, 3).map(row) } : null,
       awards, wins: wins.get(user.id) ?? 0,
     };
@@ -281,17 +285,22 @@ export function fishing(ctx: FishingContext) {
     if (body.idle === true) throw fail(400, "Idle rods don't count in the derby");
     const before = entriesOf(h, week);
     const had = before.find((e) => e.userId === user.id);
-    const entry = { userId: user.id, size, stars, caughtAt: now };
-    if (had && derbyOrder(entry, had) >= 0) return { best: false, place: before.indexOf(had) + 1, lead: false };
-    db.prepare(
-      `INSERT INTO fishing_derby_entries (server_id, week, user_id, size, score, stars, caught_at) VALUES (?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT (server_id, week, user_id) DO UPDATE SET size = excluded.size, score = excluded.score, stars = excluded.stars, caught_at = excluded.caught_at`,
-    ).run(h, week, user.id, size, score, stars, now);
+    // Every perfect one adds to your count; any catch longer than your longest replaces it.
+    const perfect = stars === 5 && score === 100;
+    const longer = !had || size > had.size || (size === had.size && stars > had.stars);
+    if (!perfect && !longer) return { best: false, perfect: false, place: before.indexOf(had!) + 1, lead: false };
+    if (!had) {
+      db.prepare('INSERT INTO fishing_derby_entries (server_id, week, user_id, size, score, stars, caught_at, perfect, perfect_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(h, week, user.id, size, score, stars, now, perfect ? 1 : 0, perfect ? now : 0);
+    } else {
+      if (perfect) db.prepare('UPDATE fishing_derby_entries SET perfect = perfect + 1, perfect_at = ? WHERE server_id = ? AND week = ? AND user_id = ?').run(now, h, week, user.id);
+      if (longer) db.prepare('UPDATE fishing_derby_entries SET size = ?, score = ?, stars = ?, caught_at = ? WHERE server_id = ? AND week = ? AND user_id = ?').run(size, score, stars, now, h, week, user.id);
+    }
     const after = entriesOf(h, week), place = after.findIndex((e) => e.userId === user.id) + 1;
     // Taking the lead from someone else is worth a line in the fireside chat, at most once an hour per hearth.
     const tookLead = place === 1 && before.length > 0 && before[0].userId !== user.id && now - d.leadSaid >= 3600000;
     if (tookLead) db.prepare('UPDATE fishing_derby SET lead_said = ? WHERE server_id = ? AND week = ?').run(now, h, week);
-    return { best: true, place, lead: tookLead };
+    return { best: longer, perfect, place, lead: tookLead };
   });
 }
 

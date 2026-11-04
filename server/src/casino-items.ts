@@ -446,4 +446,27 @@ export const PETS = [
   { id: 'dragon', name: 'A dragon', price: 100_000 },
   { id: 'phoenix', name: 'A phoenix', price: 250_000 },
   { id: 'goldwolf', name: 'A golden wolf', price: 500_000 },
+  { id: 'bunny', name: 'A bunny', price: 2_500 },
+  { id: 'frog', name: 'A frog', price: 7_500 },
+  { id: 'corgi', name: 'A corgi', price: 15_000 },
+  { id: 'axolotl', name: 'An axolotl', price: 35_000 },
+  { id: 'octopus', name: 'An octopus', price: 75_000 },
+  { id: 'ghost', name: 'A ghost', price: 150_000 },
+  { id: 'icedragon', name: 'An ice dragon', price: 300_000 },
+  { id: 'diamondcat', name: 'A diamond cat', price: 1_000_000 },
+];
+// Cheapest first, in the picker.
+PETS.sort((a, b) => a.price - b.price);
+
+/** Backdrops: whole scenes behind the fire, bought with chips (drawn in client/js/backdrops.js). */
+export const BACKDROPS = [
+  { id: 'fjord', name: 'Fjord night', price: 25_000 },
+  { id: 'pines', name: 'Snowy pines', price: 25_000 },
+  { id: 'cabin', name: 'Cabin in the woods', price: 50_000 },
+  { id: 'dunes', name: 'Desert dunes', price: 50_000 },
+  { id: 'blossom', name: 'Cherry blossom', price: 75_000 },
+  { id: 'ocean', name: 'Under the sea', price: 100_000 },
+  { id: 'volcano', name: 'Volcano', price: 150_000 },
+  { id: 'space', name: 'Outer space', price: 200_000 },
+  { id: 'lounge', name: 'Casino lounge', price: 250_000 },
 ];

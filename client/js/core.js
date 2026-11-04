@@ -920,6 +920,9 @@ function handleEvent(ev) {
     case 'casino_pet':
       onCasinoPet(ev);
       break;
+    case 'casino_backdrop':
+      onCasinoBackdrop(ev);
+      break;
     case 'slot_spin':
       onSlotSpin(ev);
       break;

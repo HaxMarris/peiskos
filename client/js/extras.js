@@ -44,13 +44,15 @@ const FIRE_ITEM_NAMES = {
   fox: 'A fox', owl: 'An owl', deer: 'A deer', bear: 'A bear', wolf: 'A wolf',
   // Premium pets, bought with chips in a hearth's casino (PETS in server/src/casino-items.ts).
   blackcat: 'A black cat', penguin: 'A penguin', redpanda: 'A red panda', unicorn: 'A unicorn', dragon: 'A dragon', phoenix: 'A phoenix', goldwolf: 'A golden wolf',
+  bunny: 'A bunny', frog: 'A frog', corgi: 'A corgi', axolotl: 'An axolotl', octopus: 'An octopus', ghost: 'A ghost', icedragon: 'An ice dragon', diamondcat: 'A diamond cat',
 };
-const PREMIUM_PETS = ['blackcat', 'penguin', 'redpanda', 'unicorn', 'dragon', 'phoenix', 'goldwolf'];
+const PREMIUM_PETS = ['blackcat', 'penguin', 'redpanda', 'unicorn', 'dragon', 'phoenix', 'goldwolf', 'bunny', 'frog', 'corgi', 'axolotl', 'octopus', 'ghost', 'icedragon', 'diamondcat'];
 const PIXEL_COLORS = {
   k: '#2b1d16', w: '#fbf3e6', c: '#efd9bd', o: '#e27b30', O: '#b4521b', b: '#8a5a36', B: '#5c3a22', l: '#c99a6b',
   g: '#9a9ca3', G: '#62656d', L: '#d5d7dc', r: '#cf4a33', R: '#982f22', p: '#f2b8b4', y: '#f6cf5a', Y: '#d99a2b',
   m: '#e8ddcf', M: '#b8a690', s: '#a07a5a', e: '#f8f4ec',
   d: '#4caf6a', D: '#2e7d4a', f: '#ff6a2a', h: '#f58fc4', u: '#6fc3f0',
+  v: '#9a6ad8', V: '#6a3ab0', a: '#f7b2c8', A: '#e27a9e', i: '#cdeeff', I: '#5aa6e0', n: '#2f5fb0',
 };
 const PIXEL_ART = {
   cocoa: [
@@ -146,6 +148,33 @@ const PIXEL_ART = {
     'fY..ffff', 'ffY.ffff', 'rffYffyy', '.rffffyy', '..rrffff', '....ffff', '...fYfYf', '...Y.Y.Y',
   ],
 };
+PIXEL_ART.bunny = [
+  '........', '....mw..', '...wpw..', '...wpw..', '...wpw..', '...www..', '..wwwwww', '.wwwwwww',
+  '.wwkwwww', '.wwwwwwp', '..wwwwww', '..wwwwww', '.wwwwwww', '.mwwwwww', '..mm.mmm', '........',
+];
+PIXEL_ART.frog = [
+  '........', '........', '..www...', '.wwkww..', '.dwwwddd', 'dddddddd', 'dddddddd', 'ddDDDDDD',
+  'dddddddd', '.ddyyyyy', '.ddyyyyy', '.ddyyyyy', 'dddyyyyy', 'dDdddddd', 'dd.dd...', '........',
+];
+PIXEL_ART.corgi = [
+  '........', '.o......', '.oo.....', '.opo....', '.ooooooo', '.oooooow', '.ookooww', '.oooowww',
+  '..owwwwk', '...wwwww', '..oooooo', '.ooowwww', '.ooowwww', '.ooowwww', '.ww..www', '........',
+];
+PIXEL_ART.axolotl = [
+  '........', '........', 'A.......', 'AA..aaaa', '.AAaaaaa', 'AAaaaaaa', '.Aaakaaa', 'AAaaaaaa',
+  '..aaaaaA', '...aaaaa', '..aaaaaa', '.aaaaaaa', '.aaaaaaa', '..aaaaaa', '..aa..aa', '........',
+];
+PIXEL_ART.octopus = [
+  '........', '....vvvv', '...vvvvv', '..vvvvvv', '..vvvvvv', '..vwwvvv', '..vwkvvv', '..vvvvvv',
+  '..vvvvVV', '.vvvvvvv', 'v.v.v.vv', 'v.v.v.v.', 'vv.v.vv.', '.v.vv.v.', '.vv..v..', '........',
+];
+PIXEL_ART.ghost = [
+  '........', '....eeee', '...eeeee', '..eeeeee', '..eeeeee', '.eekkeee', '.eekkeee', '.eeeeeee',
+  '.eeeeeek', '.eeeeeee', '.eeeeeee', '.eeeeeee', '.eeeeeee', '.ee.eeee', '.e...ee.', '........',
+];
+// The ice dragon is the dragon in ice; the diamond cat is the black cat cut from diamond.
+PIXEL_ART.icedragon = PIXEL_ART.dragon.map((row) => row.replace(/d/g, 'i').replace(/D/g, 'I').replace(/y/g, 'e'));
+PIXEL_ART.diamondcat = PIXEL_ART.blackcat.map((row, y) => row.replace(/k/g, (_, x) => ((x + y) % 5 ? 'u' : 'i')).replace(/y/g, 'n').replace(/p/g, 'I'));
 // The golden wolf is the wolf, in gold.
 PIXEL_ART.goldwolf = PIXEL_ART.wolf.map((row) => row.replace(/g/g, 'y').replace(/G/g, 'Y').replace(/L/g, 'e'));
 /** Turns one of PIXEL_ART into crisp SVG, a rect per run of one color. */
@@ -196,8 +225,25 @@ function decorateFire(s) {
   const look = hearth ? s.fireLook || 'classic' : 'classic';
   $('#fire-ring').dataset.look = look;
   sparksLayer(look === 'sparks');
-  skyLayer(hearth ? s.skyLook || 'evening' : 'evening');
+  // A backdrop someone chose for themselves wins over one put up for the whole hearth; either hides the sky.
+  const backdrop = hearth ? (BACKDROP_SCENES[s.myBackdrop] && s.myBackdrop) || (BACKDROP_SCENES[s.backdrop] && s.backdrop) || null : null;
+  backdropLayer(backdrop);
+  if (!backdrop) skyLayer(hearth ? s.skyLook || 'evening' : 'evening');
   seasonLayer();
+}
+
+/** A bought scene behind the fire, or none. Night colors around it, like any sky but the evening. */
+function backdropLayer(id) {
+  const wrap = $('.fire-ring-wrap');
+  if (!id) {
+    if (wrap.dataset.backdrop) { delete wrap.dataset.backdrop; wrap.style.background = ''; delete wrap.dataset.sky; }
+    return;
+  }
+  if (wrap.dataset.backdrop === id) return;
+  wrap.dataset.backdrop = id;
+  wrap.dataset.sky = 'backdrop';
+  $('#sky-layer').replaceChildren();
+  wrap.style.background = backdropCss(id);
 }
 
 // The sky above the fire: stars scattered over it, with a moon, northern lights or shooting stars.
@@ -254,6 +300,16 @@ async function openFireDecor() {
     return `<button type="button" class="decor-pick premium" data-pet-buy="${p.id}" ${pets.chips >= p.price ? '' : 'disabled'}>
       <span class="decor-art">${pixelSvg(p.id)}</span><span>${escapeHtml(p.name)}</span><span class="small decor-price"><span class="chip-icon sm" aria-hidden="true"></span>${p.price.toLocaleString()}</span></button>`;
   };
+  // Backdrops: click one you own to see it behind this hearth's fires (again to put it away).
+  const backdrop = (b) => {
+    const owned = pets.myBackdrops.includes(b.id);
+    const on = pets.backdrop === b.id;
+    const art = `<span class="backdrop-art" data-bd-art="${b.id}"></span>`;
+    if (owned) return `<button type="button" class="decor-pick backdrop-pick${on ? ' chosen' : ''}" data-bd="${b.id}" aria-pressed="${on}">
+      ${art}<span>${escapeHtml(b.name)}</span><span class="small muted">${on ? 'Showing for you' : pets.hearthBackdrop === b.id ? 'Up for everyone' : 'Yours'}</span></button>`;
+    return `<button type="button" class="decor-pick backdrop-pick" data-bd-buy="${b.id}" ${pets.chips >= b.price ? '' : 'disabled'}>
+      ${art}<span>${escapeHtml(b.name)}</span><span class="small decor-price"><span class="chip-icon sm" aria-hidden="true"></span>${b.price.toLocaleString()}</span></button>`;
+  };
   const look = (l) => {
     const open = fire.hours >= l.hours;
     return `<button type="button" class="decor-pick${fire.look === l.id ? ' chosen' : ''}" data-look="${l.id}" ${open && fire.canChange ? '' : 'disabled'} aria-pressed="${fire.look === l.id}">
@@ -275,7 +331,12 @@ async function openFireDecor() {
       <span class="small muted">${canToast ? (state.voice ? 'Or click the fire.' : 'Sit down at a fire first.') : `Marshmallows unlock after ${mine.marshmallowHours} hours at the fire.`}</span></div>
     ${pets ? `<h3>Premium pets</h3>
       <p class="small muted">Bought with chips from ${escapeHtml(hearth.name)}'s casino (you have <b>${pets.chips.toLocaleString()}</b> there). They're yours in ${escapeHtml(hearth.name)} only, and sit by your seat at its fires.</p>
-      <div class="decor-grid" id="decor-pets">${pets.pets.map(pet).join('')}</div>` : ''}
+      <div class="decor-grid" id="decor-pets">${pets.pets.map(pet).join('')}</div>
+      <h3>Backgrounds</h3>
+      <p class="small muted">Scenes behind ${escapeHtml(hearth.name)}'s fires, bought with its chips. The one you pick shows for you.</p>
+      <div class="decor-grid backdrop-grid" id="decor-backdrops">${pets.backdrops.map(backdrop).join('')}</div>
+      ${pets.canPutUp ? `<label class="admin-row bd-hearth-row small"><span>For everyone at ${escapeHtml(hearth.name)}'s fires:</span>
+        <select id="decor-bd-hearth"><option value="">No background</option>${pets.backdrops.filter((b) => pets.myBackdrops.includes(b.id) || pets.hearthBackdrop === b.id).map((b) => `<option value="${b.id}" ${pets.hearthBackdrop === b.id ? 'selected' : ''}>${escapeHtml(b.name)}</option>`).join('')}</select></label>` : ''}` : ''}
     ${fire ? `<h3>${escapeHtml(hearth.name)}'s fire</h3>
       <p class="small muted">Everyone's time around ${escapeHtml(hearth.name)}'s fires together: <b>${hoursText(fire.hours)}</b>. ${fire.canChange ? 'Pick how its fires burn.' : 'People who can edit the hearth pick how its fires burn.'}</p>
       <div class="decor-grid" id="decor-looks">${fire.looks.map(look).join('')}</div>
@@ -313,6 +374,35 @@ async function openFireDecor() {
       const r = await api(`/api/servers/${hearth.id}/casino/pets/${p.id}`, { method: 'POST', body: {} });
       setPet(r.pet);
       if (typeof setWallet === 'function') setWallet(r.wallet, hearth.id);
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  for (const el of document.querySelectorAll('[data-bd-art]')) el.style.background = backdropCss(el.dataset.bdArt);
+  for (const b of document.querySelectorAll('#decor-backdrops [data-bd]')) b.onclick = async () => {
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/backdrop`, { method: 'PUT', body: { backdrop: pets.backdrop === b.dataset.bd ? null : b.dataset.bd } });
+      hearth.myBackdrop = r.backdrop;
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  for (const b of document.querySelectorAll('#decor-backdrops [data-bd-buy]')) b.onclick = async () => {
+    const bd = pets.backdrops.find((x) => x.id === b.dataset.bdBuy);
+    if (!(await askConfirm(`Buy the ${bd.name} background for ${bd.price.toLocaleString()} chips from ${hearth.name}'s casino?`))) return;
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/backdrops/${bd.id}`, { method: 'POST', body: {} });
+      hearth.myBackdrop = r.backdrop;
+      if (typeof setWallet === 'function') setWallet(r.wallet, hearth.id);
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  const putUp = $('#decor-bd-hearth');
+  if (putUp) putUp.onchange = async () => {
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/backdrop`, { method: 'PUT', body: { backdrop: putUp.value || null, hearth: true } });
+      hearth.backdrop = r.hearthBackdrop;
       renderFire();
       openFireDecor();
     } catch (err) { alertError(err); }
@@ -538,6 +628,11 @@ async function openYearReview(serverId, year = new Date().getFullYear()) {
 }
 
 /** Someone in a hearth put a premium pet out (or away): it shows by their seat at its fires. */
+function onCasinoBackdrop(ev) {
+  const s = state.servers.get(ev.serverId);
+  if (s) s.myBackdrop = ev.backdrop;
+  if (state.voice) renderFire();
+}
 function onCasinoPet(ev) {
   const m = state.servers.get(ev.serverId)?.members?.find((x) => x.id === ev.userId);
   if (m) m.pet = ev.pet;

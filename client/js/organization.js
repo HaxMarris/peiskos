@@ -33,7 +33,8 @@ function quietFor(m) {
 const muteLabel = (until) => (until === -1 ? 'until you turn it back on' : `until ${formatTime(new Date(until)).replace(/^(Today|Yesterday)/, (w) => w.toLowerCase())}`);
 
 // The menu for a room (c) or a whole burrow or conversation (c null).
-function openNotifyMenu(anchor, s, c = null) {
+// `first` goes above the notification choices, like Room settings for people who can change the room.
+function openNotifyMenu(anchor, s, c = null, first = []) {
   const pref = (c ? c.notify : s.notify) ?? { level: null, mutedUntil: null };
   const muted = isMutedPref(pref);
   const level = pref.level ?? null;
@@ -48,6 +49,7 @@ function openNotifyMenu(anchor, s, c = null) {
   const later = (ms) => Date.now() + ms;
   const unread = !c && [...s.channels, ...(s.threads ?? [])].some((x) => x.kind !== 'voice' && (x.unread || x.mentions));
   openMenu(anchor, [
+    ...first,
     unread && { label: 'Mark as read', run: () => markServerRead(s) },
     ...levels,
     muted

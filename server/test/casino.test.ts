@@ -503,6 +503,28 @@ test('locks, trade ups, the upgrader and pets', async () => {
   const there = (await call(`/api/servers/${other.id}/casino/pets`, { token: t })).data;
   assert.deepEqual([there.myPets, there.pet, there.chips], [[], null, START_CHIPS]);
   assert.equal((await call(`${C}/pets`, { token: t })).data.myPets[0], 'blackcat');
+
+  // Backgrounds: bought the same way and shown for you; someone who can edit the hearth can put one up for everyone.
+  db.prepare('UPDATE casino_wallets SET chips = 100000 WHERE user_id = ? AND server_id = ?').run(max.user.id, home.id);
+  const bd = (await call(`${C}/backdrops/fjord`, { body: {}, token: t })).data;
+  assert.deepEqual([bd.wallet.chips, bd.myBackdrops, bd.backdrop, bd.canPutUp], [75_000, ['fjord'], 'fjord', true]);
+  assert.equal((await call(`${C}/backdrops/fjord`, { body: {}, token: t })).status, 400);
+  assert.equal((await call(`${C}/backdrops/nope`, { body: {}, token: t })).status, 404);
+  const mine = (await call('/api/servers', { token: t })).data.find((x: any) => x.id === home.id);
+  assert.deepEqual([mine.myBackdrop, mine.backdrop], ['fjord', null]);
+  assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: 'space' }, token: t })).status, 400); // not bought
+  const sam = await reg('samt');
+  await call('/api/join', { body: { inviteCode: home.inviteCode }, token: sam.token });
+  assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: 'fjord', hearth: true }, token: t })).data.hearthBackdrop, 'fjord');
+  const seen = (await call('/api/servers', { token: sam.token })).data.find((x: any) => x.id === home.id);
+  assert.deepEqual([seen.backdrop, seen.myBackdrop], ['fjord', null]);
+  // Members who can't edit the hearth can't put one up, even one they own.
+  db.prepare('UPDATE casino_wallets SET chips = 100000 WHERE user_id = ? AND server_id = ?').run(sam.user.id, home.id);
+  await call(`/api/servers/${home.id}/casino`, { token: sam.token });
+  db.prepare('UPDATE casino_wallets SET chips = 100000 WHERE user_id = ? AND server_id = ?').run(sam.user.id, home.id);
+  assert.equal((await call(`${C}/backdrops/cabin`, { body: {}, token: sam.token })).status, 200);
+  assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: 'cabin', hearth: true }, token: sam.token })).status, 403);
+  assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: null }, token: t })).data.backdrop, null);
 });
 
 test('case battles at the fire', async (t) => {
