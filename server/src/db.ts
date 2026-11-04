@@ -205,6 +205,7 @@ export function openDb(file: string): Db {
   addFishing(db);
   addSafetyReports(db);
   addPushLogins(db);
+  addPlanning(db);
   clearDeletedRoomJobs(db);
   hashSessionTokens(db);
   return db;
@@ -982,6 +983,12 @@ function addPushLogins(db: Db) {
       DELETE FROM push_subs WHERE session = old.token;
     END;
   `);
+}
+
+/** Added with planning together: "when works?" polls that become events. */
+function addPlanning(db: Db) {
+  addColumn(db, 'polls', 'times', 'TEXT'); // a "when works?" poll: JSON list of times (ms) instead of answers
+  addColumn(db, 'polls', 'event_id', 'INTEGER'); // the event it became
 }
 
 /** What a login token is kept as: its SHA-256, so a copy of the database (a backup) can't be used to log in. */

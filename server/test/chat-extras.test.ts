@@ -469,3 +469,27 @@ test('the photo album lists pictures from rooms you can see, without spoilers', 
   assert.equal(album.more, false);
   assert.deepEqual((await call(`/api/servers/${server.id}/album?before=${first.id}`, { token: max.token })).data.items, []);
 });
+
+test('"when works?" plans become events with the people who can make it', async () => {
+  const [max, sam, ann] = await people('max', 'sam', 'ann');
+  const { server, room } = await burrow(max, sam, ann);
+  const day = 86400_000;
+  const t1 = Date.now() + 2 * day;
+  const t2 = Date.now() + 3 * day;
+  assert.equal((await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t1] }, token: max.token })).status, 400);
+  assert.equal((await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t1, Date.now() - day] }, token: max.token })).status, 400);
+  const m = (await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t2, t1] }, token: max.token })).data;
+  assert.equal(m.poll.kind, 'when');
+  assert.deepEqual(m.poll.options.map((o: any) => o.at), [Math.floor(t1), Math.floor(t2)], 'times come sorted');
+  await call(`/api/messages/${m.id}/vote`, { body: { options: [0, 1] }, token: sam.token });
+  await call(`/api/messages/${m.id}/vote`, { body: { options: [1] }, token: ann.token });
+  assert.equal((await call(`/api/messages/${m.id}/plan/event`, { body: { option: 1 }, token: sam.token })).status, 403);
+  const done = (await call(`/api/messages/${m.id}/plan/event`, { body: { option: 1 }, token: max.token })).data;
+  assert.ok(done.poll.eventId);
+  assert.equal(done.poll.closed, true);
+  assert.equal((await call(`/api/messages/${m.id}/plan/event`, { body: { option: 0 }, token: max.token })).status, 409);
+  const ev = (await call(`/api/servers`, { token: sam.token })).data.find((s: any) => s.id === server.id).events.find((e: any) => e.id === done.poll.eventId);
+  assert.equal(ev.title, 'Game night');
+  assert.equal(ev.startsAt, Math.floor(t2));
+  assert.deepEqual(ev.rsvps.map((r: any) => r.userId).sort(), [max.user.id, sam.user.id, ann.user.id].sort());
+});

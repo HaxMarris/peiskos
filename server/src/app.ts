@@ -622,7 +622,7 @@ export function createApp(opts: AppOptions): Server {
         .all(userId) as { user_id: number }[]
     ).map((r) => r.user_id);
 
-  type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null };
+  type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
   // Anyone can send a burst of messages, then about one a second: enough for any conversation, not for a flood.
   const postAllowance = allowance(60, 1);
   // Reactions, edits and poll votes get their own, roomier allowances: a quick burst of reacting
@@ -757,8 +757,8 @@ export function createApp(opts: AppOptions): Server {
     );
     if (extras.poll) {
       const p = extras.poll;
-      db.prepare('INSERT INTO polls (message_id, question, options, multi, closes_at) VALUES (?, ?, ?, ?, ?)').run(
-        messageId, p.question, JSON.stringify(p.options), p.multi ? 1 : 0, p.closesAt,
+      db.prepare('INSERT INTO polls (message_id, question, options, multi, closes_at, times) VALUES (?, ?, ?, ?, ?, ?)').run(
+        messageId, p.question, JSON.stringify(p.options), p.multi ? 1 : 0, p.closesAt, p.times ? JSON.stringify(p.times) : null,
       );
       if (p.closesAt) wakeAt(p.closesAt);
     }
@@ -3558,12 +3558,20 @@ export function createApp(opts: AppOptions): Server {
 
   const MAX_POLL_OPTIONS = 10;
   const pollFor = (messageId: number) => {
-    const p = db.prepare('SELECT question, options, multi, closes_at FROM polls WHERE message_id = ?').get(messageId) as Json | undefined;
+    const p = db.prepare('SELECT question, options, multi, closes_at, times, event_id FROM polls WHERE message_id = ?').get(messageId) as Json | undefined;
     if (!p) return null;
     const votes = db.prepare('SELECT user_id, option FROM poll_votes WHERE message_id = ? ORDER BY rowid').all(messageId) as { user_id: number; option: number }[];
-    const options = (JSON.parse(p.options as string) as string[]).map((text, i) => ({ text, userIds: votes.filter((v) => v.option === i).map((v) => v.user_id) }));
+    const times = p.times ? (JSON.parse(p.times as string) as number[]) : null;
+    const options = (JSON.parse(p.options as string) as string[]).map((text, i) => ({
+      text, ...(times ? { at: times[i] } : {}), userIds: votes.filter((v) => v.option === i).map((v) => v.user_id),
+    }));
     const closesAt = (p.closes_at as number | null) ?? null;
-    return { question: p.question, options, multi: !!p.multi, closesAt, closed: closesAt !== null && closesAt <= now() };
+    // A "when works?" poll that became an event says which, while that event is still there.
+    const eventId = p.event_id != null && db.prepare('SELECT 1 FROM events WHERE id = ?').get(p.event_id as number) ? p.event_id : null;
+    return {
+      question: p.question, options, multi: !!p.multi, closesAt, closed: closesAt !== null && closesAt <= now(),
+      ...(times ? { kind: 'when', eventId } : {}),
+    };
   };
 
   const makePoll = (body: Json): PollInput => {
@@ -3580,6 +3588,49 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/channels/:id/polls', ({ user, params, body }) =>
     postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { poll: makePoll(body) }));
+
+  // ---- "when works?": a poll of times that the one who asked turns into an event ----
+
+  const MAX_PLAN_TIMES = 12;
+  route('POST', '/api/channels/:id/plans', ({ user, params, body }) => {
+    const channel = textRoom(Number(params[0]), user.id);
+    if (!isBurrow(channel.serverId)) throw new HttpError(400, 'Planning works in hearths, where events live');
+    const question = cleanName(body.title, 'What it is', 100);
+    const times = [...new Set((Array.isArray(body.times) ? body.times : []).map((t: unknown) => Math.floor(Number(t))))].sort((a, b) => a - b);
+    if (times.length < 2) throw new HttpError(400, 'Pick at least two times people can choose from');
+    if (times.length > MAX_PLAN_TIMES) throw new HttpError(400, `Pick at most ${MAX_PLAN_TIMES} times`);
+    if (times.some((t) => !(t > now() && t < now() + 366 * 86400_000))) throw new HttpError(400, 'Pick times in the next year, not ones that have passed');
+    const hours = Number(body.hours ?? 72) || 0;
+    if (hours < 0 || hours > 24 * 30) throw new HttpError(400, 'A plan can stay open for up to 30 days');
+    const closesAt = hours ? Math.min(now() + hours * 3600_000, times[0]) : times[0];
+    return postMessage(user, channel.id, { content: '', replyTo: body.replyTo }, {
+      poll: { question, options: times.map(String), multi: true, closesAt, times },
+    });
+  });
+
+  // Picks one of the times: it becomes an event, with everyone who said that time works down as going.
+  route('POST', '/api/messages/:id/plan/event', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel, authorId } = visibleMessage(user, id);
+    const poll = pollFor(id);
+    if (!poll || poll.kind !== 'when') throw new HttpError(404, "That message isn't a plan");
+    if (authorId !== user.id && !can(channel.serverId, user.id, 'messages')) throw new HttpError(403, 'Only whoever started the plan can pick the time');
+    if (poll.eventId) throw new HttpError(409, "It's an event already");
+    const pick = poll.options[Number(body.option)];
+    if (!pick?.at) throw new HttpError(400, "That isn't one of the times");
+    if (pick.at <= now()) throw new HttpError(400, 'That time has passed. Start a new plan.');
+    const room = channel.kind === 'thread' && channel.parentId !== null ? channel.parentId : channel.id;
+    const r = db
+      .prepare('INSERT INTO events (server_id, channel_id, title, details, starts_at, created_by, created_at, reminded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(channel.serverId, room, poll.question as string, '', pick.at, user.id, now(), pick.at - EVENT_REMIND_MS <= now() ? 1 : 0);
+    const eventId = Number(r.lastInsertRowid);
+    for (const uid of new Set([user.id, ...pick.userIds]))
+      db.prepare("INSERT OR IGNORE INTO event_rsvps (event_id, user_id, status) VALUES (?, ?, 'going')").run(eventId, uid);
+    db.prepare('UPDATE polls SET event_id = ?, closes_at = MIN(COALESCE(closes_at, ?), ?), ended = 1 WHERE message_id = ?').run(eventId, now(), now(), id);
+    wakeAt(pick.at - EVENT_REMIND_MS);
+    sendServerUpdate(channel.serverId);
+    return messageChanged(id, channel);
+  });
 
   // Your answer (or answers) to a poll; an empty list takes your vote back.
   route('POST', '/api/messages/:id/vote', ({ user, params, body }) => {
