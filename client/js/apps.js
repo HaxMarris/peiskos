@@ -1074,7 +1074,7 @@ const WELCOME_STEPS = 3;
 function welcomeStep(n) {
   stopMicTest();
   if (n >= WELCOME_STEPS) return closeModal();
-  const bar = `<div class="welcome-steps" aria-label="Step ${n + 1} of ${WELCOME_STEPS}">${Array.from({ length: WELCOME_STEPS }, (_, i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
+  const bar = `<div class="welcome-steps" role="img" aria-label="Step ${n + 1} of ${WELCOME_STEPS}">${Array.from({ length: WELCOME_STEPS }, (_, i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</div>`;
   const row = (next) => `<div class="modal-row"><button type="button" class="btn secondary" id="welcome-skip">Skip</button><button type="button" class="btn" id="welcome-next">${next}</button></div>`;
   const me = state.me;
   if (n === 0) {
