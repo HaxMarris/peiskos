@@ -2116,3 +2116,4 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .plan-row .poll-option { flex: 1; min-width: 0; }
 .plan-pick { flex: none; }
 .plan-open { align-self: flex-start; margin-top: 4px; }
+.feed-how { margin: 8px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }

@@ -493,3 +493,25 @@ test('"when works?" plans become events with the people who can make it', async 
   assert.equal(ev.startsAt, Math.floor(t2));
   assert.deepEqual(ev.rsvps.map((r: any) => r.userId).sort(), [max.user.id, sam.user.id, ann.user.id].sort());
 });
+
+test('a calendar feed has your hearths\' events, at a private address you can turn off', async () => {
+  const [max, sam] = await people('max', 'sam');
+  const { server } = await burrow(max, sam);
+  const at = Date.now() + 86400_000;
+  await call(`/api/servers/${server.id}/events`, { body: { title: 'Pizza, then games; bring snacks', startsAt: at }, token: max.token });
+  assert.equal((await call('/api/me/calendar', { token: sam.token })).data.on, false);
+  const { path } = (await call('/api/me/calendar', { body: {}, token: sam.token })).data;
+  assert.match(path, /^\/calendar\/[\w-]+\.ics$/);
+  const res = await fetch(base + path);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') ?? '', /text\/calendar/);
+  const ics = await res.text();
+  assert.match(ics, /BEGIN:VCALENDAR/);
+  assert.match(ics, /SUMMARY:Pizza\\, then games\\; bring snacks/);
+  assert.match(ics, new RegExp(`DTSTART:${new Date(at).toISOString().slice(0, 10).replace(/-/g, '')}T`));
+  // A new address replaces the old one; turning it off ends it.
+  const again = (await call('/api/me/calendar', { body: {}, token: sam.token })).data.path;
+  assert.equal((await fetch(base + path)).status, 404);
+  await call('/api/me/calendar', { method: 'DELETE', token: sam.token });
+  assert.equal((await fetch(base + again)).status, 404);
+});

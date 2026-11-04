@@ -989,6 +989,14 @@ function addPushLogins(db: Db) {
 function addPlanning(db: Db) {
   addColumn(db, 'polls', 'times', 'TEXT'); // a "when works?" poll: JSON list of times (ms) instead of answers
   addColumn(db, 'polls', 'event_id', 'INTEGER'); // the event it became
+  db.exec(`
+    -- A private web address per person that calendar apps read their hearths' events from.
+    CREATE TABLE IF NOT EXISTS calendar_feeds (
+      user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL UNIQUE,
+      created_at INTEGER NOT NULL
+    );
+  `);
 }
 
 /** What a login token is kept as: its SHA-256, so a copy of the database (a backup) can't be used to log in. */
