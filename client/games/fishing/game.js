@@ -1203,6 +1203,16 @@ function markerPos(now) {
 let audio = null;
 function biteSound(heavy) {
   if (S.muted) return;
+  // Inside Peiskos, the bite plays on the sound set picked in settings (and its Fish bites switch).
+  let host = null;
+  try { host = window.parent !== window ? window.parent : window.opener; } catch { /* another site */ }
+  try {
+    if (typeof host?.playSound === 'function') {
+      host.playSound('bite');
+      try { navigator.vibrate?.(heavy ? [60, 60, 90] : 60); } catch { /* no buzz */ }
+      return;
+    }
+  } catch { /* fall back to the plop below */ }
   try {
     audio = audio || new AudioContext();
     if (audio.state === 'suspended') audio.resume();

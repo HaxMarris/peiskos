@@ -788,7 +788,7 @@ function showEventReminder(ev) {
   const text = `${e.title} starts ${e.startsAt <= Date.now() ? 'now' : `at ${new Date(e.startsAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`}${s ? ` in ${s.name}` : ''}.`;
   const open = () => { if (s) { selectServer(s.id); openEvent(s.id, e.id); } };
   toast(text, { action: 'Open', onAction: open, timeout: 0 });
-  playSound('message');
+  playSound('event');
   if ('Notification' in window && Notification.permission === 'granted' && document.hidden) {
     const n = new Notification(e.title, { body: text });
     n.onclick = () => { window.focus(); open(); };
