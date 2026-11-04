@@ -674,6 +674,39 @@ function eventWhen(t) {
 }
 const going = (e) => e.rsvps.filter((r) => r.status === 'going').length;
 
+/** "in 3 days", "in 5 hours", "in 20 minutes", or "now". */
+function countdown(t) {
+  const ms = t - Date.now();
+  if (ms <= 60e3) return 'now';
+  const mins = Math.round(ms / 60e3);
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? '' : 's'}`;
+  const hours = Math.round(ms / 3600e3);
+  if (hours < 36) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(ms / 864e5);
+  return `in ${days} days`;
+}
+
+// Above the chat: the hearth's next event in the coming three days, counting down. Hidden for
+// events you said no to, and once you close it for that event.
+function renderEventPill() {
+  const pill = $('#event-pill');
+  const s = state.inDms ? null : state.servers.get(state.serverId);
+  const hidden = (store.get('eventPillHidden') ?? '').split(',');
+  const e = (s?.events ?? []).find((x) => x.startsAt > Date.now() - 3600e3 && x.startsAt < Date.now() + 3 * 864e5
+    && x.rsvps.find((r) => r.userId === state.me.id)?.status !== 'no' && !hidden.includes(String(x.id)));
+  pill.classList.toggle('hidden', !e);
+  if (!e) return;
+  const mine = e.rsvps.find((r) => r.userId === state.me.id)?.status;
+  $('#event-pill-open').innerHTML = `${CALENDAR_ICON}<span><b></b> ${e.startsAt <= Date.now() ? 'is happening now' : countdown(e.startsAt)}<span class="muted"> · ${going(e)} going${mine ? '' : ' · Coming?'}</span></span>`;
+  $('#event-pill-open b').textContent = e.title;
+  $('#event-pill-open').onclick = () => openEvent(s.id, e.id);
+  $('#event-pill-hide').onclick = () => {
+    store.set('eventPillHidden', [...hidden.filter(Boolean).slice(-30), String(e.id)].join(','));
+    renderEventPill();
+  };
+}
+setInterval(() => { if (state.me) renderEventPill(); }, 60e3);
+
 function renderEvents(s) {
   const section = $('#events-section');
   section.classList.toggle('hidden', !s || isDm(s));
@@ -704,7 +737,8 @@ function openEventList(serverId) {
   const s = state.servers.get(serverId);
   modal(`<h2>Events in ${escapeHtml(s.name)}</h2>
     <ul class="event-list big">${s.events.map((e) => `<li class="event-row" data-ev="${e.id}">${CALENDAR_ICON}<span class="event-text"><b>${escapeHtml(e.title)}</b><span class="small muted">${escapeHtml(eventWhen(e.startsAt))} · ${going(e)} going</span></span></li>`).join('')}</ul>
-    <div class="modal-row"><button class="btn" id="ev-new">Plan an event</button></div>`);
+    <div class="modal-row"><button class="btn secondary" id="ev-feed">Add to your calendar</button><span class="spacer"></span><button class="btn" id="ev-new">Plan an event</button></div>`);
+  $('#ev-feed').onclick = openCalendarFeed;
   $('#modal-card').querySelectorAll('[data-ev]').forEach((li) => (li.onclick = () => openEvent(serverId, Number(li.dataset.ev))));
   $('#ev-new').onclick = () => openEventEditor(serverId, null);
 }
@@ -718,7 +752,7 @@ function openEvent(serverId, eventId) {
   const names = (status) => e.rsvps.filter((r) => r.status === status).map((r) => nameOf(r.userId, 'someone'));
   const editable = e.createdBy === state.me.id || can(s, 'burrow');
   modal(`<h2>${escapeHtml(e.title)}</h2>
-    <p class="event-when">${CALENDAR_ICON}<span>${escapeHtml(new Date(e.startsAt).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}${e.startsAt <= Date.now() ? ' · happening now' : ''}</span></p>
+    <p class="event-when">${CALENDAR_ICON}<span>${escapeHtml(new Date(e.startsAt).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))} · ${e.startsAt <= Date.now() ? 'happening now' : escapeHtml(countdown(e.startsAt))}</span></p>
     ${room ? `<p class="small">Where: <button type="button" class="link-btn" id="ev-room">${room.kind === 'voice' ? escapeHtml(room.name) : '#' + escapeHtml(room.name)}</button></p>` : ''}
     ${e.details ? `<div class="event-details">${formatContent(e.details)}</div>` : ''}
     <p class="small muted">Planned by ${escapeHtml(nameOf(e.createdBy, 'someone'))}</p>
@@ -730,7 +764,12 @@ function openEvent(serverId, eventId) {
     <div class="modal-row">
       ${editable ? '<button class="btn danger" id="ev-delete">Cancel event</button><button class="btn secondary" id="ev-edit">Edit</button>' : ''}
       <span class="spacer"></span>
+      <button class="btn secondary" id="ev-calendar" aria-haspopup="menu">Add to calendar</button>
     </div>`);
+  $('#ev-calendar').onclick = (ev) => openMenu(ev.currentTarget, [
+    { label: 'Just this event', run: () => downloadEventFile(s, e, room) },
+    { label: 'Every event, kept up to date', run: openCalendarFeed },
+  ]);
   const card = $('#modal-card');
   card.querySelectorAll('[data-rsvp]').forEach((b) => (b.onclick = async () => {
     try {
@@ -749,6 +788,58 @@ function openEvent(serverId, eventId) {
     try { handleEvent({ type: 'server_updated', server: await api(`/api/events/${e.id}`, { method: 'DELETE' }) }); closeModal(); }
     catch (err) { $('#modal-error').textContent = err.message; }
   });
+}
+
+/** One event as a calendar file, for any calendar app. */
+function downloadEventFile(s, e, room) {
+  const t = (ms) => new Date(ms).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  const text = (x) => x.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const where = `${s.name}${room ? ` · ${room.kind === 'voice' ? room.name : '#' + room.name}` : ''}`;
+  const ics = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Peiskos//Events//EN', 'BEGIN:VEVENT',
+    `UID:event-${e.id}@${new URL(state.serverUrl || location.href).hostname}`, `DTSTAMP:${t(Date.now())}`, `DTSTART:${t(e.startsAt)}`, 'DURATION:PT2H',
+    `SUMMARY:${text(e.title)}`, `DESCRIPTION:${text([e.details, `${where} on Peiskos`].filter(Boolean).join('\n\n'))}`, `LOCATION:${text(where)}`,
+    'END:VEVENT', 'END:VCALENDAR'].join('\r\n') + '\r\n';
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ics], { type: 'text/calendar' }));
+  a.download = `${e.title.replace(/[\\/:*?"<>|]+/g, '').slice(0, 60) || 'event'}.ics`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+
+/** A private address calendar apps read every event from your hearths from, and keep reading. */
+async function openCalendarFeed() {
+  let on = false;
+  try { on = (await api('/api/me/calendar')).on; } catch (err) { return alertError(err); }
+  modal(`<h2>Events in your calendar</h2>
+    <p class="small muted">Every event in your hearths shows up in Google, Apple or Outlook calendar and stays up to date. Events you said no to are left out.</p>
+    <div id="feed-box"></div>`);
+  const draw = (url) => {
+    const box = $('#feed-box');
+    if (!box) return;
+    if (!url) {
+      box.innerHTML = `${on ? '<p class="small">Your calendar address is on. For safety it only shows once; get a new one to see it again (the old one stops working).</p>' : ''}
+        <div class="modal-row"><button type="button" class="btn" id="feed-make">${on ? 'Get a new address' : 'Get my calendar address'}</button>${on ? '<button type="button" class="btn danger" id="feed-off">Turn it off</button>' : ''}</div>`;
+    } else {
+      box.innerHTML = `<div class="invite-box"><input readonly aria-label="Calendar address" value="${escapeHtml(url)}" /><button type="button" class="btn" id="feed-copy">Copy</button></div>
+        <p class="small muted">Keep this address to yourself: anyone with it can see your hearths' events.</p>
+        <ul class="small feed-how">
+          <li><b>Apple Calendar:</b> <a href="${escapeHtml(url.replace(/^https?:/, 'webcal:'))}">open it here</a>, or File › New Calendar Subscription and paste it.</li>
+          <li><b>Google Calendar:</b> on a computer, Other calendars › + › From URL, and paste it.</li>
+          <li><b>Outlook:</b> Add calendar › Subscribe from web, and paste it.</li>
+        </ul>
+        <div class="modal-row"><button type="button" class="btn danger" id="feed-off">Turn it off</button></div>`;
+      $('#feed-copy').onclick = (e) => copyText(url, e.currentTarget);
+    }
+    $('#feed-make')?.addEventListener('click', async (e) => {
+      e.target.disabled = true;
+      try { const r = await api('/api/me/calendar', { method: 'POST', body: {} }); on = true; draw(new URL(r.path, state.serverUrl || location.origin).href); }
+      catch (err) { e.target.disabled = false; alertError(err); }
+    });
+    $('#feed-off')?.addEventListener('click', async () => {
+      try { await api('/api/me/calendar', { method: 'DELETE' }); on = false; draw(null); toast('Calendar address turned off.'); } catch (err) { alertError(err); }
+    });
+  };
+  draw(null);
 }
 
 function openEventEditor(serverId, e) {

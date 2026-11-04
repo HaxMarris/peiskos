@@ -371,7 +371,169 @@ function openPollCreator() {
   };
 }
 
+// A shared list in a room: who's bringing what. Anyone can add things and tick them off.
+function openListCreator() {
+  const channelId = state.channelId;
+  if (!channelId) return;
+  modal(`<h2>Start a list</h2>
+    <p class="small muted">Everyone in the room can add to it and tick things off.</p>
+    <form id="list-form">
+      <label>Name<input id="list-title" maxlength="100" required placeholder="e.g. Who's bringing what" /></label>
+      <label>Things on it, one per line<textarea id="list-items" rows="5" placeholder="Snacks&#10;Board games&#10;Firewood"></textarea></label>
+      <div class="error" id="modal-error"></div>
+      <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">Post list</button></div>
+    </form>`);
+  $('#list-title').focus();
+  $('#list-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const items = $('#list-items').value.split('\n').map((x) => x.trim()).filter(Boolean);
+    try {
+      await api(`/api/channels/${channelId}/lists`, { method: 'POST', body: { title: $('#list-title').value, items, replyTo: state.replyTo?.id } });
+      closeModal();
+      setReply(null);
+    } catch (err) { $('#modal-error').textContent = err.message; }
+  };
+}
+
+function renderList(m) {
+  const l = m.list;
+  const room = roomById(m.channelId);
+  const server = room?.s;
+  const manage = m.authorId === state.me.id || (server && !isDm(server) && can(server, 'messages'));
+  const done = l.items.filter((i) => i.doneBy).length;
+  const box = document.createElement('div');
+  box.className = 'poll shared-list';
+  box.innerHTML = `<div class="poll-q"></div><div class="muted small">${l.items.length ? `${done} of ${l.items.length} done` : 'Nothing on it yet'}</div><ul class="list-items"></ul>`;
+  box.querySelector('.poll-q').textContent = `☑ ${l.title}`;
+  const ul = box.querySelector('ul');
+  for (const it of l.items) {
+    const li = document.createElement('li');
+    li.className = 'list-item' + (it.doneBy ? ' done' : '');
+    li.innerHTML = `<label><input type="checkbox" ${it.doneBy ? 'checked' : ''} /><span class="list-text"></span></label><span class="small muted list-who"></span>`;
+    li.querySelector('.list-text').textContent = it.text;
+    if (it.doneBy) li.querySelector('.list-who').textContent = it.doneBy === state.me.id ? 'you' : nameOf(it.doneBy, 'someone');
+    li.querySelector('input').onchange = (e) => api(`/api/messages/${m.id}/list/${it.id}`, { method: 'POST', body: { done: e.target.checked } }).catch((err) => { e.target.checked = !e.target.checked; alertError(err); });
+    if (manage || it.addedBy === state.me.id) {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'icon-btn list-remove';
+      x.title = 'Take it off the list';
+      x.setAttribute('aria-label', `Take ${it.text} off the list`);
+      x.textContent = '×';
+      x.onclick = () => api(`/api/messages/${m.id}/list/${it.id}`, { method: 'DELETE' }).catch(alertError);
+      li.append(x);
+    }
+    ul.append(li);
+  }
+  if (!room?.c?.archived && l.items.length < 50) {
+    const form = document.createElement('form');
+    form.className = 'list-add';
+    form.innerHTML = '<input maxlength="120" placeholder="Add something" aria-label="Add to the list" /><button type="submit" class="btn secondary">Add</button>';
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = form.querySelector('input');
+      if (!input.value.trim()) return;
+      try { await api(`/api/messages/${m.id}/list`, { method: 'POST', body: { text: input.value } }); input.value = ''; } catch (err) { alertError(err); }
+    };
+    box.append(form);
+  }
+  return box;
+}
+
+// "When works?": a few times to pick from; whoever asked turns the best one into an event.
+function openPlanCreator() {
+  const channelId = state.channelId;
+  if (!channelId) return;
+  // Starting points: the next three evenings at 8.
+  const evening = (days) => { const d = new Date(); d.setDate(d.getDate() + days); d.setHours(20, 0, 0, 0); return d.getTime(); };
+  modal(`<h2>Find a time that works</h2>
+    <p class="small muted">Everyone ticks the times they can make. Then you pick one and it becomes an event, with them going.</p>
+    <form id="plan-form">
+      <label>What is it<input id="plan-title" maxlength="100" required placeholder="e.g. Game night" /></label>
+      <div class="poll-edit" id="plan-times"></div>
+      <button type="button" class="btn secondary" id="plan-add">Add a time</button>
+      <div class="error" id="modal-error"></div>
+      <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">Post</button></div>
+    </form>`);
+  const box = $('#plan-times');
+  const addTime = (t) => {
+    if (box.children.length >= 12) return;
+    const row = document.createElement('div');
+    row.className = 'poll-edit-row';
+    row.innerHTML = `<input type="datetime-local" aria-label="Time ${box.children.length + 1}" min="${localInputValue(Date.now())}" /><button type="button" class="icon-btn" title="Remove">×</button>`;
+    row.querySelector('input').value = localInputValue(t);
+    row.querySelector('button').onclick = () => { if (box.children.length > 2) row.remove(); $('#plan-add').disabled = false; };
+    box.append(row);
+    $('#plan-add').disabled = box.children.length >= 12;
+  };
+  for (const d of [1, 2, 3]) addTime(evening(d));
+  $('#plan-add').onclick = () => {
+    const last = [...box.querySelectorAll('input')].map((i) => new Date(i.value).getTime()).filter(Boolean).at(-1) ?? evening(0);
+    addTime(last + 86400e3);
+    box.lastChild.querySelector('input').focus();
+  };
+  $('#plan-title').focus();
+  $('#plan-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const times = [...box.querySelectorAll('input')].map((i) => new Date(i.value).getTime()).filter(Boolean);
+    try {
+      await api(`/api/channels/${channelId}/plans`, { method: 'POST', body: { title: $('#plan-title').value, times, replyTo: state.replyTo?.id } });
+      closeModal();
+      setReply(null);
+    } catch (err) { $('#modal-error').textContent = err.message; }
+  };
+}
+
+function renderPlan(m) {
+  const p = m.poll;
+  const server = roomById(m.channelId)?.s;
+  const mine = p.options.flatMap((o, i) => (o.userIds.includes(state.me.id) ? [i] : []));
+  const most = Math.max(...p.options.map((o) => o.userIds.length));
+  const box = document.createElement('div');
+  box.className = 'poll plan' + (p.closed ? ' closed' : '');
+  box.innerHTML = `<div class="poll-q"></div><div class="muted small">${p.eventId ? "It's on" : p.closed ? 'Closed' : 'Tick every time you can make'}</div>`;
+  box.querySelector('.poll-q').textContent = `📅 ${p.question}`;
+  const canPick = !p.eventId && (m.authorId === state.me.id || (server && can(server, 'messages')));
+  p.options.forEach((o, i) => {
+    const row = document.createElement('div');
+    row.className = 'plan-row';
+    const b = document.createElement('button');
+    b.type = 'button';
+    const n = o.userIds.length;
+    b.className = 'poll-option' + (mine.includes(i) ? ' mine' : '') + (!p.eventId && n && n === most ? ' winner' : '');
+    b.disabled = p.closed;
+    b.title = n ? o.userIds.map((id) => nameOfPerson(server?.members.find((x) => x.id === id))).join(', ') : 'Nobody yet';
+    b.innerHTML = `<span class="poll-fill" style="width:${server?.members.length ? (n / server.members.length) * 100 : 0}%"></span><span class="poll-text"></span><span class="poll-count">${n}</span>`;
+    b.querySelector('.poll-text').textContent = new Date(o.at).toLocaleString([], { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+    b.onclick = () => api(`/api/messages/${m.id}/vote`, { method: 'POST', body: { options: mine.includes(i) ? mine.filter((x) => x !== i) : [...mine, i] } }).catch(alertError);
+    row.append(b);
+    if (canPick && o.at > Date.now()) {
+      const pick = document.createElement('button');
+      pick.type = 'button';
+      pick.className = 'link-btn plan-pick';
+      pick.textContent = 'Pick';
+      pick.title = 'Make this the time. It becomes an event.';
+      pick.onclick = async () => {
+        if (!(await askConfirm(`Make it ${b.querySelector('.poll-text').textContent}? Everyone who ticked it is down as going.`, { ok: 'Make it an event' }))) return;
+        api(`/api/messages/${m.id}/plan/event`, { method: 'POST', body: { option: i } }).then(() => toast('Added to events.')).catch(alertError);
+      };
+      row.append(pick);
+    }
+    box.append(row);
+  });
+  if (p.eventId && server) {
+    const open = document.createElement('button');
+    open.type = 'button';
+    open.className = 'btn secondary plan-open';
+    open.textContent = 'See the event';
+    open.onclick = () => openEvent(server.id, p.eventId);
+    box.append(open);
+  }
+  return box;
+}
+
 function renderPoll(m) {
+  if (m.poll.kind === 'when') return renderPlan(m);
   const p = m.poll;
   const server = roomById(m.channelId)?.s;
   const voters = new Set(p.options.flatMap((o) => o.userIds)).size;
@@ -776,6 +938,8 @@ $('#plus-btn').onclick = (e) => {
   openMenu(e.currentTarget, [
     state.maxUploadBytes && { label: 'Upload files', run: () => $('#file-input').click() },
     { label: 'Create a poll', run: openPollCreator },
+    { label: 'Start a list', run: openListCreator },
+    !isDm(state.servers.get(state.serverId)) && { label: 'Find a time that works', run: openPlanCreator },
     stickerGroups().length && { label: 'Send a sticker', run: openStickers },
     { label: 'Send later…', run: openSchedule },
   ]);
