@@ -230,13 +230,13 @@ export function createApp(opts: AppOptions): Server {
   /** A room someone can see, by its id. Anything else is "not found", whether it exists or not. */
   const visibleRoom = (id: number, userId: number) => {
     const channel = channelById(id);
-    if (!channel || !canSee(channel, userId)) throw new HttpError(404, 'Room not found');
+    if (!channel || !canSee(channel, userId)) throw new HttpError(404, "That room is gone, or you can't see it.");
     return channel;
   };
   /** A room someone can see that holds messages (not a voice room). */
   const textRoom = (id: number, userId: number) => {
     const channel = visibleRoom(id, userId);
-    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    if (channel.kind === 'voice') throw new HttpError(400, 'Fires have no messages');
     return channel;
   };
   const channelAudience = (channel: Channel) => serverMemberIds(channel.serverId).filter((id) => canSee(channel, id));
@@ -441,7 +441,7 @@ export function createApp(opts: AppOptions): Server {
   };
   const cleanUsername = (value: unknown) => {
     const username = cleanName(value, 'Username', 32);
-    if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Username may only use letters, numbers, _ . -');
+    if (!/^[\w.-]+$/.test(username)) throw new HttpError(400, 'Usernames can only use letters, numbers and _ . -');
     return username;
   };
   /** The new password someone picked, when changing or resetting it. */
@@ -680,8 +680,8 @@ export function createApp(opts: AppOptions): Server {
   const postMessage = (user: User, channelId: number, input: Json, extras: PostExtras = {}) => {
     const channel = channelById(channelId);
     // A webhook writes in the one room it was made for, whoever can see it.
-    if (!channel || (!extras.webhook && !canSee(channel, user.id))) throw new HttpError(404, 'Room not found');
-    if (channel.kind === 'voice') throw new HttpError(400, 'Voice rooms have no messages');
+    if (!channel || (!extras.webhook && !canSee(channel, user.id))) throw new HttpError(404, "That room is gone, or you can't see it.");
+    if (channel.kind === 'voice') throw new HttpError(400, 'Fires have no messages');
     const problem = extras.webhook ? null : postProblem(channel, user.id);
     if (problem) throw new HttpError(403, problem);
     dmBlockCheck(channel.serverId, user.id);
@@ -695,9 +695,9 @@ export function createApp(opts: AppOptions): Server {
       if (wait > 0) throw new HttpError(429, `Slow mode is on. You can send another message in ${wait} second${wait === 1 ? '' : 's'}.`);
     }
     const raw = input.content ?? '';
-    if (typeof raw !== 'string') throw new HttpError(400, 'Message is empty');
+    if (typeof raw !== 'string') throw new HttpError(400, 'Write something first');
     let content = withoutBidi(raw);
-    if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
+    if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Messages can be at most ${MAX_MESSAGE_LENGTH} characters. Shorten it, or send it in two parts.`);
     if (content.startsWith('/') && !extras.forwarded && !extras.webhook) {
       const command = slashCommand(content);
       if (command) {
@@ -707,7 +707,7 @@ export function createApp(opts: AppOptions): Server {
     }
     const attachmentIds = input.attachmentIds;
     const ids = Array.isArray(attachmentIds) ? [...new Set(attachmentIds.map(String))] : [];
-    if (ids.length > MAX_ATTACHMENTS) throw new HttpError(400, `At most ${MAX_ATTACHMENTS} files per message`);
+    if (ids.length > MAX_ATTACHMENTS) throw new HttpError(400, `You can add up to ${MAX_ATTACHMENTS} files to a message`);
     // Only your own uploads to this room that aren't on a message yet.
     const usable = ids.filter(
       (id) =>
@@ -715,7 +715,7 @@ export function createApp(opts: AppOptions): Server {
           .prepare('SELECT 1 FROM attachments WHERE id = ? AND uploader_id = ? AND channel_id = ? AND message_id IS NULL')
           .get(id, user.id, channelId),
     );
-    if (usable.length !== ids.length) throw new HttpError(400, 'One of the files is missing or already sent');
+    if (usable.length !== ids.length) throw new HttpError(400, "One of the files didn't finish uploading. Remove it and add it again.");
     const spoilers = new Set(Array.isArray(input.spoilerIds) ? input.spoilerIds.map(String) : []);
     // Descriptions of pictures, by file id.
     const alts = input.descriptions && typeof input.descriptions === 'object' && !Array.isArray(input.descriptions) ? (input.descriptions as Record<string, unknown>) : {};
@@ -728,7 +728,7 @@ export function createApp(opts: AppOptions): Server {
       if (!sticker || !isMember(sticker.server_id, user.id)) throw new HttpError(400, "That sticker isn't available");
       stickerId = Number(input.stickerId);
     }
-    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Message is empty');
+    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
     let replyId: number | null = null;
     const replyTo = input.replyTo;
     if (replyTo != null) {
@@ -858,7 +858,7 @@ export function createApp(opts: AppOptions): Server {
       const link = admin.checkSignup(body);
       if (link === 'code' && opts.registrationCode && !sameText(body.registrationCode, opts.registrationCode)) {
         failedTry([`register-ip:${ip}`], 60 * 60 * 1000);
-        throw new HttpError(403, 'Invalid registration code');
+        throw new HttpError(403, "That registration code is wrong. Ask whoever runs this Peiskos for it.");
       }
       // Where the server can send email, an address is required, and it counts right away, so a
       // forgotten password can be reset from day one without confirming it first.
@@ -942,7 +942,7 @@ export function createApp(opts: AppOptions): Server {
     const ids = [...new Set(body.serverIds.map(Number))];
     if (ids.length > MAX_FAVORITES) throw new HttpError(400, `You can favorite up to ${MAX_FAVORITES} hearths`);
     const isBurrow = db.prepare("SELECT 1 FROM members m JOIN servers s ON s.id = m.server_id WHERE m.user_id = ? AND m.server_id = ? AND s.kind = 'burrow'");
-    for (const id of ids) if (!isBurrow.get(user.id, id)) throw new HttpError(404, 'Hearth not found');
+    for (const id of ids) if (!isBurrow.get(user.id, id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     inTransaction(db, () => {
       db.prepare('UPDATE members SET favorite = NULL WHERE user_id = ?').run(user.id);
       const set = db.prepare('UPDATE members SET favorite = ? WHERE user_id = ? AND server_id = ?');
@@ -1043,7 +1043,7 @@ export function createApp(opts: AppOptions): Server {
   // Anyone in a group conversation can add people (that they share a burrow with).
   route('POST', '/api/dms/:id/members', ({ user, params, body }) => {
     const serverId = Number(params[0]);
-    if (!isGroupDm(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
+    if (!isGroupDm(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
     const adding = dmPeople(user, body.userIds).filter((id) => !isMember(serverId, id));
     if (serverMemberIds(serverId).length + adding.length > MAX_GROUP_DM)
       throw new HttpError(400, `A group conversation can have up to ${MAX_GROUP_DM} people`);
@@ -1058,7 +1058,7 @@ export function createApp(opts: AppOptions): Server {
    */
   route('POST', '/api/dms/:id/close', ({ user, params }) => {
     const serverId = Number(params[0]);
-    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
+    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
     db.prepare('UPDATE members SET hidden_at = ? WHERE server_id = ? AND user_id = ?').run(now(), serverId, user.id);
     for (const { id } of db.prepare("SELECT id FROM channels WHERE server_id = ? AND kind = 'text'").all(serverId) as { id: number }[]) {
       const newest = (db.prepare('SELECT COALESCE(MAX(id), 0) AS id FROM messages WHERE channel_id = ?').get(id) as { id: number }).id;
@@ -1126,7 +1126,7 @@ export function createApp(opts: AppOptions): Server {
     const owner = db.prepare("SELECT owner_id FROM servers WHERE id = ? AND kind = 'burrow'").get(serverId) as
       | { owner_id: number }
       | undefined;
-    if (!owner || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!owner || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     if (owner.owner_id === user.id) deleteBurrow(serverId);
     else removeMember(serverId, user.id);
     return { ok: true };
@@ -1165,7 +1165,7 @@ export function createApp(opts: AppOptions): Server {
   const allowed = (serverId: number, user: User, perm: Perm) => {
     const kind = serverKind(serverId);
     const me = kind === 'burrow' ? standing(serverId, user.id) : null;
-    if (!me) throw new HttpError(404, 'Hearth not found');
+    if (!me) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     if (!me.perms.has(perm)) throw new HttpError(403, "Your roles don't allow that");
     return me;
   };
@@ -1205,7 +1205,7 @@ export function createApp(opts: AppOptions): Server {
       | { id: number; serverId: number; position: number; perms: string }
       | undefined;
   const cleanColor = (value: unknown) => {
-    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) throw new HttpError(400, 'Color must look like #4f8a5b');
+    if (typeof value !== 'string' || !/^#[0-9a-f]{6}$/i.test(value)) throw new HttpError(400, 'Pick a colour like #4f8a5b');
     return value.toLowerCase();
   };
   // Permissions you don't have yourself stay as they were.
@@ -1217,7 +1217,7 @@ export function createApp(opts: AppOptions): Server {
   /** The role, if you're allowed to change it. */
   const managedRole = (id: number, user: User) => {
     const role = roleById(id);
-    if (!role || !isMember(role.serverId, user.id)) throw new HttpError(404, 'Role not found');
+    if (!role || !isMember(role.serverId, user.id)) throw new HttpError(404, 'That role is gone');
     const me = allowed(role.serverId, user, 'roles');
     if (role.position <= me.rank) throw new HttpError(403, 'You can only change roles below your own');
     return { role, me };
@@ -1448,8 +1448,8 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/channels/:id/voice', ({ user, params }) => {
     const channel = visibleRoom(Number(params[0]), user.id);
-    if (channel.kind !== 'voice') throw new HttpError(400, 'That is not a voice room');
-    if (!opts.voice) throw new HttpError(503, 'Voice is not set up on this server');
+    if (channel.kind !== 'voice') throw new HttpError(400, "That's not a fire");
+    if (!opts.voice) throw new HttpError(503, "Fires aren't set up on this server yet. Tell whoever runs it.");
     dmBlockCheck(channel.serverId, user.id);
     checkSeat(channel, user.id);
     const canSpeak = !serverMuted(channel.serverId, user.id);
@@ -1487,7 +1487,7 @@ export function createApp(opts: AppOptions): Server {
     const to = channelById(Number(body.channelId));
     const targetId = Number(body.userId);
     const from = channelById(inVoice.get(targetId) ?? -1);
-    if (!to || to.kind !== 'voice' || !canSee(to, user.id)) throw new HttpError(404, 'Room not found');
+    if (!to || to.kind !== 'voice' || !canSee(to, user.id)) throw new HttpError(404, "That room is gone, or you can't see it.");
     voiceTarget(to.serverId, user, targetId);
     if (!from || from.serverId !== to.serverId) throw new HttpError(400, "They aren't at a fire in this hearth");
     if (!canSee(to, targetId)) throw new HttpError(403, "They can't see that room");
@@ -1591,7 +1591,7 @@ export function createApp(opts: AppOptions): Server {
   const serveSound = async (req: IncomingMessage, res: ServerResponse, file: string) => {
     const kind = SOUND_TYPES.find((t) => file.endsWith('.' + t.ext))!;
     const info = opts.uploadDir ? await stat(soundPath(file)).catch(() => null) : null;
-    if (!info) throw new HttpError(404, 'Sound not found');
+    if (!info) throw new HttpError(404, 'That sound is gone');
     res.writeHead(200, {
       'content-type': kind.type,
       'content-length': info.size,
@@ -1605,7 +1605,7 @@ export function createApp(opts: AppOptions): Server {
 
   const managedSound = (id: number, user: User) => {
     const row = db.prepare('SELECT id, server_id, file FROM sounds WHERE id = ?').get(id) as { id: number; server_id: number; file: string } | undefined;
-    if (!row || !isMember(row.server_id, user.id)) throw new HttpError(404, 'Sound not found');
+    if (!row || !isMember(row.server_id, user.id)) throw new HttpError(404, 'That sound is gone');
     allowed(row.server_id, user, 'emoji');
     return row;
   };
@@ -1631,7 +1631,7 @@ export function createApp(opts: AppOptions): Server {
     const channel = channelById(inVoice.get(user.id) ?? -1);
     if (!channel) throw new HttpError(400, 'Join a fire to play sounds');
     const sound = db.prepare("SELECT id, '/api/sounds/' || file AS url FROM sounds WHERE id = ? AND server_id = ?").get(soundId, channel.serverId) as Json | undefined;
-    if (!sound) throw new HttpError(404, 'Sound not found');
+    if (!sound) throw new HttpError(404, 'That sound is gone');
     if (serverMuted(channel.serverId, user.id)) throw new HttpError(403, "You've been muted here");
     const t = Date.now();
     if (t - (lastSound.get(user.id) ?? 0) < 2000) throw new HttpError(429, 'One sound at a time');
@@ -1679,8 +1679,8 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/dms/:id/call', ({ user, params }) => {
     const serverId = Number(params[0]);
     const kind = serverKind(serverId);
-    if (kind !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
-    if (!opts.voice) throw new HttpError(503, 'Voice is not set up on this server');
+    if (kind !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
+    if (!opts.voice) throw new HttpError(503, "Fires aren't set up on this server yet. Tell whoever runs it.");
     // Nobody can ring someone who blocked them (or whom they blocked), or an account that's gone.
     dmBlockCheck(serverId, user.id);
     let channelId = callRoom(serverId);
@@ -1697,7 +1697,7 @@ export function createApp(opts: AppOptions): Server {
   // Not picking up: the people in the call hear about it, and your other devices stop ringing.
   route('POST', '/api/dms/:id/call/decline', ({ user, params }) => {
     const serverId = Number(params[0]);
-    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
+    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
     const channelId = callRoom(serverId);
     if (channelId !== undefined) sendTo(usersInVoice(channelId), { type: 'ring_declined', serverId, userId: user.id, username: user.displayName || user.username });
     sendTo([user.id], { type: 'ring_stop', serverId });
@@ -1735,14 +1735,14 @@ export function createApp(opts: AppOptions): Server {
     const channel = ownMessage(user, id);
     // Archived rooms stay as they were, and a timeout stops editing as well as writing.
     const room = channel.kind === 'thread' && channel.parentId !== null ? channelById(channel.parentId) ?? channel : channel;
-    if (room.archivedAt !== null) throw new HttpError(403, 'This room is archived');
+    if (room.archivedAt !== null) throw new HttpError(403, "This room is archived, so nothing new can go in it");
     const left = timeoutLeft(channel.serverId, user.id);
     if (left) throw new HttpError(403, `You're timed out for ${left}`);
     if (!editAllowance.take(user.id)) throw new HttpError(429, "You're editing very fast. Wait a moment.");
     const hasFiles = !!db.prepare('SELECT 1 FROM attachments WHERE message_id = ?').get(id);
     if (typeof body.content === 'string') body.content = withoutBidi(body.content);
-    if (typeof body.content !== 'string' || (looksBlank(body.content) && !hasFiles)) throw new HttpError(400, 'Message is empty');
-    if (body.content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
+    if (typeof body.content !== 'string' || (looksBlank(body.content) && !hasFiles)) throw new HttpError(400, 'Write something first');
+    if (body.content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Messages can be at most ${MAX_MESSAGE_LENGTH} characters. Shorten it, or send it in two parts.`);
     const before = db.prepare('SELECT content, COALESCE(edited_at, created_at) AS at FROM messages WHERE id = ?').get(id) as { content: string; at: number };
     if (before.content === body.content) return messageById(id);
     const flagged = filterCheck(channel, user.id, body.content);
@@ -1766,9 +1766,9 @@ export function createApp(opts: AppOptions): Server {
     const id = Number(params[0]);
     const msg = db.prepare('SELECT channel_id FROM messages WHERE id = ?').get(id) as { channel_id: number } | undefined;
     const channel = msg && channelById(msg.channel_id);
-    if (!channel || !canSee(channel, user.id)) throw new HttpError(404, 'Message not found');
+    if (!channel || !canSee(channel, user.id)) throw new HttpError(404, 'That message is gone. It may have been deleted.');
     const emoji = typeof body.emoji === 'string' ? body.emoji.trim() : '';
-    if (!emoji || !(isCustomEmoji(emoji, user.id) || (emoji.length <= 16 && EMOJI.test(emoji)))) throw new HttpError(400, 'That is not an emoji');
+    if (!emoji || !(isCustomEmoji(emoji, user.id) || (emoji.length <= 16 && EMOJI.test(emoji)))) throw new HttpError(400, "That's not an emoji");
     const mine = db.prepare('SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').get(id, user.id, emoji);
     if (!reactAllowance.take(user.id)) throw new HttpError(429, "You're reacting very fast. Wait a moment.");
     if (mine) {
@@ -1794,7 +1794,7 @@ export function createApp(opts: AppOptions): Server {
       | { author_id: number; channel_id: number }
       | undefined;
     const channel = msg && channelById(msg.channel_id);
-    if (!msg || !channel || !canSee(channel, user.id)) throw new HttpError(404, 'Message not found');
+    if (!msg || !channel || !canSee(channel, user.id)) throw new HttpError(404, 'That message is gone. It may have been deleted.');
     if (msg.author_id !== user.id && !can(channel.serverId, user.id, 'messages'))
       throw new HttpError(403, 'You can only delete your own messages');
     if (msg.author_id !== user.id) {
@@ -1900,7 +1900,7 @@ export function createApp(opts: AppOptions): Server {
     allowed(channel.serverId, user, 'messages');
     const fromId = Number(body.fromId);
     const ids = (db.prepare('SELECT id FROM messages WHERE channel_id = ? AND id >= ? ORDER BY id LIMIT ?').all(channel.id, fromId, MAX_BULK + 1) as { id: number }[]).map((r) => r.id);
-    if (!ids.length) throw new HttpError(404, 'Message not found');
+    if (!ids.length) throw new HttpError(404, 'That message is gone. It may have been deleted.');
     if (ids.length > MAX_BULK) throw new HttpError(400, `That's more than ${MAX_BULK} messages. Pick a newer one to start from.`);
     for (const id of ids) {
       removeFiles(db.prepare('SELECT id FROM attachments WHERE message_id = ?').all(id) as Json[]);
@@ -1993,7 +1993,7 @@ export function createApp(opts: AppOptions): Server {
     const report = db.prepare('SELECT server_id, message_id, author_id FROM reports WHERE id = ?').get(Number(params[0])) as
       | { server_id: number; message_id: number | null; author_id: number | null }
       | undefined;
-    if (!report || !isMember(report.server_id, user.id)) throw new HttpError(404, 'Report not found');
+    if (!report || !isMember(report.server_id, user.id)) throw new HttpError(404, 'That report is gone');
     allowed(report.server_id, user, 'messages');
     const message = report.message_id === null ? undefined : (db.prepare('SELECT id, channel_id, content FROM messages WHERE id = ?').get(report.message_id) as Json | undefined);
     if (body.deleteMessage && message) {
@@ -2090,7 +2090,7 @@ export function createApp(opts: AppOptions): Server {
     const report = db.prepare('SELECT message_id, author_id FROM admin_reports WHERE id = ?').get(Number(params[0])) as
       | { message_id: number | null; author_id: number | null }
       | undefined;
-    if (!report) throw new HttpError(404, 'Report not found');
+    if (!report) throw new HttpError(404, 'That report is gone');
     const message = report.message_id === null ? undefined : (db.prepare('SELECT id, channel_id, content FROM messages WHERE id = ?').get(report.message_id) as Json | undefined);
     const deleting = !!body.deleteMessage && !!message;
     if (deleting) {
@@ -2182,8 +2182,8 @@ export function createApp(opts: AppOptions): Server {
   /** The logged-in person sending a file, which is the raw request body. */
   const uploader = (req: IncomingMessage) => {
     const user = userByToken(bearer(req));
-    if (!user) throw new HttpError(401, 'Not logged in');
-    if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
+    if (!user) throw new HttpError(401, "You're logged out. Log in again.");
+    if (!opts.uploadDir) throw new HttpError(503, "Sharing files isn't set up on this server. Tell whoever runs it.");
     return user;
   };
 
@@ -2242,7 +2242,7 @@ export function createApp(opts: AppOptions): Server {
     });
     if (!size) {
       unlink(filePath(id)).catch(() => {});
-      throw new HttpError(400, 'File is empty');
+      throw new HttpError(400, 'That file is empty');
     }
     // The room may have been deleted (or they lost access) while it uploaded.
     try {
@@ -2270,7 +2270,7 @@ export function createApp(opts: AppOptions): Server {
   const handleThumbUpload = async (req: IncomingMessage, res: ServerResponse, id: string) => {
     const user = uploader(req);
     const a = db.prepare('SELECT type FROM attachments WHERE id = ? AND uploader_id = ? AND message_id IS NULL').get(id, user.id) as { type: string } | undefined;
-    if (!a) throw new HttpError(404, 'File not found');
+    if (!a) throw new HttpError(404, 'That file is gone. It may have been deleted.');
     if (!a.type.startsWith('video/')) throw new HttpError(400, 'Only videos have thumbnails');
     const data = await readLimited(req, MAX_THUMB_BYTES, new HttpError(413, 'That thumbnail is too big'));
     const kind = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
@@ -2298,7 +2298,7 @@ export function createApp(opts: AppOptions): Server {
     const a = db.prepare('SELECT name, type, size FROM attachments WHERE id = ? AND message_id IS NOT NULL').get(id) as
       | { name: string; type: string; size: number }
       | undefined;
-    if (!a || !opts.uploadDir || !(await stat(filePath(id)).catch(() => null))) throw new HttpError(404, 'File not found');
+    if (!a || !opts.uploadDir || !(await stat(filePath(id)).catch(() => null))) throw new HttpError(404, 'That file is gone. It may have been deleted.');
     const inline = INLINE_TYPES.has(a.type);
     const headers: Record<string, string | number> = {
       'content-type': inline ? a.type : 'application/octet-stream',
@@ -2414,7 +2414,7 @@ export function createApp(opts: AppOptions): Server {
   const servePicture = async (req: IncomingMessage, res: ServerResponse, folder: string, file: string) => {
     const kind = AVATAR_TYPES.find((t) => file.endsWith('.' + t.ext))!;
     const info = opts.uploadDir ? await stat(picturePath(folder, file)).catch(() => null) : null;
-    if (!info) throw new HttpError(404, 'Picture not found');
+    if (!info) throw new HttpError(404, 'That picture is gone');
     res.writeHead(200, {
       'content-type': kind.type,
       'content-length': info.size,
@@ -2552,7 +2552,7 @@ export function createApp(opts: AppOptions): Server {
   const visibleMessage = (user: User, id: number) => {
     const msg = db.prepare('SELECT channel_id, author_id FROM messages WHERE id = ?').get(id) as { channel_id: number; author_id: number } | undefined;
     const channel = msg && channelById(msg.channel_id);
-    if (!msg || !channel || !canSee(channel, user.id)) throw new HttpError(404, 'Message not found');
+    if (!msg || !channel || !canSee(channel, user.id)) throw new HttpError(404, 'That message is gone. It may have been deleted.');
     return { channel, authorId: msg.author_id };
   };
   const messageChanged = (id: number, channel: Channel) => {
@@ -2778,7 +2778,7 @@ export function createApp(opts: AppOptions): Server {
     const p256dh = typeof keys.p256dh === 'string' ? keys.p256dh : '';
     const auth = typeof keys.auth === 'string' ? keys.auth : '';
     if (endpoint.length > 2000 || !pushHostAllowed(endpoint)) throw new HttpError(400, "That browser's alerts aren't supported");
-    if (Buffer.from(p256dh, 'base64url').length !== 65 || Buffer.from(auth, 'base64url').length !== 16) throw new HttpError(400, 'Those alert keys look wrong');
+    if (Buffer.from(p256dh, 'base64url').length !== 65 || Buffer.from(auth, 'base64url').length !== 16) throw new HttpError(400, "Turning on alerts didn't work. Try again.");
     db.prepare(
       `INSERT INTO push_subs (user_id, endpoint, p256dh, auth, created_at, session) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT (endpoint) DO UPDATE SET user_id = excluded.user_id, p256dh = excluded.p256dh, auth = excluded.auth, created_at = excluded.created_at, session = excluded.session`,
@@ -3320,8 +3320,8 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/channels/:id/scheduled', ({ user, params, body }) => {
     const channel = textRoom(Number(params[0]), user.id);
     const content = typeof body.content === 'string' ? withoutBidi(body.content) : '';
-    if (looksBlank(content)) throw new HttpError(400, 'Message is empty');
-    if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, 'Message is too long');
+    if (looksBlank(content)) throw new HttpError(400, 'Write something first');
+    if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Messages can be at most ${MAX_MESSAGE_LENGTH} characters. Shorten it, or send it in two parts.`);
     const sendAt = Math.floor(Number(body.sendAt));
     if (!(sendAt > now() + 10_000 && sendAt < now() + 366 * 86400_000)) throw new HttpError(400, 'Pick a time in the next year');
     const count = (db.prepare('SELECT COUNT(*) AS n FROM scheduled_messages WHERE user_id = ?').get(user.id) as { n: number }).n;
@@ -3374,7 +3374,7 @@ export function createApp(opts: AppOptions): Server {
     const spoilerIds: string[] = [];
     const descriptions: Record<string, string> = {};
     if ((m.attachments as Json[]).length) {
-      if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
+      if (!opts.uploadDir) throw new HttpError(503, "Sharing files isn't set up on this server. Tell whoever runs it.");
       // The files land in the other room, so its upload limit applies, as if they were uploaded there.
       const limit = uploadLimitFor(to.serverId, user.id);
       if (!limit) throw new HttpError(403, "Your roles can't share files in that hearth");
@@ -3509,7 +3509,7 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/channels/:id/webhooks', ({ user, params, body, host, secure }) => {
     const channel = channelById(Number(params[0]));
-    if (!channel || channel.kind !== 'text' || !canSee(channel, user.id)) throw new HttpError(404, 'Room not found');
+    if (!channel || channel.kind !== 'text' || !canSee(channel, user.id)) throw new HttpError(404, "That room is gone, or you can't see it.");
     allowed(channel.serverId, user, 'burrow');
     if (botCount(channel.serverId) >= MAX_BOTS) throw new HttpError(400, `A hearth can have up to ${MAX_BOTS} bots and webhooks`);
     const botId = makeBot(channel.serverId, botName(body.name));
@@ -3549,7 +3549,7 @@ export function createApp(opts: AppOptions): Server {
     if (!text.trim()) throw new HttpError(400, 'Send { "content": "your message" }');
     const room = channelById(hook.channelId);
     if (!room || !isMember(room.serverId, hook.userId)) throw new HttpError(404, 'No such webhook');
-    if (room.archivedAt !== null) throw new HttpError(403, 'This room is archived');
+    if (room.archivedAt !== null) throw new HttpError(403, "This room is archived, so nothing new can go in it");
     const message = postMessage(userById(hook.userId)!, hook.channelId, { content: text.slice(0, MAX_MESSAGE_LENGTH) }, { webhook: true });
     return { id: message.id };
   }, false);
@@ -3668,7 +3668,7 @@ export function createApp(opts: AppOptions): Server {
 
   const managedEmoji = (id: number, user: User) => {
     const row = db.prepare('SELECT id, server_id, kind, file FROM custom_emoji WHERE id = ?').get(id) as { id: number; server_id: number; kind: string; file: string } | undefined;
-    if (!row || !isMember(row.server_id, user.id)) throw new HttpError(404, 'Emoji not found');
+    if (!row || !isMember(row.server_id, user.id)) throw new HttpError(404, 'That emoji is gone');
     allowed(row.server_id, user, 'emoji');
     return row;
   };
@@ -3749,10 +3749,10 @@ export function createApp(opts: AppOptions): Server {
   const imageCache = new Map<string, { type: string; data: Buffer }>();
   let imageCacheBytes = 0;
   const serveEmbedImage = async (req: IncomingMessage, res: ServerResponse, messageId: number, position: number, sig: string) => {
-    if (!sameText(sig, embedSig(messageId, position))) throw new HttpError(404, 'Picture not found');
+    if (!sameText(sig, embedSig(messageId, position))) throw new HttpError(404, 'That picture is gone');
     const row = db.prepare('SELECT data FROM message_embeds WHERE message_id = ? AND position = ?').get(messageId, position) as { data: string } | undefined;
     const link = row && (JSON.parse(row.data) as Embed).image;
-    if (!link || !previewOpts) throw new HttpError(404, 'Picture not found');
+    if (!link || !previewOpts) throw new HttpError(404, 'That picture is gone');
     let image = imageCache.get(link);
     if (!image) {
       try {
@@ -3887,7 +3887,7 @@ export function createApp(opts: AppOptions): Server {
   };
   const threadName = (value: unknown) => {
     const name = typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
-    if (!name) throw new HttpError(400, 'Thread name is required');
+    if (!name) throw new HttpError(400, 'Give the thread a name');
     return name.slice(0, 60);
   };
   const renameThread = (thread: Channel, user: User, name: unknown) => {
@@ -3936,9 +3936,9 @@ export function createApp(opts: AppOptions): Server {
   /** Why someone can't write in a room right now (archived, announcements only, rules not accepted), or null if they can. */
   const postProblem = (channel: Channel, userId: number): string | null => {
     const room = channel.kind === 'thread' && channel.parentId !== null ? channelById(channel.parentId) ?? channel : channel;
-    if (room.archivedAt !== null) return 'This room is archived';
+    if (room.archivedAt !== null) return 'This room is archived, so nothing new can go in it';
     const me = standing(channel.serverId, userId);
-    if (!me) return 'Room not found';
+    if (!me) return "That room is gone, or you can't see it.";
     if (channel.kind !== 'thread' && channel.announce && !me.perms.has('rooms')) {
       const allowedRoles = db.prepare('SELECT role_id FROM channel_post_roles WHERE channel_id = ?').all(channel.id) as { role_id: number }[];
       if (!allowedRoles.some((r) => me.roleIds.includes(r.role_id))) return 'Only some roles can post in this room';
@@ -3969,11 +3969,11 @@ export function createApp(opts: AppOptions): Server {
   // All messages, only @mentions, or nothing; and muting for a while (or until turned back on).
   route('POST', '/api/notify', ({ user, body }) => {
     const serverId = Number(body.serverId);
-    if (!isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     const channelId = body.channelId == null ? 0 : Number(body.channelId);
     if (channelId) {
       const channel = channelById(channelId);
-      if (!channel || channel.serverId !== serverId || !canSee(channel, user.id)) throw new HttpError(404, 'Room not found');
+      if (!channel || channel.serverId !== serverId || !canSee(channel, user.id)) throw new HttpError(404, "That room is gone, or you can't see it.");
     }
     const level = ['all', 'mentions', 'none'].includes(body.level as string) ? (body.level as string) : null;
     const until = body.mutedUntil == null ? null : Math.floor(Number(body.mutedUntil));
@@ -4008,7 +4008,7 @@ export function createApp(opts: AppOptions): Server {
 
   route('PATCH', '/api/groups/:id', ({ user, params, body }) => {
     const group = groupById(Number(params[0]));
-    if (!group || !isMember(group.serverId, user.id)) throw new HttpError(404, 'Heading not found');
+    if (!group || !isMember(group.serverId, user.id)) throw new HttpError(404, 'That heading is gone');
     allowed(group.serverId, user, 'rooms');
     db.prepare('UPDATE room_groups SET name = ? WHERE id = ?').run(cleanName(body.name, 'Heading', 32), group.id);
     sendServerUpdate(group.serverId);
@@ -4018,7 +4018,7 @@ export function createApp(opts: AppOptions): Server {
   // Deleting a heading keeps its rooms; they move out from under it.
   route('DELETE', '/api/groups/:id', ({ user, params }) => {
     const group = groupById(Number(params[0]));
-    if (!group || !isMember(group.serverId, user.id)) throw new HttpError(404, 'Heading not found');
+    if (!group || !isMember(group.serverId, user.id)) throw new HttpError(404, 'That heading is gone');
     allowed(group.serverId, user, 'rooms');
     db.prepare('UPDATE channels SET group_id = NULL WHERE group_id = ?').run(group.id);
     db.prepare('DELETE FROM room_groups WHERE id = ?').run(group.id);
@@ -4065,7 +4065,7 @@ export function createApp(opts: AppOptions): Server {
   route('PATCH', '/api/servers/:id', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     if (isGroupDm(serverId)) {
-      if (!isMember(serverId, user.id)) throw new HttpError(404, 'Conversation not found');
+      if (!isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
       const name = typeof body.name === 'string' ? body.name.trim() : '';
       if (name.length > 64) throw new HttpError(400, 'The name can be at most 64 characters');
       db.prepare('UPDATE servers SET name = ? WHERE id = ?').run(name, serverId);
@@ -4125,7 +4125,7 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/servers/:id/rules/accept', ({ user, params }) => {
     const serverId = Number(params[0]);
-    if (!isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     db.prepare('UPDATE members SET rules_accepted_at = ? WHERE server_id = ? AND user_id = ?').run(now(), serverId, user.id);
     const server = serverSummary(serverId, user.id);
     sendTo([user.id], { type: 'server_updated', server });
@@ -4155,9 +4155,9 @@ export function createApp(opts: AppOptions): Server {
     const inv = db.prepare('SELECT code, server_id, expires_at, max_uses, uses, created_by FROM invites WHERE code = ?').get(code) as
       | { code: string; server_id: number; expires_at: number | null; max_uses: number | null; uses: number; created_by: number | null }
       | undefined;
-    if (!inv) throw new HttpError(404, 'Invite code not found');
-    if (inv.expires_at !== null && inv.expires_at <= now()) throw new HttpError(410, 'This invite has expired');
-    if (inv.max_uses !== null && inv.uses >= inv.max_uses) throw new HttpError(410, 'This invite has been used up');
+    if (!inv) throw new HttpError(404, "That invite doesn't work. Ask for a new one.");
+    if (inv.expires_at !== null && inv.expires_at <= now()) throw new HttpError(410, 'This invite has run out. Ask for a new one.');
+    if (inv.max_uses !== null && inv.uses >= inv.max_uses) throw new HttpError(410, 'This invite has been used up. Ask for a new one.');
     return { serverId: inv.server_id, invite: inv.code, createdBy: inv.created_by };
   };
 
@@ -4177,14 +4177,14 @@ export function createApp(opts: AppOptions): Server {
   // Anyone in a burrow can make an invite; people who can edit the burrow see and cancel everyone's.
   route('GET', '/api/servers/:id/invites', ({ user, params }) => {
     const serverId = Number(params[0]);
-    if (!standing(serverId, user.id) || isGroupDm(serverId)) throw new HttpError(404, 'Hearth not found');
+    if (!standing(serverId, user.id) || isGroupDm(serverId)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     return invitesOf(serverId, user);
   });
 
   route('POST', '/api/servers/:id/invites', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     const kind = serverKind(serverId);
-    if (kind !== 'burrow' || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (kind !== 'burrow' || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     const expiresIn = body.expiresIn == null ? null : Math.floor(Number(body.expiresIn));
     if (expiresIn !== null && !(expiresIn >= 60 && expiresIn <= 30 * 86400)) throw new HttpError(400, 'Invites can last from a minute to 30 days');
     const maxUses = body.maxUses == null ? null : Math.floor(Number(body.maxUses));
@@ -4201,7 +4201,7 @@ export function createApp(opts: AppOptions): Server {
 
   route('DELETE', '/api/invites/:code', ({ user, params }) => {
     const inv = db.prepare('SELECT server_id, created_by FROM invites WHERE code = ?').get(params[0]) as { server_id: number; created_by: number | null } | undefined;
-    if (!inv || !isMember(inv.server_id, user.id)) throw new HttpError(404, 'Invite not found');
+    if (!inv || !isMember(inv.server_id, user.id)) throw new HttpError(404, "That invite doesn't work. Ask for a new one.");
     if (inv.created_by !== user.id) allowed(inv.server_id, user, 'invites');
     db.prepare('DELETE FROM invites WHERE code = ?').run(params[0]);
     return invitesOf(inv.server_id, user);
@@ -4350,7 +4350,7 @@ export function createApp(opts: AppOptions): Server {
   /** The event, if you made it or can edit the burrow. */
   const ownEvent = (id: number, user: User) => {
     const e = eventById(id);
-    if (!e || !isMember(e.serverId, user.id)) throw new HttpError(404, 'Event not found');
+    if (!e || !isMember(e.serverId, user.id)) throw new HttpError(404, 'That event is gone. It may have been cancelled.');
     if (e.createdBy !== user.id) allowed(e.serverId, user, 'burrow');
     return e;
   };
@@ -4358,7 +4358,7 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/servers/:id/events', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     const kind = serverKind(serverId);
-    if (kind !== 'burrow' || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (kind !== 'burrow' || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     const upcoming = (db.prepare('SELECT COUNT(*) AS n FROM events WHERE server_id = ? AND starts_at > ?').get(serverId, now()) as { n: number }).n;
     if (upcoming >= 50) throw new HttpError(400, 'This hearth has 50 events coming up already');
     const e = cleanEvent(serverId, user, body);
@@ -4391,7 +4391,7 @@ export function createApp(opts: AppOptions): Server {
   // Going, maybe, or not going (null takes your answer back).
   route('POST', '/api/events/:id/rsvp', ({ user, params, body }) => {
     const ev = eventById(Number(params[0]));
-    if (!ev || !isMember(ev.serverId, user.id)) throw new HttpError(404, 'Event not found');
+    if (!ev || !isMember(ev.serverId, user.id)) throw new HttpError(404, 'That event is gone. It may have been cancelled.');
     if (['going', 'maybe', 'no'].includes(body.status as string))
       db.prepare(
         `INSERT INTO event_rsvps (event_id, user_id, status) VALUES (?, ?, ?)
@@ -4571,7 +4571,7 @@ export function createApp(opts: AppOptions): Server {
     const id = Number(params[0]);
     const u = userById(id);
     const knows = id === user.id || usersSharingServerWith(user.id).includes(id) || friendRow(user.id, id);
-    if (!u || !knows) throw new HttpError(404, 'Person not found');
+    if (!u || !knows) throw new HttpError(404, "Couldn't find that person");
     const mutual = db
       .prepare(
         `SELECT s.id, s.name FROM members a JOIN members b ON a.server_id = b.server_id JOIN servers s ON s.id = a.server_id
@@ -4585,7 +4585,7 @@ export function createApp(opts: AppOptions): Server {
   // Your name in one burrow. Empty goes back to your display name.
   route('PATCH', '/api/servers/:id/nickname', ({ user, params, body }) => {
     const serverId = Number(params[0]);
-    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     let nick = typeof body.nickname === 'string' ? withoutBidi(body.nickname).replace(/\s+/g, ' ').trim() : '';
     if (looksBlank(nick)) nick = '';
     if (nick.length > 32) throw new HttpError(400, 'Keep your nickname to 32 characters');
@@ -4597,7 +4597,7 @@ export function createApp(opts: AppOptions): Server {
   // The role you show under your name in the member list. Null goes back to your top role.
   route('PATCH', '/api/servers/:id/shown-role', ({ user, params, body }) => {
     const serverId = Number(params[0]);
-    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     const roleId = body.roleId == null ? null : Number(body.roleId);
     if (roleId !== null && !db.prepare('SELECT 1 FROM member_roles WHERE server_id = ? AND user_id = ? AND role_id = ?').get(serverId, user.id, roleId))
       throw new HttpError(400, "You don't have that role");
@@ -4609,11 +4609,11 @@ export function createApp(opts: AppOptions): Server {
   // The fire you keep at the top of a hearth's sidebar. Null goes back to the first one you can see.
   route('PATCH', '/api/servers/:id/pinned-fire', ({ user, params, body }) => {
     const serverId = Number(params[0]);
-    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, 'Hearth not found');
+    if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
     const channelId = body.channelId == null ? null : Number(body.channelId);
     if (channelId !== null) {
       const channel = channelById(channelId);
-      if (!channel || channel.serverId !== serverId || channel.kind !== 'voice' || !canSee(channel, user.id)) throw new HttpError(404, 'Fire not found');
+      if (!channel || channel.serverId !== serverId || channel.kind !== 'voice' || !canSee(channel, user.id)) throw new HttpError(404, 'That fire is gone');
     }
     db.prepare('UPDATE members SET pinned_fire_id = ? WHERE server_id = ? AND user_id = ?').run(channelId, serverId, user.id);
     const summary = serverSummary(serverId, user.id);
@@ -4698,7 +4698,7 @@ export function createApp(opts: AppOptions): Server {
     if (target?.id === user.id) throw new HttpError(400, "You can't add yourself");
     // The same answer for nobody and for someone who blocked you.
     if (!target || blocked(target.id, user.id)) throw new HttpError(404, "Couldn't find anyone with that username");
-    if (blocked(user.id, target.id)) throw new HttpError(400, 'Unblock them first');
+    if (blocked(user.id, target.id)) throw new HttpError(400, 'Unblock them first, from their profile');
     const r = friendRow(user.id, target.id);
     if (r?.accepted_at) return friendsOf(user.id);
     if (r && r.requested_by !== user.id) {
@@ -4734,7 +4734,7 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/blocks', ({ user, body }) => {
     const other = Number(body.userId);
     if (other === user.id) throw new HttpError(400, "You can't block yourself");
-    if (!userById(other)) throw new HttpError(404, 'Person not found');
+    if (!userById(other)) throw new HttpError(404, "Couldn't find that person");
     db.prepare('INSERT OR IGNORE INTO blocks (user_id, blocked_id, created_at) VALUES (?, ?, ?)').run(user.id, other, now());
     db.prepare('DELETE FROM friends WHERE user_a = ? AND user_b = ?').run(...pair(user.id, other));
     friendsChanged(user.id, other);
@@ -5113,7 +5113,7 @@ export function createApp(opts: AppOptions): Server {
   // Export my data: a zip of your account, your messages (as JSON) and the files you sent.
   const handleExport = async (req: IncomingMessage, res: ServerResponse) => {
     const user = userByToken(bearer(req));
-    if (!user) throw new HttpError(401, 'Not logged in');
+    if (!user) throw new HttpError(401, "You're logged out. Log in again.");
     checkTries([`export:${user.id}`], 5);
     failedTry([`export:${user.id}`], 60 * 60 * 1000);
     const me = meJson(user);
@@ -5262,7 +5262,7 @@ export function createApp(opts: AppOptions): Server {
         if (!m) continue;
         const token = bearer(req);
         const user = userByToken(token);
-        if (r.auth && !user) throw new HttpError(401, 'Not logged in');
+        if (r.auth && !user) throw new HttpError(401, "You're logged out. Log in again.");
         const body = req.method === 'GET' ? {} : await readBody(req);
         const ua = String(req.headers['user-agent'] ?? '');
         const secure = req.headers['x-forwarded-proto'] === 'https' || !!(req.socket as { encrypted?: boolean }).encrypted;
@@ -5348,7 +5348,7 @@ export function createApp(opts: AppOptions): Server {
         } else if (msg.type === 'voice_join') {
           const channel = channelById(Number(msg.channelId));
           if (!channel || channel.kind !== 'voice' || !canSee(channel, user.id))
-            throw new HttpError(404, 'Room not found');
+            throw new HttpError(404, "That room is gone, or you can't see it.");
           checkSeat(channel, user.id);
           pendingMoves.delete(user.id);
           // Sitting down on another device: the one they were at the fire on gets up.
@@ -5374,8 +5374,8 @@ export function createApp(opts: AppOptions): Server {
           const left = timeoutLeft(channelById(channelId)!.serverId, user.id);
           if (left) throw new HttpError(403, `You're timed out for ${left}`);
           const content = typeof msg.content === 'string' ? withoutBidi(msg.content).trim() : '';
-          if (looksBlank(content)) throw new HttpError(400, 'Message is empty');
-          if (content.length > 1000) throw new HttpError(400, 'Message is too long');
+          if (looksBlank(content)) throw new HttpError(400, 'Write something first');
+          if (content.length > 1000) throw new HttpError(400, 'Messages here can be at most 1000 characters');
           if (!postAllowance.take(user.id)) throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
           const author = nameIn(channelById(channelId)!.serverId, user.id);
           const message = { id: ++firesideId, userId: user.id, author, content, createdAt: Date.now() };

@@ -159,7 +159,7 @@ export function fishing(ctx: FishingContext) {
 
   const hearth = (id: string, userId: number) => {
     const h = Number(id);
-    if (!ctx.isMember(h, userId)) throw fail(404, 'Hearth not found');
+    if (!ctx.isMember(h, userId)) throw fail(404, "That hearth is gone, or you're not in it.");
     return h;
   };
   const current = (userId: number, h: number) =>
