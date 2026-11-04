@@ -113,7 +113,7 @@ async function doTradeUp(btn) {
     lastTrade = r.item;
     renderCases();
     $('#cases-main .trade-result')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    if (['covert', 'rare'].includes(skinById(r.item.skinId).rarity)) playSound('message');
+    if (['covert', 'rare'].includes(skinById(r.item.skinId).rarity)) playSound('win');
   } catch (err) {
     btn.disabled = false;
     toast(err.message);
@@ -247,7 +247,7 @@ async function doUpgrade(btn) {
   renderCases();
   $('#cases-main .up-dial')?.classList.add(r.won ? 'won' : 'lost');
   if (r.won) {
-    playSound('message');
+    playSound('win');
     const skin = skinById(r.item.skinId);
     $('#up-message').innerHTML = `It worked! ${escapeHtml(skinTitle(skin, r.item.stattrak))} is in your inventory. <button type="button" class="link-btn" data-up-brag>Show the fire</button>`;
   }

@@ -777,7 +777,7 @@ function showSlotWins(r, strips) {
   const jackpot = r.wins.some((w) => lines[w.line].every((row, reel) => r.grid[reel][row] === 'flame'));
   res.textContent = jackpot ? `JACKPOT! +${chipsText(r.won)}` : `You win ${chipsText(r.won)}!`;
   res.className = 'slot-result win' + (r.won >= slotBet * 10 ? ' big' : '');
-  if (r.won >= slotBet * 20) playSound('message');
+  if (r.won >= slotBet * 20) playSound('win');
 }
 
 // ---- the others at the fire playing slots: a little machine each, spinning when theirs does
@@ -1050,7 +1050,7 @@ function showDrops() {
   </div>`;
   const { title, wear } = itemDetails(best);
   box.dataset.brag = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
-  if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('message');
+  if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('win');
 }
 
 function itemDetails(item) {
@@ -1083,7 +1083,7 @@ function showDrop(item, c, isNew = false) {
       <button type="button" class="btn secondary" data-brag="${item.id}">Show the fire</button>
     </div>`;
   box.dataset.brag = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
-  if (['covert', 'rare'].includes(skin.rarity)) playSound('message');
+  if (['covert', 'rare'].includes(skin.rarity)) playSound('win');
 }
 
 // ---- the collection book: every skin in every case, lit up once you've unboxed it (selling doesn't take it out)

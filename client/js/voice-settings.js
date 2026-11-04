@@ -1013,19 +1013,44 @@ function wireThemeSettings() {
   show();
 }
 
+// Each switch: its setting, its label, and the sound it plays when turned on.
+const SOUND_SWITCHES = [
+  ['messages', 'New messages', 'message'],
+  ['mention', 'Mentions and direct messages', 'mention'],
+  ['sent', 'Sending a message', 'sent'],
+  ['voice', 'People joining and leaving your fire', 'join'],
+  ['you', 'You joining a fire', 'joined'],
+  ['mute', 'Muting and deafening yourself', 'mute'],
+  ['share', 'Someone starting to share their screen', 'share'],
+  ['connection', 'Losing your voice connection, and getting it back', 'lost'],
+  ['win', 'Big wins and rare drops in the casino', 'win'],
+  ['bite', 'A fish biting', 'bite'],
+  ['event', 'An event starting', 'event'],
+];
 function soundSettings() {
   return `<h3>Sounds</h3>
-    <label class="check"><input type="checkbox" id="sound-messages" ${soundPrefs.messages ? 'checked' : ''} /> New messages</label>
-    <label class="check"><input type="checkbox" id="sound-sent" ${soundPrefs.sent ? 'checked' : ''} /> Sending a message</label>
-    <label class="check"><input type="checkbox" id="sound-voice" ${soundPrefs.voice ? 'checked' : ''} /> People joining and leaving voice</label>
+    <label>Sound set
+      <div class="sound-volume"><select id="sound-set">${Object.entries(SOUND_SETS).map(([id, k]) => `<option value="${id}" ${soundPrefs.set === id ? 'selected' : ''}>${k.name}${id === 'kindling' ? ' (default)' : ''}</option>`).join('')}</select><button type="button" class="btn secondary" id="sound-set-play">Play</button></div>
+    </label>
+    <span class="small muted">Every sound below plays on this.</span>
+    ${SOUND_SWITCHES.map(([key, label]) => `<label class="check"><input type="checkbox" id="sound-${key}" ${soundPrefs[key] ? 'checked' : ''} /> ${label}</label>`).join('')}
     <label>Sound volume
       <div class="sound-volume"><input type="range" id="sound-volume" min="0" max="100" step="5" value="${Math.round(soundPrefs.volume * 100)}" /><button type="button" class="btn secondary" id="sound-test">Test</button></div>
     </label>`;
 }
+let soundPreview = [];
+/** A friend joins, says something, and leaves, on the set you're looking at. */
+function previewSoundSet() {
+  soundPreview.forEach(clearTimeout);
+  playSound('join', true);
+  soundPreview = [setTimeout(() => playSound('message', true), 1300), setTimeout(() => playSound('leave', true), 2600)];
+}
 function wireSoundSettings() {
-  $('#sound-messages').onchange = (e) => { soundPrefs.messages = e.target.checked; saveSoundPrefs(); };
-  $('#sound-sent').onchange = (e) => { soundPrefs.sent = e.target.checked; saveSoundPrefs(); if (e.target.checked) playSound('sent', true); };
-  $('#sound-voice').onchange = (e) => { soundPrefs.voice = e.target.checked; saveSoundPrefs(); };
+  $('#sound-set').onchange = (e) => { soundPrefs.set = e.target.value; saveSoundPrefs(); previewSoundSet(); };
+  $('#sound-set-play').onclick = previewSoundSet;
+  for (const [key, , sound] of SOUND_SWITCHES) {
+    $(`#sound-${key}`).onchange = (e) => { soundPrefs[key] = e.target.checked; saveSoundPrefs(); if (e.target.checked) playSound(sound, true); };
+  }
   $('#sound-volume').oninput = (e) => { soundPrefs.volume = Number(e.target.value) / 100; saveSoundPrefs(); };
   $('#sound-volume').onchange = () => playSound('message', true);
   $('#sound-test').onclick = () => playSound('message', true);

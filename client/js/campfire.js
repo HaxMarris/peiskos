@@ -1256,26 +1256,161 @@ function closeVolume() { $('#volume-pop')?.remove(); }
 document.addEventListener('click', closeVolume);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeVolume(); });
 
-// Short chimes made on the fly, so there are no sound files to ship.
+// Short sounds made on the fly, so there are no sound files to ship. You pick a sound set (an
+// instrument) in settings, and every sound plays on it.
 const soundPrefs = (() => {
-  const defaults = { messages: true, sent: true, voice: true, volume: 0.5 };
+  const defaults = { set: 'kindling', messages: true, sent: true, voice: true, you: true, mute: true, share: true, mention: true, connection: true, win: true, bite: true, event: true, volume: 0.5 };
   try { return { ...defaults, ...JSON.parse(store.get('sounds')) }; } catch { return defaults; }
 })();
 const saveSoundPrefs = () => store.set('sounds', JSON.stringify(soundPrefs));
-// Every sound is the same soft, wooden tone, on notes from one scale (C major pentatonic),
-// so they sound like they belong together. [frequency, start, length, loudness] in Hz, seconds and 0-1.
+
+// Notes in Hz, from one scale (C major pentatonic) so every sound belongs with the rest.
+const NOTE = { G3: 196, A3: 220, C4: 261.6, D4: 293.7, E4: 329.6, G4: 392, A4: 440, C5: 523.3, D5: 587.3, E5: 659.3, G5: 784, A5: 880, C6: 1046.5, E6: 1318.5, G6: 1568 };
+const { G3, A3, C4, D4, E4, G4, A4, C5, D5, E5, G5, A5, C6, E6, G6 } = NOTE;
+
+// Each sound: the setting that turns it off, and its notes as [frequency, start, length, loudness]
+// in Hz, seconds and 0-1. A sound set can swap in its own notes for join, leave and message.
 const SOUNDS = {
-  message: { pref: 'messages', notes: [[784, 0, 0.32, 1], [1046.5, 0.08, 0.42, 0.9]] },
-  sent: { pref: 'sent', notes: [[1046.5, 0, 0.14, 0.35]] },
-  join: { pref: 'voice', notes: [[523.3, 0, 0.3, 1], [784, 0.1, 0.45, 0.9]] },
-  leave: { pref: 'voice', notes: [[784, 0, 0.3, 0.9], [523.3, 0.1, 0.45, 0.8]] },
-  ring: { pref: 'voice', notes: [[659.3, 0, 0.35, 1], [784, 0.3, 0.35, 1], [659.3, 0.6, 0.35, 1], [784, 0.9, 0.5, 1]] },
+  message: { pref: 'messages', notes: [[G5, 0, 0.32, 1], [C6, 0.08, 0.42, 0.9]] },
+  sent: { pref: 'sent', notes: [[C6, 0, 0.14, 0.35]] },
+  join: { pref: 'voice', notes: [[C5, 0, 0.3, 1], [G5, 0.1, 0.45, 0.9]] },
+  leave: { pref: 'voice', notes: [[G5, 0, 0.3, 0.9], [C5, 0.1, 0.45, 0.8]] },
+  ring: { pref: 'voice', notes: [[E5, 0, 0.35, 1], [G5, 0.3, 0.35, 1], [E5, 0.6, 0.35, 1], [G5, 0.9, 0.5, 1]] },
+  joined: { pref: 'you', notes: [[C5, 0, 0.5, 0.9], [E5, 0.09, 0.5, 0.9], [G5, 0.18, 0.6, 0.9], [C6, 0.27, 0.9, 0.8]] },
+  mute: { pref: 'mute', notes: [[E5, 0, 0.18, 0.6], [C5, 0.07, 0.25, 0.6]] },
+  unmute: { pref: 'mute', notes: [[C5, 0, 0.18, 0.6], [E5, 0.07, 0.25, 0.6]] },
+  deafen: { pref: 'mute', notes: [[G4, 0, 0.2, 0.6], [D4, 0.08, 0.3, 0.6]] },
+  undeafen: { pref: 'mute', notes: [[D4, 0, 0.2, 0.6], [G4, 0.08, 0.3, 0.6]] },
+  share: { pref: 'share', notes: [[G4, 0, 0.35, 0.8], [C5, 0.1, 0.35, 0.8], [G5, 0.2, 0.6, 0.8]] },
+  mention: { pref: 'mention', notes: [[G5, 0, 0.3, 1], [C6, 0.08, 0.3, 0.9], [E6, 0.16, 0.5, 0.8]] },
+  lost: { pref: 'connection', notes: [[E4, 0, 0.35, 0.8], [C4, 0.22, 0.6, 0.8]] },
+  back: { pref: 'connection', notes: [[C4, 0, 0.25, 0.8], [E4, 0.08, 0.25, 0.8], [G4, 0.16, 0.45, 0.8]] },
+  win: { pref: 'win', notes: [[C5, 0, 0.3, 0.8], [E5, 0.07, 0.3, 0.8], [G5, 0.14, 0.3, 0.8], [C6, 0.21, 0.3, 0.85], [E6, 0.28, 0.4, 0.85], [G6, 0.36, 0.8, 0.8]] },
+  bite: { pref: 'bite', notes: [[A4, 0, 0.15, 0.9], [A4, 0.12, 0.15, 0.9], [E5, 0.24, 0.3, 0.8]] },
+  event: { pref: 'event', notes: [[G4, 0, 0.4, 0.8], [C5, 0.16, 0.4, 0.8], [E5, 0.32, 0.4, 0.8], [G5, 0.48, 0.9, 0.8]] },
 };
+
+// The sound sets. note() plays one note; wet is how much goes into the small room; lp softens the top.
+const SOUND_SETS = {
+  kindling: {
+    name: 'Kindling', lp: 5000, wet: 0.25,
+    note: (d, f, at, len, loud) => soundTone(d, f, at, len, 0.2 * loud, { type: 'triangle', attack: 0.02, partials: [[1, 1, 1], [2, 0.12, 0.5]] }),
+    join: [[G3, 0.04, 0.9, 0.85], [D4, 0.16, 1.0, 0.75]],
+    leave: [[D4, 0, 0.6, 0.7], [G3, 0.16, 1.1, 0.8]],
+    message: [[A4, 0, 0.45, 0.8], [E5, 0.09, 0.6, 0.55]],
+  },
+  wood: {
+    name: 'Wooden chime', lp: 2400, wet: 0,
+    note: (d, f, at, len, loud) => soundTone(d, f, at, len, 0.2 * loud, { attack: 0.008, partials: [[1, 1, 1], [2.01, 0.18, 0.4]] }),
+  },
+  kalimba: {
+    name: 'Thumb piano', lp: 6000, wet: 0.2,
+    note: (d, f, at, len, loud) => soundTone(d, f, at, len, 0.17 * loud, { attack: 0.003, partials: [[1, 1, 1], [3.0, 0.14, 0.12], [5.9, 0.08, 0.06]] }),
+    join: [[C5, 0, 0.9, 1], [E5, 0.09, 0.9, 0.9], [G5, 0.18, 1.2, 1]],
+    leave: [[G5, 0, 0.8, 0.85], [E5, 0.13, 0.8, 0.8], [C5, 0.26, 1.2, 0.85]],
+    message: [[E6, 0, 0.45, 0.7], [C6, 0.1, 0.8, 0.85]],
+  },
+  log: {
+    name: 'Log drum', lp: 3200, wet: 0.12,
+    note(d, f, at, len, loud) {
+      soundTone(d, f, at, len * 0.45, 0.26 * loud, { attack: 0.002, glide: 1.25, glideTime: 0.03, partials: [[1, 1, 1], [3.93, 0.18, 0.25]] });
+      soundNoise(d, at, 0.012, 0.05 * loud, 2600);
+    },
+    join: [[A3, 0, 0.8, 1], [E4, 0.13, 0.8, 0.95]],
+    leave: [[E4, 0, 0.8, 0.9], [A3, 0.16, 0.9, 0.95]],
+    message: [[D5, 0, 0.5, 0.75], [A5, 0.09, 0.5, 0.65]],
+  },
+  bell: {
+    name: 'Hand bell', lp: 7000, wet: 0.35,
+    note: (d, f, at, len, loud) => soundTone(d, f, at, len * 3, 0.09 * loud, { attack: 0.002, partials: [[1, 1, 1], [2, 0.5, 0.6], [2.76, 0.35, 0.4], [5.4, 0.18, 0.2], [8.93, 0.08, 0.1]] }),
+    join: [[C5, 0, 0.6, 1], [G5, 0.14, 0.73, 0.95]],
+    leave: [[G5, 0, 0.5, 0.8], [C5, 0.16, 0.67, 0.8]],
+    message: [[A5, 0, 0.43, 0.85]],
+  },
+  hum: {
+    name: 'Warm hum', lp: 0, wet: 0.2,
+    note(d, f, at, len, loud, close = false) {
+      const lp = soundCtx.createBiquadFilter();
+      lp.type = 'lowpass'; lp.Q.value = 0.7;
+      lp.frequency.setValueAtTime(close ? 1700 : 450, at);
+      lp.frequency.exponentialRampToValueAtTime(close ? 380 : 1700, at + len * 0.8);
+      lp.connect(d);
+      for (const cents of [-7, 7]) soundTone(lp, f, at, len, 0.05 * loud, { type: 'sawtooth', attack: 0.07, detune: cents });
+    },
+    join(d, t) { for (const [f, s] of [[C4, 0], [E4, 0.04], [G4, 0.08], [C5, 0.14]]) this.note(d, f, t + s, 0.9, 1); },
+    leave(d, t) { for (const [f, s] of [[C5, 0], [G4, 0.04], [E4, 0.08], [C4, 0.12]]) this.note(d, f, t + s, 0.9, 0.9, true); },
+    message: [[E5, 0, 0.3, 0.9], [A5, 0.12, 0.4, 0.8]],
+  },
+  pop: {
+    name: 'Pop', lp: 0, wet: 0.1,
+    note: (d, f, at, len, loud) => soundTone(d, f, at, len * 0.35, 0.22 * loud, { attack: 0.004, glide: 0.45, glideTime: 0.07 }),
+    join: [[G4, 0, 0.5, 1], [D5, 0.12, 0.5, 1]],
+    leave(d, t) {
+      soundTone(d, D5, t, 0.28, 0.2, { attack: 0.004, glide: 1.5, glideTime: 0.02 });
+      soundTone(d, 260, t + 0.13, 0.35, 0.22, { attack: 0.004, glide: 2.3, glideTime: 0.18 });
+    },
+    message: [[C6, 0, 0.35, 0.8], [G6, 0.08, 0.35, 0.6]],
+  },
+};
+
 let soundCtx = null;
+let soundRoom = null;
 let lastMessageSound = 0;
 
-function playSound(name, force = false) {
+/** One note made of partials, each [multiple, share of the loudness, share of the length]. */
+function soundTone(dest, f, at, len, peak, { type = 'sine', partials = [[1, 1, 1]], attack = 0.006, glide = 0, glideTime = 0.05, detune = 0 } = {}) {
+  for (const [mult, share, dec] of partials) {
+    const osc = soundCtx.createOscillator();
+    const gain = soundCtx.createGain();
+    osc.type = type;
+    osc.detune.value = detune;
+    osc.frequency.setValueAtTime(f * mult * (glide || 1), at);
+    if (glide) osc.frequency.exponentialRampToValueAtTime(f * mult, at + glideTime);
+    gain.gain.setValueAtTime(0.0001, at);
+    gain.gain.exponentialRampToValueAtTime(Math.max(peak * share, 0.0002), at + attack);
+    gain.gain.exponentialRampToValueAtTime(0.0001, at + attack + len * dec);
+    osc.connect(gain).connect(dest);
+    osc.start(at);
+    osc.stop(at + attack + len * dec + 0.05);
+  }
+}
+/** A click of filtered noise, for the knock on a log drum. */
+function soundNoise(dest, at, len, peak, freq) {
+  const ctx = soundCtx;
+  const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * (len + 0.02)), ctx.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource(), filter = ctx.createBiquadFilter(), gain = ctx.createGain();
+  src.buffer = buf;
+  filter.type = 'bandpass'; filter.frequency.value = freq; filter.Q.value = 1.5;
+  gain.gain.setValueAtTime(0.0001, at);
+  gain.gain.exponentialRampToValueAtTime(peak, at + 0.001);
+  gain.gain.exponentialRampToValueAtTime(0.0001, at + len);
+  src.connect(filter).connect(gain).connect(dest);
+  src.start(at);
+}
+/** A small, warm room for the sets that want one: decaying noise as the reverb. */
+function soundRoomBus() {
+  if (soundRoom) return soundRoom;
+  const ctx = soundCtx;
+  const len = Math.floor(ctx.sampleRate * 1.6), ir = ctx.createBuffer(2, len, ctx.sampleRate);
+  for (let c = 0; c < 2; c++) {
+    const d = ir.getChannelData(c);
+    for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3.2);
+  }
+  soundRoom = ctx.createConvolver();
+  soundRoom.buffer = ir;
+  const soften = ctx.createBiquadFilter();
+  soften.type = 'lowpass';
+  soften.frequency.value = 3500;
+  soundRoom.connect(soften).connect(ctx.destination);
+  return soundRoom;
+}
+
+/** set: play on this sound set instead of yours (for previews in settings). */
+function playSound(name, force = false, set = soundPrefs.set) {
   const sound = SOUNDS[name];
+  if (!sound) return;
   if (!force && (!soundPrefs[sound.pref] || !soundPrefs.volume)) return;
   // A busy room shouldn't turn into a wind chime.
   if (name === 'message' && !force) {
@@ -1288,30 +1423,24 @@ function playSound(name, force = false) {
       setChimeOutput();
     }
     if (soundCtx.state === 'suspended') soundCtx.resume();
-    const ctx = soundCtx;
-    const t0 = ctx.currentTime + 0.01;
-    // A low-pass takes the edge off, like a mallet on wood rather than a beep.
-    const soften = ctx.createBiquadFilter();
-    soften.type = 'lowpass';
-    soften.frequency.value = 2400;
-    soften.connect(ctx.destination);
-    for (const [freq, start, length, loud] of sound.notes) {
-      const at = t0 + start;
-      const peak = 0.2 * loud * soundPrefs.volume;
-      // The note, plus a quiet overtone that dies away first.
-      for (const [mult, share, decay] of [[1, 1, length], [2.01, 0.18, length * 0.4]]) {
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = 'sine';
-        osc.frequency.value = freq * mult;
-        gain.gain.setValueAtTime(0.0001, at);
-        gain.gain.exponentialRampToValueAtTime(peak * share, at + 0.008);
-        gain.gain.exponentialRampToValueAtTime(0.0001, at + decay);
-        osc.connect(gain).connect(soften);
-        osc.start(at);
-        osc.stop(at + decay + 0.02);
-      }
+    const kit = SOUND_SETS[set] ?? SOUND_SETS.kindling;
+    const t0 = soundCtx.currentTime + 0.02;
+    const out = soundCtx.createGain();
+    out.gain.value = soundPrefs.volume;
+    if (kit.lp) {
+      const soften = soundCtx.createBiquadFilter();
+      soften.type = 'lowpass';
+      soften.frequency.value = kit.lp;
+      out.connect(soften).connect(soundCtx.destination);
+    } else out.connect(soundCtx.destination);
+    if (kit.wet) {
+      const send = soundCtx.createGain();
+      send.gain.value = kit.wet;
+      out.connect(send).connect(soundRoomBus());
     }
+    const own = kit[name];
+    if (typeof own === 'function') own.call(kit, out, t0);
+    else for (const [f, start, len, loud] of own ?? sound.notes) kit.note(out, f, t0 + start, len, loud);
   } catch {}
 }
 
