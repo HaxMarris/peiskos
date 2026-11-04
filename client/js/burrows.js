@@ -338,7 +338,7 @@ function renderChannels() {
     li.prepend(roomIcon());
     if (!readingNow(c.id) && c.mentions && n.level !== 'none') li.append(pingCount(c.mentions));
     li.onclick = () => { selectChannel(c.id); showView('chat'); };
-    li.oncontextmenu = (e) => { e.preventDefault(); openNotifyMenu(li, s, c); };
+    onHold(li, () => openNotifyMenu(li, s, c, manager ? [{ label: 'Room settings', run: () => openRoomSettings(c) }] : []));
     if (manager) li.append(roomSettingsButton(c));
     if (manager && !c.archived && !isPhone()) makeDraggable(li, s, c);
     return [li, ...threadRows(s, c)];
@@ -374,7 +374,10 @@ function renderChannels() {
       ? `<div class="voice-room-name"><span class="fire-badge">${FIRE_ICON}</span><span class="fire-text"><span class="room-name">${escapeHtml(c.name)}</span><span class="fire-sub">${escapeHtml(sub)}</span></span>${c.private ? LOCK_ICON : ''}</div>`
       : `<div class="voice-room-name">${FIRE_ICON.replace('<svg', '<svg class="voice-icon"')}<span class="room-name">${escapeHtml(c.name)}</span>${c.userLimit ? `<span class="seat-count">${ids.length}/${c.userLimit}</span>` : ''}${c.private ? LOCK_ICON : ''}</div>`;
     if (i > 0) li.firstChild.append(pinFireButton(s, c));
-    if (can(s, 'rooms')) li.firstChild.append(roomSettingsButton(c));
+    if (can(s, 'rooms')) {
+      li.firstChild.append(roomSettingsButton(c));
+      onHold(li, () => openRoomSettings(c));
+    }
     li.title = joined ? 'Open the fire' : 'Join voice';
     li.onclick = () => (joined ? goToVoice() : joinVoice(c.id));
     const people = ids.map((id) => {
@@ -426,6 +429,26 @@ function renderChannels() {
   $('#voice-section').classList.toggle('hidden', voiceRooms.length < 2);
   renderVoicePlaces();
   renderFire();
+}
+
+// Right-click, or press and hold on a phone. The gear only shows on the room you're in there, so this is
+// how you reach the rest. Android also sends a contextmenu on a long press, so a hold that just fired skips it.
+function onHold(el, open) {
+  let timer = null, start = null, fired = 0;
+  el.oncontextmenu = (e) => { e.preventDefault(); if (Date.now() - fired > 800) open(); };
+  el.addEventListener('touchstart', (e) => {
+    clearTimeout(timer);
+    if (e.touches.length !== 1 || e.target.closest('button')) return;
+    start = e.touches[0];
+    timer = setTimeout(() => { fired = Date.now(); haptic(); open(); }, 450);
+  }, { passive: true });
+  el.addEventListener('touchmove', (e) => {
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - start.clientX, t.clientY - start.clientY) > 10) clearTimeout(timer);
+  }, { passive: true });
+  // Ending the hold mustn't also open the room or close the menu it just opened.
+  el.addEventListener('touchend', (e) => { clearTimeout(timer); if (Date.now() - fired < 800) e.preventDefault(); });
+  el.addEventListener('touchcancel', () => clearTimeout(timer));
 }
 
 // Moves a fire to the card at the top, for you only. The hearth's first fire is the default, so pinning it clears the choice.
