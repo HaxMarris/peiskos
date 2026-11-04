@@ -31,6 +31,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   leaveVoice(true);
   const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted };
   state.voice = voice;
+  store.set('firstWeekFire', '1');
   state.fireside = { channelId, messages: [], unread: 0 };
   // Made now, while the click still counts, or some browsers start it paused.
   if (wantsMicProcessor()) voice.micCtx = newMicContext();

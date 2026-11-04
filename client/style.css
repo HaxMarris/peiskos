@@ -2075,6 +2075,11 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .home-main { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; color: var(--text-strong); }
 .home-row .small { flex: none; }
 .home-side { flex: none; }
+.first-week .first-week-tick { display: inline-block; width: 16px; height: 16px; margin-right: 10px; vertical-align: -3px; border-radius: 50%; border: 2px solid var(--muted); }
+.first-week .done .first-week-tick { border-color: var(--accent); background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='white' d='m9.5 16.2-4-4 1.4-1.4 2.6 2.6 6.6-6.6 1.4 1.4z'/%3E%3C/svg%3E") center / 14px no-repeat; }
+.first-week .done { cursor: default; opacity: .7; }
+.first-week .done .home-main { font-weight: 600; text-decoration: line-through; text-decoration-color: var(--muted); }
+.first-week #first-week-hide { margin-top: 6px; }
 .tile.home-tile { background: var(--surface-2); color: var(--accent-text); }
 .tile.home-tile svg { width: 18px; height: 18px; fill: currentColor; }
 .switch-home { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 8px; border-radius: var(--radius-md); font: inherit; color: var(--text-strong); cursor: pointer; text-align: left; }
