@@ -371,6 +371,75 @@ function openPollCreator() {
   };
 }
 
+// A shared list in a room: who's bringing what. Anyone can add things and tick them off.
+function openListCreator() {
+  const channelId = state.channelId;
+  if (!channelId) return;
+  modal(`<h2>Start a list</h2>
+    <p class="small muted">Everyone in the room can add to it and tick things off.</p>
+    <form id="list-form">
+      <label>Name<input id="list-title" maxlength="100" required placeholder="e.g. Who's bringing what" /></label>
+      <label>Things on it, one per line<textarea id="list-items" rows="5" placeholder="Snacks&#10;Board games&#10;Firewood"></textarea></label>
+      <div class="error" id="modal-error"></div>
+      <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">Post list</button></div>
+    </form>`);
+  $('#list-title').focus();
+  $('#list-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const items = $('#list-items').value.split('\n').map((x) => x.trim()).filter(Boolean);
+    try {
+      await api(`/api/channels/${channelId}/lists`, { method: 'POST', body: { title: $('#list-title').value, items, replyTo: state.replyTo?.id } });
+      closeModal();
+      setReply(null);
+    } catch (err) { $('#modal-error').textContent = err.message; }
+  };
+}
+
+function renderList(m) {
+  const l = m.list;
+  const room = roomById(m.channelId);
+  const server = room?.s;
+  const manage = m.authorId === state.me.id || (server && !isDm(server) && can(server, 'messages'));
+  const done = l.items.filter((i) => i.doneBy).length;
+  const box = document.createElement('div');
+  box.className = 'poll shared-list';
+  box.innerHTML = `<div class="poll-q"></div><div class="muted small">${l.items.length ? `${done} of ${l.items.length} done` : 'Nothing on it yet'}</div><ul class="list-items"></ul>`;
+  box.querySelector('.poll-q').textContent = `☑ ${l.title}`;
+  const ul = box.querySelector('ul');
+  for (const it of l.items) {
+    const li = document.createElement('li');
+    li.className = 'list-item' + (it.doneBy ? ' done' : '');
+    li.innerHTML = `<label><input type="checkbox" ${it.doneBy ? 'checked' : ''} /><span class="list-text"></span></label><span class="small muted list-who"></span>`;
+    li.querySelector('.list-text').textContent = it.text;
+    if (it.doneBy) li.querySelector('.list-who').textContent = it.doneBy === state.me.id ? 'you' : nameOf(it.doneBy, 'someone');
+    li.querySelector('input').onchange = (e) => api(`/api/messages/${m.id}/list/${it.id}`, { method: 'POST', body: { done: e.target.checked } }).catch((err) => { e.target.checked = !e.target.checked; alertError(err); });
+    if (manage || it.addedBy === state.me.id) {
+      const x = document.createElement('button');
+      x.type = 'button';
+      x.className = 'icon-btn list-remove';
+      x.title = 'Take it off the list';
+      x.setAttribute('aria-label', `Take ${it.text} off the list`);
+      x.textContent = '×';
+      x.onclick = () => api(`/api/messages/${m.id}/list/${it.id}`, { method: 'DELETE' }).catch(alertError);
+      li.append(x);
+    }
+    ul.append(li);
+  }
+  if (!room?.c?.archived && l.items.length < 50) {
+    const form = document.createElement('form');
+    form.className = 'list-add';
+    form.innerHTML = '<input maxlength="120" placeholder="Add something" aria-label="Add to the list" /><button type="submit" class="btn secondary">Add</button>';
+    form.onsubmit = async (e) => {
+      e.preventDefault();
+      const input = form.querySelector('input');
+      if (!input.value.trim()) return;
+      try { await api(`/api/messages/${m.id}/list`, { method: 'POST', body: { text: input.value } }); input.value = ''; } catch (err) { alertError(err); }
+    };
+    box.append(form);
+  }
+  return box;
+}
+
 // "When works?": a few times to pick from; whoever asked turns the best one into an event.
 function openPlanCreator() {
   const channelId = state.channelId;
@@ -869,6 +938,7 @@ $('#plus-btn').onclick = (e) => {
   openMenu(e.currentTarget, [
     state.maxUploadBytes && { label: 'Upload files', run: () => $('#file-input').click() },
     { label: 'Create a poll', run: openPollCreator },
+    { label: 'Start a list', run: openListCreator },
     !isDm(state.servers.get(state.serverId)) && { label: 'Find a time that works', run: openPlanCreator },
     stickerGroups().length && { label: 'Send a sticker', run: openStickers },
     { label: 'Send later…', run: openSchedule },

@@ -296,6 +296,7 @@ export function createApp(opts: AppOptions): Server {
       forwarded: forwarded ? JSON.parse(forwarded as string) : null,
       sticker: stickerId == null ? null : stickerJson(stickerId as number),
       poll: pollFor(r.id as number),
+      list: listFor(r.id as number),
       embeds: embedsOff ? [] : embedsFor(r.id as number),
       thread: threadOf(r.id as number),
     }));
@@ -630,7 +631,7 @@ export function createApp(opts: AppOptions): Server {
   const reactAllowance = allowance(60, 3);
   const editAllowance = allowance(30, 0.5);
   const voteAllowance = allowance(30, 1);
-  type PostExtras = { forwarded?: Json; poll?: PollInput; scheduled?: boolean; live?: Json; webhook?: boolean };
+  type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
 
   // ---- slash commands, worked out by the server so nobody can fake a dice roll
 
@@ -728,7 +729,7 @@ export function createApp(opts: AppOptions): Server {
       if (!sticker || !isMember(sticker.server_id, user.id)) throw new HttpError(400, "That sticker isn't available");
       stickerId = Number(input.stickerId);
     }
-    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
+    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.list && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
     let replyId: number | null = null;
     const replyTo = input.replyTo;
     if (replyTo != null) {
@@ -761,6 +762,10 @@ export function createApp(opts: AppOptions): Server {
         messageId, p.question, JSON.stringify(p.options), p.multi ? 1 : 0, p.closesAt, p.times ? JSON.stringify(p.times) : null,
       );
       if (p.closesAt) wakeAt(p.closesAt);
+    }
+    if (extras.list) {
+      db.prepare('INSERT INTO lists (message_id, title) VALUES (?, ?)').run(messageId, extras.list.title);
+      for (const text of extras.list.items) db.prepare('INSERT INTO list_items (message_id, text, added_by) VALUES (?, ?, ?)').run(messageId, text, user.id);
     }
     const message = messageById(messageId)!;
     broadcastToChannel(channel, { type: 'message', message });
@@ -3588,6 +3593,65 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/channels/:id/polls', ({ user, params, body }) =>
     postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { poll: makePoll(body) }));
+
+  // ---- shared lists: who's bringing what ----
+
+  const MAX_LIST_ITEMS = 50;
+  const listFor = (messageId: number) => {
+    const l = db.prepare('SELECT title FROM lists WHERE message_id = ?').get(messageId) as { title: string } | undefined;
+    if (!l) return null;
+    const items = db.prepare('SELECT id, text, added_by AS addedBy, done_by AS doneBy, done_at AS doneAt FROM list_items WHERE message_id = ? ORDER BY id').all(messageId);
+    return { title: l.title, items };
+  };
+  const listText = (value: unknown) => {
+    const text = typeof value === 'string' ? withoutBidi(value).trim() : '';
+    if (!text) throw new HttpError(400, 'Write what the item is');
+    if (text.length > 120) throw new HttpError(400, 'Keep each item to 120 characters');
+    return text;
+  };
+  route('POST', '/api/channels/:id/lists', ({ user, params, body }) => {
+    const title = cleanName(body.title, 'The list name', 100);
+    const items = (Array.isArray(body.items) ? body.items : []).filter((x) => typeof x === 'string' && x.trim()).map(listText);
+    if (items.length > MAX_LIST_ITEMS) throw new HttpError(400, `A list can have up to ${MAX_LIST_ITEMS} items`);
+    return postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { list: { title, items } });
+  });
+  /** A list someone can see and change: it's in a room they can see that isn't archived. */
+  const listMessage = (user: User, id: number) => {
+    const { channel, authorId } = visibleMessage(user, id);
+    if (!listFor(id)) throw new HttpError(404, "That message isn't a list");
+    if (channel.archivedAt !== null) throw new HttpError(403, 'This room is archived, so nothing new can go in it');
+    if (!voteAllowance.take(user.id)) throw new HttpError(429, "You're changing things very fast. Wait a moment.");
+    return { channel, authorId };
+  };
+  route('POST', '/api/messages/:id/list', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel } = listMessage(user, id);
+    if ((db.prepare('SELECT COUNT(*) AS n FROM list_items WHERE message_id = ?').get(id) as { n: number }).n >= MAX_LIST_ITEMS)
+      throw new HttpError(400, `A list can have up to ${MAX_LIST_ITEMS} items. Remove some first.`);
+    db.prepare('INSERT INTO list_items (message_id, text, added_by) VALUES (?, ?, ?)').run(id, listText(body.text), user.id);
+    return messageChanged(id, channel);
+  });
+  // Ticking an item says you've got it; anyone can untick it again.
+  route('POST', '/api/messages/:id/list/:item', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel } = listMessage(user, id);
+    const item = db.prepare('SELECT id FROM list_items WHERE id = ? AND message_id = ?').get(Number(params[1]), id);
+    if (!item) throw new HttpError(404, "That item isn't on the list any more");
+    if (body.done) db.prepare('UPDATE list_items SET done_by = ?, done_at = ? WHERE id = ?').run(user.id, now(), Number(params[1]));
+    else db.prepare('UPDATE list_items SET done_by = NULL, done_at = NULL WHERE id = ?').run(Number(params[1]));
+    return messageChanged(id, channel);
+  });
+  // Whoever added an item, started the list, or can manage messages can take it off.
+  route('DELETE', '/api/messages/:id/list/:item', ({ user, params }) => {
+    const id = Number(params[0]);
+    const { channel, authorId } = listMessage(user, id);
+    const item = db.prepare('SELECT added_by FROM list_items WHERE id = ? AND message_id = ?').get(Number(params[1]), id) as { added_by: number | null } | undefined;
+    if (!item) throw new HttpError(404, "That item isn't on the list any more");
+    if (item.added_by !== user.id && authorId !== user.id && !can(channel.serverId, user.id, 'messages'))
+      throw new HttpError(403, 'Only whoever added it, or started the list, can take it off');
+    db.prepare('DELETE FROM list_items WHERE id = ?').run(Number(params[1]));
+    return messageChanged(id, channel);
+  });
 
   // ---- "when works?": a poll of times that the one who asked turns into an event ----
 

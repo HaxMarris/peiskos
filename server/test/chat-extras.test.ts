@@ -515,3 +515,20 @@ test('a calendar feed has your hearths\' events, at a private address you can tu
   await call('/api/me/calendar', { method: 'DELETE', token: sam.token });
   assert.equal((await fetch(base + again)).status, 404);
 });
+
+test('shared lists: anyone in the room adds and ticks things off', async () => {
+  const [max, sam, ann, eve] = await people('max', 'sam', 'ann', 'eve');
+  const { room } = await burrow(max, sam, ann);
+  const m = (await call(`/api/channels/${room}/lists`, { body: { title: 'Cabin weekend', items: ['Snacks', ' ', 'Board games'] }, token: max.token })).data;
+  assert.deepEqual(m.list.items.map((i: any) => i.text), ['Snacks', 'Board games']);
+  const added = (await call(`/api/messages/${m.id}/list`, { body: { text: 'Firewood' }, token: sam.token })).data;
+  const wood = added.list.items.find((i: any) => i.text === 'Firewood');
+  assert.equal(wood.addedBy, sam.user.id);
+  const ticked = (await call(`/api/messages/${m.id}/list/${wood.id}`, { body: { done: true }, token: ann.token })).data;
+  assert.equal(ticked.list.items.find((i: any) => i.id === wood.id).doneBy, ann.user.id);
+  const snacks = m.list.items[0];
+  assert.equal((await call(`/api/messages/${m.id}/list/${snacks.id}`, { method: 'DELETE', token: ann.token })).status, 403, "ann didn't add it");
+  assert.equal((await call(`/api/messages/${m.id}/list/${wood.id}`, { method: 'DELETE', token: sam.token })).status, 200);
+  assert.equal((await call(`/api/messages/${m.id}/list`, { body: { text: 'x' }, token: eve.token })).status, 404);
+  assert.equal((await call(`/api/messages/${m.id}/list`, { body: { text: 'x'.repeat(121) }, token: sam.token })).status, 400);
+});

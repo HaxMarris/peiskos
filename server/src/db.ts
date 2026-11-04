@@ -990,6 +990,20 @@ function addPlanning(db: Db) {
   addColumn(db, 'polls', 'times', 'TEXT'); // a "when works?" poll: JSON list of times (ms) instead of answers
   addColumn(db, 'polls', 'event_id', 'INTEGER'); // the event it became
   db.exec(`
+    -- A checklist in a room (who's bringing what), on its message. Anyone in the room can add to it and tick things off.
+    CREATE TABLE IF NOT EXISTS lists (
+      message_id INTEGER PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      title      TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS list_items (
+      id         INTEGER PRIMARY KEY,
+      message_id INTEGER NOT NULL REFERENCES lists(message_id) ON DELETE CASCADE,
+      text       TEXT NOT NULL,
+      added_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      done_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      done_at    INTEGER
+    );
+    CREATE INDEX IF NOT EXISTS list_items_by_list ON list_items(message_id);
     -- A private web address per person that calendar apps read their hearths' events from.
     CREATE TABLE IF NOT EXISTS calendar_feeds (
       user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

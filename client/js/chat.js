@@ -201,6 +201,7 @@ function renderLine(m) {
   el.append(content);
   if (m.sticker) el.append(renderSticker(m.sticker));
   if (m.poll) el.append(renderPoll(m));
+  if (m.list) el.append(renderList(m));
   if (m.live) el.append(renderLiveCard(m));
   if (m.attachments?.length) el.append(renderAttachments(m.attachments));
   if (m.embeds?.length) el.append(renderEmbeds(m));
@@ -214,7 +215,7 @@ function renderLine(m) {
   const replyBtn = iconButton('', 'Reply', () => setReply(m));
   replyBtn.innerHTML = REPLY_ICON;
   actions.append(reactBtn, replyBtn);
-  if (m.authorId === state.me.id && !m.poll && !m.forwarded && !m.live) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
+  if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
   const more = iconButton('', 'More', (e) => openMessageMenu(e.currentTarget, m));
   more.innerHTML = MORE_ICON;
   more.setAttribute('aria-haspopup', 'menu');
