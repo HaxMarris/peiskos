@@ -449,6 +449,7 @@ function renderAttachments(list) {
       keepSpace(el, a, 400, 300);
       el.onload = () => { if (state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 400) messagesEl.scrollTop = messagesEl.scrollHeight; };
       el.onclick = () => openImage(a, url);
+      pictureMenuOn(el, a, url);
     } else if (VIDEO_TYPES.test(a.type)) {
       el = document.createElement('video');
       el.className = 'att-video';
@@ -487,8 +488,79 @@ function renderAttachments(list) {
 
 function openImage(a, url) {
   modal(`<div class="lightbox"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.name)}" />
-    <div class="modal-row"><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div></div>`);
+    <div class="modal-row"><button type="button" class="btn secondary" id="lightbox-copy">Copy</button><button type="button" class="btn secondary" id="lightbox-save">${isPhone() ? 'Save or share' : 'Save'}</button><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div></div>`);
   $('#modal-card').classList.add('wide');
+  $('#lightbox-copy').onclick = () => copyPicture(url);
+  $('#lightbox-save').onclick = () => savePicture(a, url);
+  pictureMenuOn($('#modal-card .lightbox img'), a, url);
+}
+
+// ---- copying and saving pictures. Right-click one (or hold it on a phone) for Copy, Save and Open
+// original. The desktop app has no menu of its own for pictures, and phones' hold menus are off in
+// the chat (holding a message opens its sheet), so Peiskos brings its own.
+async function pictureBlob(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.blob();
+}
+async function copyPicture(url) {
+  try {
+    let blob = await pictureBlob(url);
+    // The clipboard takes PNG everywhere; anything else is redrawn as one (a GIF keeps its first frame).
+    if (blob.type !== 'image/png') {
+      const bmp = await createImageBitmap(blob);
+      const canvas = Object.assign(document.createElement('canvas'), { width: bmp.width, height: bmp.height });
+      canvas.getContext('2d').drawImage(bmp, 0, 0);
+      blob = await new Promise((done) => canvas.toBlob(done, 'image/png'));
+    }
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
+    toast('Picture copied');
+  } catch {
+    toast("Couldn't copy the picture here. Save it instead.");
+  }
+}
+async function savePicture(a, url) {
+  try {
+    const blob = await pictureBlob(url);
+    const file = new File([blob], a.name || 'picture', { type: blob.type });
+    // Phones save through the share sheet ("Save image", or send it straight on).
+    if (isPhone() && navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file] });
+    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: file.name });
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+  } catch (err) {
+    if (err?.name !== 'AbortError') toast("Couldn't save the picture.");
+  }
+}
+function openPictureMenu(x, y, a, url) {
+  const at = { getBoundingClientRect: () => ({ left: x, right: x + 180, top: y, bottom: y }) };
+  openMenu(at, [
+    { label: 'Copy picture', run: () => copyPicture(url) },
+    { label: isPhone() ? 'Save or share picture' : 'Save picture', run: () => savePicture(a, url) },
+    { label: 'Open original', run: () => window.open(url, '_blank', 'noopener') },
+  ]);
+}
+function pictureMenuOn(img, a, url) {
+  if (!img) return;
+  let timer = 0, held = 0;
+  img.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (Date.now() - held > 800) openPictureMenu(e.clientX, e.clientY, a, url);
+  });
+  // iPhones send no contextmenu for a hold, so time it here (Android sends both; the first wins).
+  img.addEventListener('touchstart', (e) => {
+    const t = e.touches[0];
+    clearTimeout(timer);
+    timer = setTimeout(() => { held = Date.now(); haptic(); openPictureMenu(t.clientX, t.clientY, a, url); }, 450);
+  }, { passive: true });
+  for (const type of ['touchmove', 'touchcancel']) img.addEventListener(type, () => clearTimeout(timer), { passive: true });
+  // Lifting the finger after a hold mustn't count as a tap, which would close the menu it opened.
+  img.addEventListener('touchend', (e) => { clearTimeout(timer); if (Date.now() - held < 2000) e.preventDefault(); });
+  // Lifting the finger after a hold would count as a tap and open the picture.
+  img.addEventListener('click', (e) => { if (Date.now() - held < 800) { e.stopImmediatePropagation(); e.preventDefault(); } }, true);
 }
 
 function formatSize(n) {
