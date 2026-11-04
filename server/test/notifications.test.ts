@@ -427,3 +427,19 @@ test("strangers asking for someone's reset codes can't use up that person's own 
   assert.equal((await forgot('198.18.5.99')).status, 429);
   assert.equal((await forgot('203.0.113.60')).status, 200);
 });
+
+test("reset codes can't be guessed by asking for new ones from many addresses", async () => {
+  const [kit] = await people('kit');
+  const from = (n: number) => ({ 'x-forwarded-for': `203.0.113.${n}` });
+  const guess = (n: number) => call('/api/password/reset', { body: { username: kit.user.username, code: '000000', newPassword: 'new-password' }, headers: from(n) });
+  // Three codes, five wrong guesses each, from addresses Kit has never used.
+  for (let n = 1; n <= 3; n++) {
+    assert.equal((await call('/api/password/forgot', { body: { username: kit.user.username }, headers: from(n) })).status, 200);
+    for (let i = 0; i < 5; i++) assert.equal((await guess(n)).status, 400);
+  }
+  // A fourth code from yet another address gets no more guesses for the account today...
+  assert.equal((await call('/api/password/forgot', { body: { username: kit.user.username }, headers: from(4) })).status, 200);
+  assert.equal((await guess(4)).status, 429);
+  // ...but Kit, where they've logged in before, can still use theirs.
+  assert.equal((await call('/api/password/reset', { body: { username: kit.user.username, code: '000000', newPassword: 'new-password' } })).status, 400);
+});

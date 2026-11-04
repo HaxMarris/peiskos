@@ -182,7 +182,7 @@ function createWindow({ hidden = false } = {}) {
   };
   const popouts = new Map(); // frame name -> its window
   win.webContents.setWindowOpenHandler(({ url, frameName }) => {
-    if (url === 'about:blank' && POPOUTS[frameName]) {
+    if (url === 'about:blank' && Object.hasOwn(POPOUTS, frameName)) {
       return {
         action: 'allow',
         overrideBrowserWindowOptions: { ...POPOUTS[frameName], autoHideMenuBar: true, title: 'Peiskos' },
@@ -192,7 +192,7 @@ function createWindow({ hidden = false } = {}) {
     return { action: 'deny' };
   });
   win.webContents.on('did-create-window', (child, { frameName }) => {
-    if (!POPOUTS[frameName]) return;
+    if (!Object.hasOwn(POPOUTS, frameName)) return;
     popouts.set(frameName, child);
     child.setMenu(null);
     child.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
