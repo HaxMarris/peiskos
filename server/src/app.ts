@@ -94,6 +94,7 @@ type Channel = {
 const CHANNEL_COLS = `id, server_id AS serverId, name, kind, private, parent_id AS parentId,
   slow_seconds AS slow, announce, archived_at AS archivedAt, user_limit AS userLimit, keep_chat AS keepChat`;
 const MAX_MESSAGE_LENGTH = 4000;
+const MAX_ALT_LENGTH = 1000;
 const MAX_ATTACHMENTS = 10;
 const MAX_REACTIONS = 20; // different emoji on one message
 const MAX_ROLES = 30;
@@ -252,6 +253,7 @@ export function createApp(opts: AppOptions): Server {
     size: a.size,
     url: `/api/attachments/${a.id}/${encodeURIComponent(a.name as string)}`,
     ...(a.spoiler ? { spoiler: true } : {}),
+    ...(a.alt ? { alt: a.alt } : {}),
     ...(a.voice_seconds != null ? { voiceSeconds: a.voice_seconds } : {}),
     ...(a.width && a.height ? { width: a.width, height: a.height } : {}),
     ...(a.thumb ? { thumb: `/api/attachments/${a.id}/thumb` } : {}),
@@ -300,7 +302,7 @@ export function createApp(opts: AppOptions): Server {
     const ids = rows.map((r) => r.id as number);
     const atts = db
       .prepare(
-        `SELECT id, message_id, name, type, size, spoiler, voice_seconds, width, height, thumb FROM attachments
+        `SELECT id, message_id, name, type, size, spoiler, alt, voice_seconds, width, height, thumb FROM attachments
          WHERE message_id IN (${ids.map(() => '?').join(',')}) ORDER BY position`,
       )
       .all(...ids) as Json[];
@@ -715,6 +717,9 @@ export function createApp(opts: AppOptions): Server {
     );
     if (usable.length !== ids.length) throw new HttpError(400, 'One of the files is missing or already sent');
     const spoilers = new Set(Array.isArray(input.spoilerIds) ? input.spoilerIds.map(String) : []);
+    // Descriptions of pictures, by file id.
+    const alts = input.descriptions && typeof input.descriptions === 'object' && !Array.isArray(input.descriptions) ? (input.descriptions as Record<string, unknown>) : {};
+    const altFor = (id: string) => (typeof alts[id] === 'string' ? (alts[id] as string).trim().slice(0, MAX_ALT_LENGTH) || null : null);
     let stickerId: number | null = null;
     if (input.stickerId != null) {
       const sticker = db.prepare("SELECT server_id FROM custom_emoji WHERE id = ? AND kind = 'sticker'").get(Number(input.stickerId)) as
@@ -745,7 +750,7 @@ export function createApp(opts: AppOptions): Server {
     const messageId = Number(r.lastInsertRowid);
     const forWhom = recordMentions(channel, messageId, user.id, content, replyId);
     usable.forEach((id, position) =>
-      db.prepare('UPDATE attachments SET message_id = ?, position = ?, spoiler = ? WHERE id = ?').run(messageId, position, spoilers.has(id) ? 1 : 0, id),
+      db.prepare('UPDATE attachments SET message_id = ?, position = ?, spoiler = ?, alt = ? WHERE id = ?').run(messageId, position, spoilers.has(id) ? 1 : 0, altFor(id), id),
     );
     if (extras.poll) {
       const p = extras.poll;
@@ -3364,6 +3369,7 @@ export function createApp(opts: AppOptions): Server {
     // Files are copied, so the forward keeps working if the original is deleted.
     const attachmentIds: string[] = [];
     const spoilerIds: string[] = [];
+    const descriptions: Record<string, string> = {};
     if ((m.attachments as Json[]).length) {
       if (!opts.uploadDir) throw new HttpError(503, 'Uploads are not set up on this server');
       // The files land in the other room, so its upload limit applies, as if they were uploaded there.
@@ -3382,6 +3388,7 @@ export function createApp(opts: AppOptions): Server {
         ).run(copy, to.id, user.id, a.name as string, a.type as string, a.size as number, now(), (a.voiceSeconds as number) ?? null, (a.width as number) ?? null, (a.height as number) ?? null, thumb);
         attachmentIds.push(copy);
         if (a.spoiler) spoilerIds.push(copy);
+        if (a.alt) descriptions[copy] = a.alt as string;
       }
     }
     let content = m.content as string;
@@ -3399,7 +3406,7 @@ export function createApp(opts: AppOptions): Server {
       from: place.kind === 'dm' ? 'a direct message' : place.threadName ? `${place.serverName} › #${place.channelName} › ${place.threadName}` : `${place.serverName} › #${place.channelName}`,
     };
     try {
-      return postMessage(user, to.id, { content: content.slice(0, MAX_MESSAGE_LENGTH), attachmentIds, spoilerIds, stickerId: keepSticker ? sticker!.id : null }, { forwarded });
+      return postMessage(user, to.id, { content: content.slice(0, MAX_MESSAGE_LENGTH), attachmentIds, spoilerIds, descriptions, stickerId: keepSticker ? sticker!.id : null }, { forwarded });
     } catch (err) {
       // Not sent (slow mode, a read-only room…): the copies go now rather than waiting a day for the sweep.
       removeFiles(attachmentIds.map((id) => ({ id })));

@@ -406,6 +406,21 @@ function renderPending() {
       chip.append(sp);
       if (p.spoiler) chip.classList.add('spoilered');
     }
+    // A picture can carry a description, read out by screen readers and shown if it can't load.
+    if (!p.error && p.shrinking == null && /^image\//.test(p.file.type)) {
+      const al = document.createElement('button');
+      al.type = 'button';
+      al.className = 'pending-spoiler' + (p.alt ? ' on' : '');
+      al.textContent = p.alt ? 'Described' : 'Describe';
+      al.title = p.alt ? `Description: ${p.alt}` : 'Say what the picture shows, for people using a screen reader';
+      al.onclick = async () => {
+        const text = await ask({ title: 'Describe the picture', text: 'Read out by screen readers, and shown if the picture can\'t load.', ok: 'Save', field: { value: p.alt ?? '', placeholder: 'A dog asleep by the fire', max: 1000 } });
+        if (text == null) return;
+        p.alt = text.trim();
+        renderPending();
+      };
+      chip.append(al);
+    }
     const x = document.createElement('button');
     x.type = 'button';
     x.className = 'pending-remove';
@@ -442,7 +457,8 @@ function renderAttachments(list) {
       el = document.createElement('img');
       el.className = 'att-image';
       el.src = url;
-      el.alt = a.name;
+      el.alt = a.alt || a.name;
+      if (a.alt) el.title = a.alt;
       // Pictures load as they scroll into view, with their space kept so the chat doesn't jump when they arrive.
       el.loading = 'lazy';
       el.decoding = 'async';
@@ -487,7 +503,7 @@ function renderAttachments(list) {
 }
 
 function openImage(a, url) {
-  modal(`<div class="lightbox"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.name)}" />
+  modal(`<div class="lightbox"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.alt || a.name)}" />${a.alt ? `<p class="small muted lightbox-alt">${escapeHtml(a.alt)}</p>` : ''}
     <div class="modal-row"><button type="button" class="btn secondary" id="lightbox-copy">Copy</button><button type="button" class="btn secondary" id="lightbox-save">${isPhone() ? 'Save or share' : 'Save'}</button><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div></div>`);
   $('#modal-card').classList.add('wide');
   $('#lightbox-copy').onclick = () => copyPicture(url);

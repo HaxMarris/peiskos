@@ -181,8 +181,9 @@ test('forwarding copies the message and its files', async () => {
     headers: { authorization: `Bearer ${sam.token}`, 'content-type': 'image/png', 'x-filename': 'moose.png' },
     body: PNG,
   }).then((r) => r.json() as any);
-  const original = await say(room, sam, 'look', { attachmentIds: [up.id], spoilerIds: [up.id] });
+  const original = await say(room, sam, 'look', { attachmentIds: [up.id], spoilerIds: [up.id], descriptions: { [up.id]: '  A moose in the snow ' } });
   assert.equal(original.attachments[0].spoiler, true);
+  assert.equal(original.attachments[0].alt, 'A moose in the snow', 'a picture keeps its description, trimmed');
   const fwd = (await call(`/api/messages/${original.id}/forward`, { body: { channelId: other }, token: max.token })).data;
   assert.equal(fwd.content, 'look');
   assert.equal(fwd.authorId, max.user.id);
@@ -190,6 +191,7 @@ test('forwarding copies the message and its files', async () => {
   assert.match(fwd.forwarded.from, /general/);
   assert.notEqual(fwd.attachments[0].id, up.id);
   assert.equal(fwd.attachments[0].spoiler, true);
+  assert.equal(fwd.attachments[0].alt, 'A moose in the snow');
   // The copy keeps working after the original goes.
   await call(`/api/messages/${original.id}`, { method: 'DELETE', token: sam.token });
   await new Promise((r) => setTimeout(r, 50));

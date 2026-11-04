@@ -657,9 +657,9 @@ label.check input { width: auto; }
 .tile.xl { width: 88px; height: 88px; border-radius: var(--radius-2xl); font-size: 28px; }
 .burrow-picture { margin: 4px 0 2px; }
 .pending-files { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
-.pending { position: relative; display: flex; align-items: center; gap: 8px; max-width: 260px; background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius-md); padding: 6px 30px 6px 6px; overflow: hidden; box-shadow: var(--shadow); }
+.pending { position: relative; display: flex; align-items: center; gap: 8px; max-width: min(360px, 100%); background: var(--surface); border: 1.5px solid var(--line); border-radius: var(--radius-md); padding: 6px 30px 6px 6px; overflow: hidden; box-shadow: var(--shadow); }
 .pending img, .pending .file-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); object-fit: cover; flex: none; }
-.pending-name { font-size: 13px; font-weight: 700; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pending-name { min-width: 3em; font-size: 13px; font-weight: 700; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pending-meta { font-size: 12px; color: var(--muted); flex: none; }
 .pending .bar { position: absolute; left: 0; bottom: 0; height: 3px; background: var(--moss); transition: width .15s; }
 .pending.failed { border-color: var(--berry); }

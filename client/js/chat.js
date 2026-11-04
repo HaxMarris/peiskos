@@ -377,8 +377,9 @@ async function sendComposer() {
     const uploaded = await Promise.all(files.map((p) => p.done));
     const attachmentIds = uploaded.map((a) => a.id);
     const spoilerIds = uploaded.filter((a, i) => files[i].spoiler).map((a) => a.id);
+    const descriptions = Object.fromEntries(uploaded.map((a, i) => [a.id, files[i].alt?.trim()]).filter(([, d]) => d));
     // Turned down by the server after it went out: the files are already uploaded, so they come back as they are.
-    await sendMessage(channelId, { content, attachmentIds, spoilerIds, replyTo: replyTo?.id }, (err) => putBack(err));
+    await sendMessage(channelId, { content, attachmentIds, spoilerIds, descriptions, replyTo: replyTo?.id }, (err) => putBack(err));
     // Their previews are let go once the message is surely sent (or was put back and is still in use).
     setTimeout(() => files.forEach((p) => p.previewUrl && !state.pending.includes(p) && URL.revokeObjectURL(p.previewUrl)), 30000);
   } catch (err) {

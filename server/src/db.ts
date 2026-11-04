@@ -227,6 +227,8 @@ function addChatExtras(db: Db) {
   addColumn(db, 'messages', 'embeds_off', 'INTEGER NOT NULL DEFAULT 0');
   // Pictures hidden until tapped, and recorded voice messages (their length).
   addColumn(db, 'attachments', 'spoiler', 'INTEGER NOT NULL DEFAULT 0');
+  // What a picture shows, in words, for screen readers and when it can't load.
+  addColumn(db, 'attachments', 'alt', 'TEXT');
   addColumn(db, 'attachments', 'voice_seconds', 'REAL');
   // A thread is a room of kind 'thread' that hangs off one message in another room.
   addColumn(db, 'channels', 'parent_id', 'INTEGER REFERENCES channels(id) ON DELETE CASCADE');
