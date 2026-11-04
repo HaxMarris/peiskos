@@ -332,3 +332,20 @@ test('deleting your account', async () => {
   const after = (await call(`/api/channels/${other.channels[0].id}/messages`, { token: mo.token })).data;
   assert.ok(!after.some((m: any) => m.content === 'gone soon'));
 });
+
+test('achievements show on profiles: earned ones to others, every one to yourself', async () => {
+  const host = await register('ach_host');
+  const pals = [];
+  for (let i = 0; i < 4; i++) pals.push(await register(`ach_pal${i}`));
+  const s = (await call('/api/servers', { body: { name: 'Lodge' }, token: host.token })).data;
+  for (const p of pals) await call('/api/join', { body: { inviteCode: s.inviteCode }, token: p.token });
+  const room = s.channels[0].id;
+  const m = (await call(`/api/channels/${room}/messages`, { body: { content: 'a classic' }, token: host.token })).data;
+  for (const p of pals.slice(0, 2)) await call(`/api/messages/${m.id}/reactions`, { body: { emoji: '🔥' }, token: p.token });
+  const seen = (await call(`/api/users/${host.user.id}`, { token: pals[0].token })).data.achievements;
+  assert.deepEqual(seen.map((a: any) => a.id).sort(), ['favourite', 'host']);
+  assert.ok(seen.every((a: any) => a.earned));
+  const mine = (await call(`/api/users/${host.user.id}`, { token: host.token })).data.achievements;
+  assert.ok(mine.length > seen.length);
+  assert.equal(mine.find((a: any) => a.id === 'keeper').earned, false);
+});

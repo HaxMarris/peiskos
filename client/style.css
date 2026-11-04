@@ -2104,3 +2104,40 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .switch-home { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 8px; border-radius: var(--radius-md); font: inherit; color: var(--text-strong); cursor: pointer; text-align: left; }
 .switch-home:hover { background: var(--hover); }
 @media (max-width: 760px) { .home-view { padding: 20px 16px 32px; } .home-head h2 { font-size: 24px; } }
+
+/* A hearth's photo album: square tiles by month. */
+.album-month { margin: 14px 0 8px; font-size: 14px; }
+.album-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 6px; }
+.album-item { position: relative; aspect-ratio: 1; padding: 0; border: 0; border-radius: var(--radius-md); overflow: hidden; background: var(--surface-2); cursor: pointer; }
+.album-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.album-play { position: absolute; inset: 0; display: grid; place-items: center; color: #fff; font-size: 26px; text-shadow: 0 1px 6px rgb(0 0 0 / .6); }
+@media (max-width: 640px) { .album-grid { grid-template-columns: repeat(3, 1fr); gap: 4px; } }
+.plan-row { display: flex; align-items: center; gap: 8px; }
+.plan-row .poll-option { flex: 1; min-width: 0; }
+.plan-pick { flex: none; }
+.plan-open { align-self: flex-start; margin-top: 4px; }
+.feed-how { margin: 8px 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.list-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.list-item { display: flex; align-items: center; gap: 8px; min-height: 34px; }
+.list-item label { flex: 1; min-width: 0; display: flex; flex-direction: row; align-items: center; justify-content: flex-start; text-align: left; gap: 10px; cursor: pointer; font-weight: 400; font-size: 15px; color: var(--text); margin: 0; }
+.list-item input { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.list-text { overflow-wrap: anywhere; }
+.list-item.done .list-text { text-decoration: line-through; color: var(--muted); }
+.list-who { flex: none; }
+.list-remove { flex: none; padding: 2px 6px; opacity: .6; }
+.list-remove:hover { opacity: 1; }
+.list-add { display: flex; gap: 6px; margin-top: 4px; }
+.list-add input { flex: 1; min-width: 0; padding: 7px 10px; border: 1.5px solid var(--field-line); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: inherit; }
+.list-add .btn { padding: 7px 14px; }
+/* The next event, counting down above the chat. */
+.event-pill { display: flex; align-items: center; gap: 4px; margin: 6px 16px 0; padding: 4px 4px 4px 12px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); }
+.event-pill-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; padding: 2px 0; cursor: pointer; }
+.event-pill-open > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-pill-open svg { width: 18px; height: 18px; flex: none; fill: var(--accent-text); }
+.event-pill .icon-btn { padding: 4px 8px; font-size: 18px; line-height: 1; }
+/* Achievements on a person's card. Ones still to go (only on your own) are faded. */
+.achievements { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; justify-content: center; }
+.achievements-count { width: 100%; text-align: center; }
+.achievement { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); font-size: 18px; cursor: default; }
+.achievement img { width: 20px; height: 20px; }
+.achievement.locked { filter: grayscale(1); opacity: .4; }

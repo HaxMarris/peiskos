@@ -627,6 +627,88 @@ async function openYearReview(serverId, year = new Date().getFullYear()) {
   $('#review-year')?.addEventListener('change', (e) => openYearReview(serverId, Number(e.target.value)));
 }
 
+// ---------------------------------------------------------------- best of and the photo album
+
+/** Messages enough people put 🔥 on, newest first. */
+async function openBestOf(serverId) {
+  const s = state.servers.get(serverId);
+  if (!s) return;
+  modal(`<h2>Best of ${escapeHtml(s.name)}</h2><p class="small muted" id="best-note">Messages that get enough 🔥 reactions land here.</p>
+    <div id="best-list" class="card-list">${placeholder('cards', 3)}</div>
+    <div class="modal-row"><button type="button" class="btn secondary hidden" id="best-more">Show older</button></div>`, 'best-modal');
+  let offset = 0;
+  const more = async (first) => {
+    let r;
+    try { r = await api(`/api/servers/${serverId}/best-of?offset=${offset}`); } catch (err) { if ($('#best-list')) $('#best-list').textContent = err.message; return; }
+    const list = $('#best-list');
+    if (!list) return;
+    $('#best-note').textContent = `Messages that ${r.needs} or more people put 🔥 on land here.`;
+    if (first && !r.results.length) return (list.innerHTML = emptyNote('Nothing yet', `React 🔥 to a message you love. Once ${r.needs} people do, it's kept here.`));
+    const cards = r.results.map((x) => messageCard(x.message, x.place, { onOpen: () => { closeModal(); jumpTo(x.message.channelId, x.message.id); } }));
+    first ? list.replaceChildren(...cards) : list.append(...cards);
+    offset += r.results.length;
+    $('#best-more').classList.toggle('hidden', !r.more);
+  };
+  $('#best-more').onclick = (e) => { e.target.disabled = true; more(false).finally(() => (e.target.disabled = false)); };
+  more(true);
+}
+
+/** Every picture and video shared in a hearth, by month. */
+async function openAlbum(serverId) {
+  const s = state.servers.get(serverId);
+  if (!s) return;
+  modal(`<h2>${escapeHtml(s.name)} photo album</h2>
+    <div id="album">${placeholder('grid', 12)}</div>
+    <div class="modal-row"><button type="button" class="btn secondary hidden" id="album-more">Show older</button></div>`, 'album-modal');
+  $('#modal-card').classList.add('wide');
+  let before = 0;
+  let month = '';
+  const box = $('#album');
+  const items = [];
+  const more = async (first) => {
+    let r;
+    try { r = await api(`/api/servers/${serverId}/album${before ? `?before=${before}` : ''}`); } catch (err) { box.textContent = err.message; return; }
+    if (first) box.replaceChildren();
+    if (first && !r.items.length) return (box.innerHTML = emptyNote('No pictures yet', 'Pictures and videos shared in this hearth show up here.'));
+    let grid = box.lastElementChild?.classList.contains('album-grid') ? box.lastElementChild : null;
+    for (const a of r.items) {
+      const m = new Date(a.createdAt).toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+      if (m !== month) {
+        month = m;
+        box.insertAdjacentHTML('beforeend', `<h3 class="album-month">${escapeHtml(m)}</h3><div class="album-grid"></div>`);
+        grid = box.lastElementChild;
+      }
+      const url = state.serverUrl + a.url;
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'album-item';
+      b.dataset.i = String(items.push(a) - 1);
+      b.setAttribute('aria-label', a.alt || a.name);
+      b.innerHTML = a.type.startsWith('video/')
+        ? (a.thumb ? `<img loading="lazy" alt="" src="${escapeHtml(state.serverUrl + a.thumb)}" />` : '') + '<span class="album-play" aria-hidden="true">▶</span>'
+        : `<img loading="lazy" alt="" src="${escapeHtml(url)}" />`;
+      grid.append(b);
+    }
+    before = r.items.at(-1)?.messageId ?? before;
+    $('#album-more').classList.toggle('hidden', !r.more);
+  };
+  box.onclick = (e) => {
+    const b = e.target.closest('.album-item');
+    if (!b) return;
+    const a = items[Number(b.dataset.i)];
+    if (a.type.startsWith('video/')) { closeModal(); jumpTo(a.channelId, a.messageId); return; }
+    openImage(a, state.serverUrl + a.url);
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'btn secondary';
+    go.textContent = 'Go to message';
+    go.onclick = () => { closeModal(); jumpTo(a.channelId, a.messageId); };
+    $('#modal-card .lightbox .modal-row')?.prepend(go);
+  };
+  $('#album-more').onclick = (e) => { e.target.disabled = true; more(false).finally(() => (e.target.disabled = false)); };
+  more(true);
+}
+
 /** Someone in a hearth put a premium pet out (or away): it shows by their seat at its fires. */
 function onCasinoBackdrop(ev) {
   const s = state.servers.get(ev.serverId);
@@ -726,6 +808,13 @@ function renderHome() {
       .map((m) => row(`data-person="${m.id}"`, `${escapeHtml(nameOfPerson(m))}'s birthday`, 'Today')),
   ];
 
+  // Coming up: what you're going to (or might) in the next two weeks, after today's.
+  const comingUp = hearths.flatMap((s) => (s.events ?? [])
+    .filter((e) => e.startsAt > soon && e.startsAt < Date.now() + 14 * 864e5 && ['going', 'maybe'].includes(e.rsvps.find((r) => r.userId === state.me.id)?.status))
+    .map((e) => ({ s, e })))
+    .sort((a, b) => a.e.startsAt - b.e.startsAt)
+    .map(({ s, e }) => row(`data-event="${s.id}:${e.id}"`, escapeHtml(e.title), `${escapeHtml(countdown(e.startsAt))} · ${escapeHtml(s.name)}`));
+
   // Friends who are around.
   const friends = (state.friends?.friends ?? []).filter((f) => f.online)
     .map((f) => row(`data-dm="${f.id}"`, escapeHtml(nameOfPerson(f)), presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
@@ -736,6 +825,7 @@ function renderHome() {
     section('For you', forYou),
     section('New messages', unread.slice(0, 12)),
     section('Today', today),
+    section('Coming up', comingUp.slice(0, 6)),
     section('Friends online', friends),
   ].join('');
   const view = $('#home-view');

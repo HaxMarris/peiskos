@@ -296,6 +296,7 @@ export function createApp(opts: AppOptions): Server {
       forwarded: forwarded ? JSON.parse(forwarded as string) : null,
       sticker: stickerId == null ? null : stickerJson(stickerId as number),
       poll: pollFor(r.id as number),
+      list: listFor(r.id as number),
       embeds: embedsOff ? [] : embedsFor(r.id as number),
       thread: threadOf(r.id as number),
     }));
@@ -622,7 +623,7 @@ export function createApp(opts: AppOptions): Server {
         .all(userId) as { user_id: number }[]
     ).map((r) => r.user_id);
 
-  type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null };
+  type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
   // Anyone can send a burst of messages, then about one a second: enough for any conversation, not for a flood.
   const postAllowance = allowance(60, 1);
   // Reactions, edits and poll votes get their own, roomier allowances: a quick burst of reacting
@@ -630,7 +631,7 @@ export function createApp(opts: AppOptions): Server {
   const reactAllowance = allowance(60, 3);
   const editAllowance = allowance(30, 0.5);
   const voteAllowance = allowance(30, 1);
-  type PostExtras = { forwarded?: Json; poll?: PollInput; scheduled?: boolean; live?: Json; webhook?: boolean };
+  type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
 
   // ---- slash commands, worked out by the server so nobody can fake a dice roll
 
@@ -728,7 +729,7 @@ export function createApp(opts: AppOptions): Server {
       if (!sticker || !isMember(sticker.server_id, user.id)) throw new HttpError(400, "That sticker isn't available");
       stickerId = Number(input.stickerId);
     }
-    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
+    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.list && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
     let replyId: number | null = null;
     const replyTo = input.replyTo;
     if (replyTo != null) {
@@ -757,10 +758,14 @@ export function createApp(opts: AppOptions): Server {
     );
     if (extras.poll) {
       const p = extras.poll;
-      db.prepare('INSERT INTO polls (message_id, question, options, multi, closes_at) VALUES (?, ?, ?, ?, ?)').run(
-        messageId, p.question, JSON.stringify(p.options), p.multi ? 1 : 0, p.closesAt,
+      db.prepare('INSERT INTO polls (message_id, question, options, multi, closes_at, times) VALUES (?, ?, ?, ?, ?, ?)').run(
+        messageId, p.question, JSON.stringify(p.options), p.multi ? 1 : 0, p.closesAt, p.times ? JSON.stringify(p.times) : null,
       );
       if (p.closesAt) wakeAt(p.closesAt);
+    }
+    if (extras.list) {
+      db.prepare('INSERT INTO lists (message_id, title) VALUES (?, ?)').run(messageId, extras.list.title);
+      for (const text of extras.list.items) db.prepare('INSERT INTO list_items (message_id, text, added_by) VALUES (?, ?, ?)').run(messageId, text, user.id);
     }
     const message = messageById(messageId)!;
     broadcastToChannel(channel, { type: 'message', message });
@@ -3558,12 +3563,20 @@ export function createApp(opts: AppOptions): Server {
 
   const MAX_POLL_OPTIONS = 10;
   const pollFor = (messageId: number) => {
-    const p = db.prepare('SELECT question, options, multi, closes_at FROM polls WHERE message_id = ?').get(messageId) as Json | undefined;
+    const p = db.prepare('SELECT question, options, multi, closes_at, times, event_id FROM polls WHERE message_id = ?').get(messageId) as Json | undefined;
     if (!p) return null;
     const votes = db.prepare('SELECT user_id, option FROM poll_votes WHERE message_id = ? ORDER BY rowid').all(messageId) as { user_id: number; option: number }[];
-    const options = (JSON.parse(p.options as string) as string[]).map((text, i) => ({ text, userIds: votes.filter((v) => v.option === i).map((v) => v.user_id) }));
+    const times = p.times ? (JSON.parse(p.times as string) as number[]) : null;
+    const options = (JSON.parse(p.options as string) as string[]).map((text, i) => ({
+      text, ...(times ? { at: times[i] } : {}), userIds: votes.filter((v) => v.option === i).map((v) => v.user_id),
+    }));
     const closesAt = (p.closes_at as number | null) ?? null;
-    return { question: p.question, options, multi: !!p.multi, closesAt, closed: closesAt !== null && closesAt <= now() };
+    // A "when works?" poll that became an event says which, while that event is still there.
+    const eventId = p.event_id != null && db.prepare('SELECT 1 FROM events WHERE id = ?').get(p.event_id as number) ? p.event_id : null;
+    return {
+      question: p.question, options, multi: !!p.multi, closesAt, closed: closesAt !== null && closesAt <= now(),
+      ...(times ? { kind: 'when', eventId } : {}),
+    };
   };
 
   const makePoll = (body: Json): PollInput => {
@@ -3580,6 +3593,108 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/channels/:id/polls', ({ user, params, body }) =>
     postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { poll: makePoll(body) }));
+
+  // ---- shared lists: who's bringing what ----
+
+  const MAX_LIST_ITEMS = 50;
+  const listFor = (messageId: number) => {
+    const l = db.prepare('SELECT title FROM lists WHERE message_id = ?').get(messageId) as { title: string } | undefined;
+    if (!l) return null;
+    const items = db.prepare('SELECT id, text, added_by AS addedBy, done_by AS doneBy, done_at AS doneAt FROM list_items WHERE message_id = ? ORDER BY id').all(messageId);
+    return { title: l.title, items };
+  };
+  const listText = (value: unknown) => {
+    const text = typeof value === 'string' ? withoutBidi(value).trim() : '';
+    if (!text) throw new HttpError(400, 'Write what the item is');
+    if (text.length > 120) throw new HttpError(400, 'Keep each item to 120 characters');
+    return text;
+  };
+  route('POST', '/api/channels/:id/lists', ({ user, params, body }) => {
+    const title = cleanName(body.title, 'The list name', 100);
+    const items = (Array.isArray(body.items) ? body.items : []).filter((x) => typeof x === 'string' && x.trim()).map(listText);
+    if (items.length > MAX_LIST_ITEMS) throw new HttpError(400, `A list can have up to ${MAX_LIST_ITEMS} items`);
+    return postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { list: { title, items } });
+  });
+  /** A list someone can see and change: it's in a room they can see that isn't archived. */
+  const listMessage = (user: User, id: number) => {
+    const { channel, authorId } = visibleMessage(user, id);
+    if (!listFor(id)) throw new HttpError(404, "That message isn't a list");
+    if (channel.archivedAt !== null) throw new HttpError(403, 'This room is archived, so nothing new can go in it');
+    if (!voteAllowance.take(user.id)) throw new HttpError(429, "You're changing things very fast. Wait a moment.");
+    return { channel, authorId };
+  };
+  route('POST', '/api/messages/:id/list', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel } = listMessage(user, id);
+    if ((db.prepare('SELECT COUNT(*) AS n FROM list_items WHERE message_id = ?').get(id) as { n: number }).n >= MAX_LIST_ITEMS)
+      throw new HttpError(400, `A list can have up to ${MAX_LIST_ITEMS} items. Remove some first.`);
+    db.prepare('INSERT INTO list_items (message_id, text, added_by) VALUES (?, ?, ?)').run(id, listText(body.text), user.id);
+    return messageChanged(id, channel);
+  });
+  // Ticking an item says you've got it; anyone can untick it again.
+  route('POST', '/api/messages/:id/list/:item', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel } = listMessage(user, id);
+    const item = db.prepare('SELECT id FROM list_items WHERE id = ? AND message_id = ?').get(Number(params[1]), id);
+    if (!item) throw new HttpError(404, "That item isn't on the list any more");
+    if (body.done) db.prepare('UPDATE list_items SET done_by = ?, done_at = ? WHERE id = ?').run(user.id, now(), Number(params[1]));
+    else db.prepare('UPDATE list_items SET done_by = NULL, done_at = NULL WHERE id = ?').run(Number(params[1]));
+    return messageChanged(id, channel);
+  });
+  // Whoever added an item, started the list, or can manage messages can take it off.
+  route('DELETE', '/api/messages/:id/list/:item', ({ user, params }) => {
+    const id = Number(params[0]);
+    const { channel, authorId } = listMessage(user, id);
+    const item = db.prepare('SELECT added_by FROM list_items WHERE id = ? AND message_id = ?').get(Number(params[1]), id) as { added_by: number | null } | undefined;
+    if (!item) throw new HttpError(404, "That item isn't on the list any more");
+    if (item.added_by !== user.id && authorId !== user.id && !can(channel.serverId, user.id, 'messages'))
+      throw new HttpError(403, 'Only whoever added it, or started the list, can take it off');
+    db.prepare('DELETE FROM list_items WHERE id = ?').run(Number(params[1]));
+    return messageChanged(id, channel);
+  });
+
+  // ---- "when works?": a poll of times that the one who asked turns into an event ----
+
+  const MAX_PLAN_TIMES = 12;
+  route('POST', '/api/channels/:id/plans', ({ user, params, body }) => {
+    const channel = textRoom(Number(params[0]), user.id);
+    if (!isBurrow(channel.serverId)) throw new HttpError(400, 'Planning works in hearths, where events live');
+    const question = cleanName(body.title, 'What it is', 100);
+    const times = [...new Set((Array.isArray(body.times) ? body.times : []).map((t: unknown) => Math.floor(Number(t))))].sort((a, b) => a - b);
+    if (times.length < 2) throw new HttpError(400, 'Pick at least two times people can choose from');
+    if (times.length > MAX_PLAN_TIMES) throw new HttpError(400, `Pick at most ${MAX_PLAN_TIMES} times`);
+    if (times.some((t) => !(t > now() && t < now() + 366 * 86400_000))) throw new HttpError(400, 'Pick times in the next year, not ones that have passed');
+    const hours = Number(body.hours ?? 72) || 0;
+    if (hours < 0 || hours > 24 * 30) throw new HttpError(400, 'A plan can stay open for up to 30 days');
+    const closesAt = hours ? Math.min(now() + hours * 3600_000, times[0]) : times[0];
+    return postMessage(user, channel.id, { content: '', replyTo: body.replyTo }, {
+      poll: { question, options: times.map(String), multi: true, closesAt, times },
+    });
+  });
+
+  // Picks one of the times: it becomes an event, with everyone who said that time works down as going.
+  route('POST', '/api/messages/:id/plan/event', ({ user, params, body }) => {
+    const id = Number(params[0]);
+    const { channel, authorId } = visibleMessage(user, id);
+    const poll = pollFor(id);
+    if (!poll || poll.kind !== 'when') throw new HttpError(404, "That message isn't a plan");
+    if (authorId !== user.id && !can(channel.serverId, user.id, 'messages')) throw new HttpError(403, 'Only whoever started the plan can pick the time');
+    if (poll.eventId) throw new HttpError(409, "It's an event already");
+    const pick = poll.options[Number(body.option)];
+    if (!pick?.at) throw new HttpError(400, "That isn't one of the times");
+    if (pick.at <= now()) throw new HttpError(400, 'That time has passed. Start a new plan.');
+    const room = channel.kind === 'thread' && channel.parentId !== null ? channel.parentId : channel.id;
+    const r = db
+      .prepare('INSERT INTO events (server_id, channel_id, title, details, starts_at, created_by, created_at, reminded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(channel.serverId, room, poll.question as string, '', pick.at, user.id, now(), pick.at - EVENT_REMIND_MS <= now() ? 1 : 0);
+    const eventId = Number(r.lastInsertRowid);
+    for (const uid of new Set([user.id, ...pick.userIds]))
+      db.prepare("INSERT OR IGNORE INTO event_rsvps (event_id, user_id, status) VALUES (?, ?, 'going')").run(eventId, uid);
+    db.prepare('UPDATE polls SET event_id = ?, closes_at = MIN(COALESCE(closes_at, ?), ?), ended = 1 WHERE message_id = ?').run(eventId, now(), now(), id);
+    wakeAt(pick.at - EVENT_REMIND_MS);
+    sendServerUpdate(channel.serverId);
+    return messageChanged(id, channel);
+  });
 
   // Your answer (or answers) to a poll; an empty list takes your vote back.
   route('POST', '/api/messages/:id/vote', ({ user, params, body }) => {
@@ -3833,6 +3948,49 @@ export function createApp(opts: AppOptions): Server {
     ).map((r) => r.id);
     const results = messagesByIds(ids.slice(0, PAGE)).map((message) => ({ message, place: placeOf(message.channelId as number, user.id) }));
     return { results, more: ids.length > PAGE };
+  });
+
+  // ---- a hearth's best messages and its pictures ----
+
+  /** How many people (not counting the author) have to 🔥 a message for it to make Best of. */
+  const bestOfNeeds = (serverId: number) => (serverMemberIds(serverId).length <= 5 ? 2 : 3);
+  route('GET', '/api/servers/:id/best-of', ({ user, params, url }) => {
+    const serverId = Number(params[0]);
+    if (!isBurrow(serverId)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
+    const rooms = searchRooms(user, String(serverId));
+    const needs = bestOfNeeds(serverId);
+    if (!rooms.length) return { results: [], more: false, needs };
+    const PAGE = 20;
+    const offset = Math.max(0, Math.min(Number(url.searchParams.get('offset')) || 0, 2000));
+    const ids = (db.prepare(
+      `SELECT m.id FROM messages m JOIN reactions r ON r.message_id = m.id AND r.emoji = '🔥' AND r.user_id != m.author_id
+       WHERE m.channel_id IN (${rooms.join(',')}) GROUP BY m.id HAVING COUNT(*) >= ? ORDER BY m.id DESC LIMIT ? OFFSET ?`,
+    ).all(needs, PAGE + 1, offset) as { id: number }[]).map((r) => r.id);
+    const results = messagesByIds(ids.slice(0, PAGE)).map((message) => ({ message, place: placeOf(message.channelId as number, user.id) }));
+    return { results, more: ids.length > PAGE, needs };
+  });
+
+  // Every picture and video shared in a hearth's rooms you can see, newest first. Spoilers stay out.
+  route('GET', '/api/servers/:id/album', ({ user, params, url }) => {
+    const serverId = Number(params[0]);
+    if (!isBurrow(serverId)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
+    const rooms = searchRooms(user, String(serverId));
+    if (!rooms.length) return { items: [], more: false };
+    const PAGE = 60;
+    const before = Number(url.searchParams.get('before')) || Number.MAX_SAFE_INTEGER;
+    const rows = db.prepare(
+      `SELECT a.*, m.id AS messageId, m.channel_id AS channelId, m.created_at AS createdAt, m.author_id AS authorId
+       FROM attachments a JOIN messages m ON m.id = a.message_id
+       WHERE m.channel_id IN (${rooms.join(',')}) AND (a.type LIKE 'image/%' OR a.type LIKE 'video/%') AND COALESCE(a.spoiler, 0) = 0 AND m.id < ?
+       ORDER BY m.id DESC, a.rowid LIMIT ?`,
+    ).all(before, PAGE + 1) as Json[];
+    const items = rows.slice(0, PAGE).map((r) => ({
+      ...attachmentJson(r), messageId: r.messageId, channelId: r.channelId, createdAt: r.createdAt, authorId: r.authorId,
+    }));
+    // A page ends between messages, so "more" picks up at the last message shown.
+    const more = rows.length > PAGE;
+    if (more) while (items.length > 1 && items[items.length - 1].messageId === rows[PAGE].messageId) items.pop();
+    return { items, more };
   });
 
   // ---- threads: side conversations off one message ----
@@ -4402,6 +4560,64 @@ export function createApp(opts: AppOptions): Server {
     return serverSummary(ev.serverId, user.id);
   });
 
+  // ---- calendar feed: your hearths' events in Google, Apple or Outlook calendar ----
+
+  route('GET', '/api/me/calendar', ({ user }) => ({ on: !!db.prepare('SELECT 1 FROM calendar_feeds WHERE user_id = ?').get(user.id) }));
+  // A new address each time, so turning it off and on again cuts off anyone who had the old one.
+  route('POST', '/api/me/calendar', ({ user }) => {
+    const token = randomBytes(24).toString('base64url');
+    db.prepare(`INSERT INTO calendar_feeds (user_id, token_hash, created_at) VALUES (?, ?, ?)
+                ON CONFLICT(user_id) DO UPDATE SET token_hash = excluded.token_hash, created_at = excluded.created_at`)
+      .run(user.id, createHash('sha256').update(token).digest('hex'), now());
+    return { on: true, path: `/calendar/${token}.ics` };
+  });
+  route('DELETE', '/api/me/calendar', ({ user }) => {
+    db.prepare('DELETE FROM calendar_feeds WHERE user_id = ?').run(user.id);
+    return { on: false };
+  });
+
+  const icsText = (s: string) => s.replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+  const icsTime = (t: number) => new Date(t).toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+  /** Lines longer than 75 bytes are folded, as calendar files want. */
+  const icsFold = (line: string) => {
+    const out: string[] = [];
+    let rest = line;
+    while (Buffer.byteLength(rest) > 75) {
+      let cut = 74;
+      while (Buffer.byteLength(rest.slice(0, cut)) > 74) cut--;
+      out.push(rest.slice(0, cut));
+      rest = ' ' + rest.slice(cut);
+    }
+    out.push(rest);
+    return out.join('\r\n');
+  };
+  const sendCalendar = (req: IncomingMessage, res: ServerResponse, token: string) => {
+    const feed = db.prepare('SELECT user_id FROM calendar_feeds WHERE token_hash = ?').get(createHash('sha256').update(token).digest('hex')) as { user_id: number } | undefined;
+    if (!feed) return send(res, 404, { error: 'This calendar address was turned off. Get a new one from Peiskos.' });
+    const secure = req.headers['x-forwarded-proto'] === 'https' || !!(req.socket as { encrypted?: boolean }).encrypted;
+    const base = (opts.publicUrl || `${secure ? 'https' : 'http'}://${String(req.headers.host ?? 'localhost')}`).replace(/\/$/, '');
+    const host = new URL(base).hostname;
+    const rows = db.prepare(
+      `SELECT e.id, e.server_id AS serverId, e.title, e.details, e.starts_at AS startsAt, e.channel_id AS channelId, e.created_at AS createdAt, s.name AS hearth
+       FROM events e JOIN servers s ON s.id = e.server_id JOIN members m ON m.server_id = e.server_id AND m.user_id = ?
+       WHERE e.starts_at > ? ORDER BY e.starts_at LIMIT 500`,
+    ).all(feed.user_id, now() - 60 * 86400_000) as { id: number; serverId: number; title: string; details: string; startsAt: number; channelId: number | null; createdAt: number; hearth: string }[];
+    const lines = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Peiskos//Events//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH', 'X-WR-CALNAME:Peiskos', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H'];
+    for (const e of rows) {
+      const room = e.channelId === null ? null : channelById(e.channelId);
+      if (room && !canSee(room, feed.user_id)) continue;
+      const status = (db.prepare('SELECT status FROM event_rsvps WHERE event_id = ? AND user_id = ?').get(e.id, feed.user_id) as { status: string } | undefined)?.status;
+      if (status === 'no') continue;
+      lines.push('BEGIN:VEVENT', `UID:event-${e.id}@${host}`, `DTSTAMP:${icsTime(e.createdAt)}`, `DTSTART:${icsTime(e.startsAt)}`, 'DURATION:PT2H',
+        `SUMMARY:${icsText(e.title)}`, `DESCRIPTION:${icsText([e.details, `${e.hearth}${room ? ` · #${room.name}` : ''} on Peiskos`].filter(Boolean).join('\n\n'))}`,
+        `LOCATION:${icsText(`${e.hearth}${room ? ` · #${room.name}` : ''}`)}`, `URL:${base}/`, ...(status === 'maybe' ? ['STATUS:TENTATIVE'] : []), 'END:VEVENT');
+    }
+    lines.push('END:VCALENDAR');
+    const body = lines.map(icsFold).join('\r\n') + '\r\n';
+    res.writeHead(200, { 'content-type': 'text/calendar; charset=utf-8', 'cache-control': 'private, max-age=300', 'x-content-type-options': 'nosniff' });
+    res.end(body);
+  };
+
   /** Tells the people going (or maybe going) that an event starts soon. */
   const remindEvents = () => {
     const due = db
@@ -4567,6 +4783,38 @@ export function createApp(opts: AppOptions): Server {
   route('DELETE', '/api/me/banner', ({ user }) => setBannerFile(user, null));
 
   /** Someone's card: who they are, what you share, and whether you're friends. */
+  // ---- achievements: little badges on profiles, worked out from what people have done ----
+
+  const ACHIEVEMENTS: { id: string; icon: string; title: string; how: string; earned: (id: number) => boolean }[] = [
+    { id: 'chatter', icon: '💬', title: 'Chatterbox', how: 'Send 1,000 messages',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM messages WHERE author_id = ? LIMIT 1000)').get(id) as { n: number }).n >= 1000 },
+    { id: 'storyteller', icon: '📜', title: 'Storyteller', how: 'Send 10,000 messages',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM (SELECT 1 FROM messages WHERE author_id = ? LIMIT 10000)').get(id) as { n: number }).n >= 10000 },
+    { id: 'regular', icon: '🔥', title: 'Regular at the fire', how: 'Spend 10 hours at fires',
+      earned: (id) => (db.prepare('SELECT COALESCE(SUM(ended_at - started_at), 0) AS ms FROM voice_time WHERE user_id = ?').get(id) as { ms: number }).ms >= 10 * 3600_000 },
+    { id: 'keeper', icon: '🪵', title: 'Fire keeper', how: 'Spend 100 hours at fires',
+      earned: (id) => (db.prepare('SELECT COALESCE(SUM(ended_at - started_at), 0) AS ms FROM voice_time WHERE user_id = ?').get(id) as { ms: number }).ms >= 100 * 3600_000 },
+    { id: 'favourite', icon: '⭐', title: 'Crowd favourite', how: 'Have a message make Best of',
+      earned: (id) => !!db.prepare(`SELECT 1 FROM messages m JOIN reactions r ON r.message_id = m.id AND r.emoji = '🔥' AND r.user_id != m.author_id
+                                    WHERE m.author_id = ? GROUP BY m.id HAVING COUNT(*) >= 2 LIMIT 1`).get(id) },
+    { id: 'planner', icon: '📅', title: 'Party planner', how: 'Plan 5 events',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM events WHERE created_by = ?').get(id) as { n: number }).n >= 5 },
+    { id: 'host', icon: '🏕️', title: 'Host', how: 'Host a hearth with 5 or more people in it',
+      earned: (id) => !!db.prepare(`SELECT 1 FROM servers s WHERE s.owner_id = ? AND s.kind = 'burrow' AND (SELECT COUNT(*) FROM members WHERE server_id = s.id) >= 5`).get(id) },
+    { id: 'friendly', icon: '🤝', title: 'Good company', how: 'Have 5 friends',
+      earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM friends WHERE (user_a = ? OR user_b = ?) AND accepted_at IS NOT NULL').get(id, id) as { n: number }).n >= 5 },
+    { id: 'perfect', icon: '🐟', title: 'Perfect catch', how: 'Land a 5-star fish',
+      earned: (id) => !!db.prepare('SELECT 1 FROM fishing_best WHERE user_id = ? AND stars >= 5 LIMIT 1').get(id) },
+    { id: 'derby', icon: '🏆', title: 'Derby champion', how: 'Win a fishing derby',
+      earned: (id) => !!db.prepare('SELECT 1 FROM fishing_derby_entries WHERE user_id = ? AND place = 1 LIMIT 1').get(id) },
+    { id: 'year', icon: '🎂', title: 'Old flame', how: 'Be on Peiskos for a year',
+      earned: (id) => !!db.prepare('SELECT 1 FROM users WHERE id = ? AND created_at <= ?').get(id, now() - 365 * 86400_000) },
+  ];
+  /** What someone has earned, and for yourself the ones still to go. */
+  const achievementsOf = (id: number, self: boolean) =>
+    ACHIEVEMENTS.map(({ id: key, icon, title, how, earned }) => ({ id: key, icon, title, how, earned: earned(id) }))
+      .filter((a) => self || a.earned);
+
   route('GET', '/api/users/:id', ({ user, params }) => {
     const id = Number(params[0]);
     const u = userById(id);
@@ -4579,7 +4827,10 @@ export function createApp(opts: AppOptions): Server {
       )
       .all(user.id, id);
     const deleted = !!(db.prepare('SELECT deleted_at FROM users WHERE id = ?').get(id) as { deleted_at: number | null }).deleted_at;
-    return { ...u, ...profileOf(id), deleted, friend: friendState(user.id, id), blocked: blocked(user.id, id), mutualBurrows: id === user.id ? [] : mutual };
+    return {
+      ...u, ...profileOf(id), deleted, friend: friendState(user.id, id), blocked: blocked(user.id, id), mutualBurrows: id === user.id ? [] : mutual,
+      achievements: deleted ? [] : achievementsOf(id, id === user.id),
+    };
   });
 
   // Your name in one burrow. Empty goes back to your display name.
@@ -5211,6 +5462,8 @@ export function createApp(opts: AppOptions): Server {
       // Invite links open the app, which shows the burrow before joining.
       const invite = url.pathname.match(/^\/invite\/([\w-]{1,32})\/?$/);
       if (invite) return sendInvitePage(req, res, invite[1]);
+      const calendar = url.pathname.match(/^\/calendar\/([\w-]{20,64})\.ics$/);
+      if (calendar && req.method === 'GET') return sendCalendar(req, res, calendar[1]);
       // Something shared from another app on a phone, before Burrow's service worker was there to
       // catch it: open the app (the shared things are lost, but it doesn't error).
       if (req.method === 'POST' && url.pathname === '/share') return res.writeHead(303, { location: '/' }).end();

@@ -433,3 +433,102 @@ test('drafts follow you to your other devices, and go when sent', async () => {
   assert.deepEqual((await call('/api/drafts', { token: max.token })).data, []);
   other.ws.close();
 });
+
+test('best of: messages enough people put 🔥 on', async () => {
+  const [max, sam, ann, eve] = await people('max', 'sam', 'ann', 'eve');
+  const { server, room } = await burrow(max, sam, ann);
+  const loved = await say(room, max, 'the best one');
+  const meh = await say(room, max, 'just ok');
+  const fire = (id: number, who: any) => call(`/api/messages/${id}/reactions`, { body: { emoji: '🔥' }, token: who.token });
+  await fire(loved.id, max); // your own doesn't count
+  await fire(loved.id, sam);
+  let r = (await call(`/api/servers/${server.id}/best-of`, { token: sam.token })).data;
+  assert.equal(r.needs, 2);
+  assert.deepEqual(r.results, []);
+  await fire(loved.id, ann);
+  await fire(meh.id, sam);
+  r = (await call(`/api/servers/${server.id}/best-of`, { token: sam.token })).data;
+  assert.deepEqual(r.results.map((x: any) => x.message.id), [loved.id]);
+  assert.equal((await call(`/api/servers/${server.id}/best-of`, { token: eve.token })).data.results.length, 0, 'not in the hearth, nothing to see');
+});
+
+test('the photo album lists pictures from rooms you can see, without spoilers', async () => {
+  const [max, sam] = await people('max', 'sam');
+  const { server, room } = await burrow(max, sam);
+  const upload = () => fetch(`${base}/api/channels/${room}/attachments`, {
+    method: 'POST', headers: { authorization: `Bearer ${sam.token}`, 'content-type': 'image/png', 'x-filename': 'moose.png' }, body: PNG,
+  }).then((r) => r.json() as any);
+  const a = await upload();
+  const b = await upload();
+  const first = await say(room, sam, 'look', { attachmentIds: [a.id] });
+  await say(room, sam, 'secret', { attachmentIds: [b.id], spoilerIds: [b.id] });
+  await say(room, sam, 'words only');
+  const album = (await call(`/api/servers/${server.id}/album`, { token: max.token })).data;
+  assert.deepEqual(album.items.map((x: any) => x.id), [a.id]);
+  assert.equal(album.items[0].messageId, first.id);
+  assert.equal(album.more, false);
+  assert.deepEqual((await call(`/api/servers/${server.id}/album?before=${first.id}`, { token: max.token })).data.items, []);
+});
+
+test('"when works?" plans become events with the people who can make it', async () => {
+  const [max, sam, ann] = await people('max', 'sam', 'ann');
+  const { server, room } = await burrow(max, sam, ann);
+  const day = 86400_000;
+  const t1 = Date.now() + 2 * day;
+  const t2 = Date.now() + 3 * day;
+  assert.equal((await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t1] }, token: max.token })).status, 400);
+  assert.equal((await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t1, Date.now() - day] }, token: max.token })).status, 400);
+  const m = (await call(`/api/channels/${room}/plans`, { body: { title: 'Game night', times: [t2, t1] }, token: max.token })).data;
+  assert.equal(m.poll.kind, 'when');
+  assert.deepEqual(m.poll.options.map((o: any) => o.at), [Math.floor(t1), Math.floor(t2)], 'times come sorted');
+  await call(`/api/messages/${m.id}/vote`, { body: { options: [0, 1] }, token: sam.token });
+  await call(`/api/messages/${m.id}/vote`, { body: { options: [1] }, token: ann.token });
+  assert.equal((await call(`/api/messages/${m.id}/plan/event`, { body: { option: 1 }, token: sam.token })).status, 403);
+  const done = (await call(`/api/messages/${m.id}/plan/event`, { body: { option: 1 }, token: max.token })).data;
+  assert.ok(done.poll.eventId);
+  assert.equal(done.poll.closed, true);
+  assert.equal((await call(`/api/messages/${m.id}/plan/event`, { body: { option: 0 }, token: max.token })).status, 409);
+  const ev = (await call(`/api/servers`, { token: sam.token })).data.find((s: any) => s.id === server.id).events.find((e: any) => e.id === done.poll.eventId);
+  assert.equal(ev.title, 'Game night');
+  assert.equal(ev.startsAt, Math.floor(t2));
+  assert.deepEqual(ev.rsvps.map((r: any) => r.userId).sort(), [max.user.id, sam.user.id, ann.user.id].sort());
+});
+
+test('a calendar feed has your hearths\' events, at a private address you can turn off', async () => {
+  const [max, sam] = await people('max', 'sam');
+  const { server } = await burrow(max, sam);
+  const at = Date.now() + 86400_000;
+  await call(`/api/servers/${server.id}/events`, { body: { title: 'Pizza, then games; bring snacks', startsAt: at }, token: max.token });
+  assert.equal((await call('/api/me/calendar', { token: sam.token })).data.on, false);
+  const { path } = (await call('/api/me/calendar', { body: {}, token: sam.token })).data;
+  assert.match(path, /^\/calendar\/[\w-]+\.ics$/);
+  const res = await fetch(base + path);
+  assert.equal(res.status, 200);
+  assert.match(res.headers.get('content-type') ?? '', /text\/calendar/);
+  const ics = await res.text();
+  assert.match(ics, /BEGIN:VCALENDAR/);
+  assert.match(ics, /SUMMARY:Pizza\\, then games\\; bring snacks/);
+  assert.match(ics, new RegExp(`DTSTART:${new Date(at).toISOString().slice(0, 10).replace(/-/g, '')}T`));
+  // A new address replaces the old one; turning it off ends it.
+  const again = (await call('/api/me/calendar', { body: {}, token: sam.token })).data.path;
+  assert.equal((await fetch(base + path)).status, 404);
+  await call('/api/me/calendar', { method: 'DELETE', token: sam.token });
+  assert.equal((await fetch(base + again)).status, 404);
+});
+
+test('shared lists: anyone in the room adds and ticks things off', async () => {
+  const [max, sam, ann, eve] = await people('max', 'sam', 'ann', 'eve');
+  const { room } = await burrow(max, sam, ann);
+  const m = (await call(`/api/channels/${room}/lists`, { body: { title: 'Cabin weekend', items: ['Snacks', ' ', 'Board games'] }, token: max.token })).data;
+  assert.deepEqual(m.list.items.map((i: any) => i.text), ['Snacks', 'Board games']);
+  const added = (await call(`/api/messages/${m.id}/list`, { body: { text: 'Firewood' }, token: sam.token })).data;
+  const wood = added.list.items.find((i: any) => i.text === 'Firewood');
+  assert.equal(wood.addedBy, sam.user.id);
+  const ticked = (await call(`/api/messages/${m.id}/list/${wood.id}`, { body: { done: true }, token: ann.token })).data;
+  assert.equal(ticked.list.items.find((i: any) => i.id === wood.id).doneBy, ann.user.id);
+  const snacks = m.list.items[0];
+  assert.equal((await call(`/api/messages/${m.id}/list/${snacks.id}`, { method: 'DELETE', token: ann.token })).status, 403, "ann didn't add it");
+  assert.equal((await call(`/api/messages/${m.id}/list/${wood.id}`, { method: 'DELETE', token: sam.token })).status, 200);
+  assert.equal((await call(`/api/messages/${m.id}/list`, { body: { text: 'x' }, token: eve.token })).status, 404);
+  assert.equal((await call(`/api/messages/${m.id}/list`, { body: { text: 'x'.repeat(121) }, token: sam.token })).status, 400);
+});
