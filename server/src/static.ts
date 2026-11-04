@@ -89,8 +89,13 @@ export function staticFiles() {
     let built = pages.get(key);
     if (!built) {
       built = (async () => {
-        const raw = Buffer.from(html.replace(/((?:src|href)=")((?:js\/|vendor\/)?[\w.-]+\.(?:js|css))"/g, (all, attr, ref) =>
-          versions.has(ref) ? `${attr}${ref}?v=${versions.get(ref)}"` : all));
+        // The page's own <meta> security policy is for the desktop and phone apps, which open it as a
+        // file. Served from here the same policy (stricter) comes as a header, and with the <meta> one
+        // in the page browsers fetch its scripts one after another instead of all at once.
+        const raw = Buffer.from(html
+          .replace(/\s*<meta http-equiv="Content-Security-Policy"[^>]*>/, '')
+          .replace(/((?:src|href)=")((?:js\/|vendor\/)?[\w.-]+\.(?:js|css))"/g, (all, attr, ref) =>
+            versions.has(ref) ? `${attr}${ref}?v=${versions.get(ref)}"` : all));
         const [br, gz] = await compress(raw);
         return { mtime: page.mtime, size: page.size, etag: `W/"${createHash('sha1').update(raw).digest('base64url')}"`, raw, br, gzip: gz };
       })();

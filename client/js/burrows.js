@@ -12,8 +12,15 @@ function renderServers() {
   const hasUnread = serverUnread;
   const dmUnread = state.dmOrder.some((id) => hasUnread(state.servers.get(id)));
 
+  const homePill = document.createElement('button');
+  homePill.className = 'pill home-pill' + (state.atHome ? ' on' : '');
+  homePill.innerHTML = `<span class="tile home-tile">${HOME_ICON}</span><span class="pill-name">Home</span>`;
+  homePill.title = 'Home: what\'s happening everywhere';
+  homePill.onclick = openHome;
+  if (state.atHome) homePill.setAttribute('aria-current', 'true');
+
   const dmPill = document.createElement('button');
-  dmPill.className = 'pill dm-pill' + (state.inDms ? ' on' : '') + (!state.inDms && dmUnread ? ' unread' : '');
+  dmPill.className = 'pill dm-pill' + (state.inDms && !state.atHome ? ' on' : '') + (!state.inDms && dmUnread ? ' unread' : '');
   dmPill.innerHTML = `<span class="tile dm-tile">${CHAT_ICON}</span><span class="pill-name">Messages</span>`;
   dmPill.title = 'Direct messages';
   dmPill.onclick = openDms;
@@ -27,7 +34,7 @@ function renderServers() {
   const pills = inBar.map((id) => {
     const srv = state.servers.get(id);
     const b = document.createElement('button');
-    const on = id === state.serverId && !state.inDms;
+    const on = id === state.serverId && !state.inDms && !state.atHome;
     b.className = 'pill' + (on ? ' on' : '') + (!on && hasUnread(srv) ? ' unread' : '');
     b.dataset.id = id;
     b.title = srv.name;
@@ -41,6 +48,7 @@ function renderServers() {
     if (on) b.setAttribute('aria-current', 'true');
     if (favs.includes(id)) b.classList.add('fav');
     b.onclick = () => selectServer(id);
+    b.oncontextmenu = (e) => { e.preventDefault(); openNotifyMenu(b, srv); };
     return b;
   });
 
@@ -58,7 +66,8 @@ function renderServers() {
   add.textContent = '+';
   add.onclick = openAddServer;
 
-  $('#burrow-nav').replaceChildren(dmPill, ...pills, more, add);
+  $('#burrow-nav').replaceChildren(homePill, dmPill, ...pills, more, add);
+  if (state.atHome) renderHome();
   fitPills();
 
   // The phone's burrow button.
@@ -83,6 +92,10 @@ function renderServers() {
   $('#empty-state').classList.toggle('hidden', !empty);
   // With no hearth yet, the room list and member list have nothing to show, so they step aside.
   $('#app').classList.toggle('no-hearth', empty);
+  // Messages with no conversation open: an empty screen instead of the last room's header and box.
+  const noDm = state.inDms && !state.servers.get(state.serverId);
+  $('#dm-empty').classList.toggle('hidden', !noDm);
+  $('#app').classList.toggle('no-dm', noDm);
 }
 
 // The burrow's picture, or its initials on a forest color.
@@ -243,6 +256,11 @@ function renderSwitcher() {
   const inFolders = new Set(state.folders.flatMap((f) => f.serverIds));
   const others = state.serverOrder.filter((id) => !favs.includes(id) && !inFolders.has(id));
   const rows = [];
+  const home = document.createElement('button');
+  home.className = 'switch-home';
+  home.innerHTML = `<span class="tile home-tile">${HOME_ICON}</span><b>Home</b>`;
+  home.onclick = () => { closeSwitcher(); openHome(); };
+  rows.push(home);
   if (favs.length) rows.push(heading(`Favorites · ${favs.length} of ${MAX_FAVORITES}`), ...favs.map(row));
   else {
     const hint = document.createElement('p');
@@ -287,6 +305,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSwitc
 window.addEventListener('resize', placeSwitcher);
 
 async function selectServer(id, initial = false, open = null) {
+  closeHome();
   const s = state.servers.get(id);
   if (!initial) showView('rooms');
   if (s) state.inDms = isDm(s);
@@ -470,9 +489,22 @@ function pinFireButton(s, c) {
 
 // Opens a room or thread. With `around`, it opens at that message instead of the newest;
 // with `present`, at the newest even if there's a lot you haven't read.
+// The last few rooms you were in, as you left them, so going back shows them at once and where
+// you were reading. They're refreshed from the server straight after.
+const roomMemory = new Map();
+function keepRoomView() {
+  const id = state.channelId;
+  if (!id || !state.messages.length || messagesEl.getAttribute('aria-busy')) return;
+  const atBottom = state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+  roomMemory.delete(id);
+  roomMemory.set(id, { messages: state.messages, reachedStart: state.reachedStart, reachedEnd: state.reachedEnd, scrollTop: messagesEl.scrollTop, atBottom });
+  if (roomMemory.size > 8) roomMemory.delete(roomMemory.keys().next().value);
+}
+
 async function selectChannel(id, { around = null, present = false } = {}) {
   closeStage();
   const changing = id !== state.channelId;
+  if (changing) keepRoomView();
   if (changing) {
     saveDraft();
     // Files upload into a specific room, so switching rooms drops any not yet sent.
@@ -515,6 +547,16 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   let target = around;
   if (target == null && !present && (ch.unread ?? 0) > 40) target = (ch.lastReadId ?? 0) + 1;
   const parentLoad = where.thread ? loadThreadParent(ch) : null;
+  const mem = changing && target == null && !present && !where.thread ? roomMemory.get(id) : null;
+  if (mem) {
+    state.messages = mem.messages;
+    state.reachedStart = mem.reachedStart;
+    state.reachedEnd = mem.reachedEnd;
+    renderMessages({ stick: mem.atBottom });
+    if (!mem.atBottom) messagesEl.scrollTop = mem.scrollTop;
+    renderPresentBar();
+    updateUnreadBar();
+  }
   let msgs;
   // A slow load shows message-shaped placeholders instead of the last room or nothing.
   const placeholders = setTimeout(() => { if (state.channelId === id && !state.messages.length) showMessagePlaceholders(); }, 150);
@@ -530,6 +572,31 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   finally { clearTimeout(placeholders); messagesEl.removeAttribute('aria-busy'); }
   if (parentLoad) await parentLoad.catch(() => {});
   if (state.channelId !== id) return;
+  if (mem) {
+    // Bring the remembered room up to date without moving you.
+    const atBottom = state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
+    const last = state.messages.at(-1);
+    if (atBottom || !msgs.length || !last) {
+      state.messages = msgs;
+      state.reachedStart = msgs.length < 50;
+      state.reachedEnd = true;
+      renderMessages({ stick: true });
+    } else if (msgs[0].id <= last.id) {
+      // The fresh page overlaps what's here: older messages stay, the rest is replaced (edits, deletes, new ones).
+      state.messages = [...state.messages.filter((m) => m.id < msgs[0].id), ...msgs];
+      state.reachedEnd = true;
+      renderMessages();
+    } else {
+      // Lots came in since: they load as you scroll down.
+      state.reachedEnd = false;
+      renderMessages();
+    }
+    renderPresentBar();
+    updateUnreadBar();
+    markReadSoon();
+    if (!isPhone()) $('#composer-input').focus();
+    return;
+  }
   state.messages = msgs;
   // In slow mode, your last message here decides when you can send the next.
   const lastMine = msgs.findLast((m) => m.authorId === state.me.id);
@@ -623,6 +690,7 @@ function renderMembers() {
         } else li.title = 'Your profile and nickname';
         li.classList.add('can-dm');
         li.onclick = () => openPerson(s, m);
+        li.dataset.hoverUser = m.id;
         if (canActOn(s, m)) {
           const more = iconButton('⋯', `Manage ${nameOfPerson(m)}`, (e) => { e.stopPropagation(); openMemberMenu(s, m); });
           more.classList.add('member-more');

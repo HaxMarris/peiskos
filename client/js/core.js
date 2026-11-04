@@ -552,6 +552,8 @@ async function loadServers() {
   state.favorites = favs.serverIds;
   [...list, ...dms].forEach(rememberAvatars);
   state.servers = new Map([...list, ...dms].map((s) => [s.id, s]));
+  // The list can be fetched a moment before this device's connection counts you as online.
+  for (const s of state.servers.values()) for (const m of s.members ?? []) if (m.id === state.me?.id) m.online = true;
   state.serverOrder = list.map((s) => s.id);
   state.dmOrder = dms.map((s) => s.id);
   if (state.servers.has(state.serverId)) state.inDms = isDm(state.servers.get(state.serverId));
@@ -702,12 +704,14 @@ function handleEvent(ev) {
         }
         if (where.thread) Object.assign(c, { count: (c.count ?? 0) + 1, lastAt: m.createdAt });
       }
+      if (mine) confirmSending(m);
       if (m.channelId === state.channelId) {
         clearTyping(m.channelId, m.author);
         if (state.reachedEnd) {
           state.messages.push(m);
           appendMessage(m, { stick: mine });
           renderSeen();
+          renderOutbox(); // anything still sending or waiting stays at the end
         } else if (mine) loadPresent();
         if (mine) { state.holdUnread = null; state.newFrom = null; state.unreadAtOpen = null; updateUnreadBar(); }
         markReadSoon();
@@ -972,6 +976,13 @@ function handleEvent(ev) {
       break;
     case 'scheduled_failed':
       toast(`A scheduled message couldn't be sent: ${ev.error}`, { timeout: 0 });
+      break;
+    case 'fire_gathered':
+      // Friends sat down at a fire you're not at.
+      if (state.voice || hushed()) break;
+      toast(ev.text, { action: 'Join', onAction: () => joinVoice(ev.channelId), timeout: 15000 });
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted')
+        new Notification(ev.text).onclick = () => { window.focus(); selectServer(ev.serverId); };
       break;
     case 'error': {
       // Usually a message that couldn't be sent: slow mode, an archived room, and so on.

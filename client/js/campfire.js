@@ -1258,16 +1258,18 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeVolum
 
 // Short chimes made on the fly, so there are no sound files to ship.
 const soundPrefs = (() => {
-  const defaults = { messages: true, voice: true, volume: 0.5 };
+  const defaults = { messages: true, sent: true, voice: true, volume: 0.5 };
   try { return { ...defaults, ...JSON.parse(store.get('sounds')) }; } catch { return defaults; }
 })();
 const saveSoundPrefs = () => store.set('sounds', JSON.stringify(soundPrefs));
+// Every sound is the same soft, wooden tone, on notes from one scale (C major pentatonic),
+// so they sound like they belong together. [frequency, start, length, loudness] in Hz, seconds and 0-1.
 const SOUNDS = {
-  // [frequency, start, length] in Hz and seconds
-  message: { pref: 'messages', notes: [[987.8, 0, 0.12], [1318.5, 0.07, 0.2]] },
-  join: { pref: 'voice', notes: [[523.3, 0, 0.14], [784, 0.09, 0.22]] },
-  leave: { pref: 'voice', notes: [[784, 0, 0.14], [523.3, 0.09, 0.22]] },
-  ring: { pref: 'voice', notes: [[659.3, 0, 0.25], [830.6, 0.3, 0.25], [659.3, 0.6, 0.25], [830.6, 0.9, 0.35]] },
+  message: { pref: 'messages', notes: [[784, 0, 0.32, 1], [1046.5, 0.08, 0.42, 0.9]] },
+  sent: { pref: 'sent', notes: [[1046.5, 0, 0.14, 0.35]] },
+  join: { pref: 'voice', notes: [[523.3, 0, 0.3, 1], [784, 0.1, 0.45, 0.9]] },
+  leave: { pref: 'voice', notes: [[784, 0, 0.3, 0.9], [523.3, 0.1, 0.45, 0.8]] },
+  ring: { pref: 'voice', notes: [[659.3, 0, 0.35, 1], [784, 0.3, 0.35, 1], [659.3, 0.6, 0.35, 1], [784, 0.9, 0.5, 1]] },
 };
 let soundCtx = null;
 let lastMessageSound = 0;
@@ -1286,18 +1288,29 @@ function playSound(name, force = false) {
       setChimeOutput();
     }
     if (soundCtx.state === 'suspended') soundCtx.resume();
-    const t0 = soundCtx.currentTime + 0.01;
-    for (const [freq, start, length] of sound.notes) {
-      const osc = soundCtx.createOscillator();
-      const gain = soundCtx.createGain();
-      osc.type = 'sine';
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, t0 + start);
-      gain.gain.exponentialRampToValueAtTime(0.25 * soundPrefs.volume, t0 + start + 0.015);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + start + length);
-      osc.connect(gain).connect(soundCtx.destination);
-      osc.start(t0 + start);
-      osc.stop(t0 + start + length + 0.02);
+    const ctx = soundCtx;
+    const t0 = ctx.currentTime + 0.01;
+    // A low-pass takes the edge off, like a mallet on wood rather than a beep.
+    const soften = ctx.createBiquadFilter();
+    soften.type = 'lowpass';
+    soften.frequency.value = 2400;
+    soften.connect(ctx.destination);
+    for (const [freq, start, length, loud] of sound.notes) {
+      const at = t0 + start;
+      const peak = 0.2 * loud * soundPrefs.volume;
+      // The note, plus a quiet overtone that dies away first.
+      for (const [mult, share, decay] of [[1, 1, length], [2.01, 0.18, length * 0.4]]) {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq * mult;
+        gain.gain.setValueAtTime(0.0001, at);
+        gain.gain.exponentialRampToValueAtTime(peak * share, at + 0.008);
+        gain.gain.exponentialRampToValueAtTime(0.0001, at + decay);
+        osc.connect(gain).connect(soften);
+        osc.start(at);
+        osc.stop(at + decay + 0.02);
+      }
     }
   } catch {}
 }

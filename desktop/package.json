@@ -39,6 +39,7 @@
       "activity.js",
       "tray.js",
       "shortcuts.js",
+      "window-state.js",
       "draw-overlay.js",
       "draw-overlay-preload.js",
       "draw-overlay.html",

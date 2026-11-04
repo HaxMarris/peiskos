@@ -487,7 +487,7 @@ function renderAttachments(list) {
 
 function openImage(a, url) {
   modal(`<div class="lightbox"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.name)}" />
-    <div class="modal-row"><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a><button class="btn" data-close>Close</button></div></div>`);
+    <div class="modal-row"><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div></div>`);
   $('#modal-card').classList.add('wide');
 }
 

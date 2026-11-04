@@ -197,7 +197,6 @@ function openServers() {
     <p class="muted small">Each server is a different host's Peiskos. Switching keeps you logged in to all of them.</p>
     <ul class="server-accounts" id="server-accounts"></ul>
     <div class="modal-row">
-      <button type="button" class="btn secondary" data-close>Close</button>
       <button type="button" class="btn" id="add-account">Add a server</button>
     </div>`);
   const rows = list.map((a) => {
@@ -267,22 +266,22 @@ async function openPlace(s, c) {
  * A search box over a list of places. Arrows move, Enter opens, and with nothing typed the
  * unread ones come first. `pick` gets the chosen place; `only` narrows what's listed.
  */
-function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true }) {
+function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true, actions = [] }) {
   modal(`<h2>${escapeHtml(title)}</h2>
     <input id="place-search" class="place-search" placeholder="Where to?" autocomplete="off" role="combobox" aria-expanded="true" aria-controls="place-list" aria-autocomplete="list" />
     <ul id="place-list" class="place-list" role="listbox" aria-label="Places"></ul>
     <p class="small muted">${escapeHtml(hint)}</p>`, 'place-modal');
-  const all = switcherPlaces().filter(only);
+  const all = [...switcherPlaces().filter(only), ...actions];
   const box = $('#place-search');
   let shown = [];
   let at = 0;
-  const unread = (p) => (p.c ? isUnread(p.c) : serverUnread(p.s));
+  const unread = (p) => (p.kind === 'action' ? false : p.c ? isUnread(p.c) : serverUnread(p.s));
   const render = () => {
     const q = box.value.trim().toLowerCase().replace(/^[#@]/, '');
     shown = q
       ? all.filter((p) => p.label.toLowerCase().includes(q) || p.sub.toLowerCase().includes(q))
         .sort((a, b) => b.label.toLowerCase().startsWith(q) - a.label.toLowerCase().startsWith(q) || unread(b) - unread(a))
-      : [...all].sort((a, b) => unread(b) - unread(a) || (b.c?.id === state.channelId) - (a.c?.id === state.channelId));
+      : all.filter((p) => p.kind !== 'action').sort((a, b) => unread(b) - unread(a) || (b.c?.id === state.channelId) - (a.c?.id === state.channelId));
     shown = shown.slice(0, 40);
     at = Math.min(at, Math.max(0, shown.length - 1));
     $('#place-list').replaceChildren(...shown.map((p, i) => {
@@ -291,7 +290,8 @@ function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true 
       li.setAttribute('role', 'option');
       li.setAttribute('aria-selected', String(i === at));
       li.className = (i === at ? 'active' : '') + (unread(p) ? ' unread' : '');
-      const mark = p.kind === 'dm' ? '@' : p.kind === 'burrow' ? '' : '#';
+      const mark = p.kind === 'dm' ? '@' : p.kind === 'burrow' || p.kind === 'action' ? '' : '#';
+      if (p.kind === 'action') li.classList.add('place-action');
       li.innerHTML = `<span class="place-label">${mark}${escapeHtml(p.label)}</span><span class="small muted">${escapeHtml(p.sub)}</span>`;
       li.onclick = () => { closeModal(); pick(p); };
       return li;
@@ -316,15 +316,37 @@ function openPlacePicker({ title, hint, pick = (p) => p.go(), only = () => true 
   render();
   box.focus();
 }
-const openQuickSwitcher = () => openPlacePicker({ title: 'Go to', hint: 'Type part of a room, conversation or hearth. Unread ones come first.' });
+// Things you can do from Ctrl+K as well as places to go. They show once you start typing.
+function quickActions() {
+  const s = state.servers.get(state.serverId);
+  const hearth = s && !isDm(s) ? s : null;
+  const fire = hearth?.channels.find((c) => c.kind === 'voice');
+  const act = (label, go) => ({ kind: 'action', label, sub: 'Action', go });
+  return [
+    act('Home', () => openHome()),
+    act('New message', () => openNewDm()),
+    act('Search messages', () => openSearch()),
+    s && serverUnread(s) && act(`Mark ${hearth ? hearth.name : 'this conversation'} as read`, () => markServerRead(s)),
+    hearth && act(`Invite people to ${hearth.name}`, () => openInvites(hearth.id)),
+    hearth && act(`${hearth.name} settings`, () => openHearthSettings(hearth.id)),
+    state.voice && act(state.voice.muted ? 'Unmute' : 'Mute', () => toggleMute()),
+    state.voice && act('Leave the fire', () => leaveVoice()),
+    !state.voice && fire && state.voiceEnabled && act(`Join the fire in ${hearth.name}`, () => joinVoice(fire.id)),
+    act('Your account', () => openAccount()),
+    act('Start or join a hearth', () => openAddServer('create')),
+    act('Keyboard shortcuts', () => openShortcuts()),
+  ].filter(Boolean);
+}
+const openQuickSwitcher = () => openPlacePicker({ title: 'Go to', hint: 'Type part of a room, conversation or hearth, or something to do. Unread ones come first.', actions: quickActions() });
 
 // ---------------------------------------------------------------- keyboard shortcuts
 
 const SHORTCUTS = [
-  ['Ctrl+K', 'Go to a room, conversation or hearth'],
+  ['Ctrl+K', 'Go to a room, conversation or hearth, or do something'],
   ['Ctrl+F', 'Search messages'],
   ['Alt+↑ / Alt+↓', 'Previous or next room'],
-  ['Alt+Shift+↑ / ↓', 'Previous or next unread room'],
+  ['Alt+Shift+↑ / ↓', 'Previous or next unread room, in any hearth'],
+  ['Shift+Esc', 'Mark this hearth or conversation as read'],
   ['Esc', 'Close a window or menu, or stop replying'],
   ['↑ in an empty message box', 'Edit your last message'],
   ['Shift+Enter', 'New line in a message'],
@@ -356,6 +378,22 @@ function stepRoom(step, unreadOnly) {
     requestAnimationFrame(() => { if (!isPhone()) $('#composer-input').focus(); });
     return;
   }
+  // Nothing unread left here: on to the next hearth or conversation that has some.
+  if (unreadOnly) nextUnreadElsewhere(step);
+}
+
+async function nextUnreadElsewhere(step) {
+  const order = [...state.serverOrder, ...state.dmOrder];
+  const at = order.indexOf(state.serverId);
+  for (let i = 1; i < order.length; i++) {
+    const s = state.servers.get(order[(at + step * i + order.length * i) % order.length]);
+    if (!serverUnread(s)) continue;
+    const room = [...s.channels, ...(s.threads ?? [])].find((c) => isUnread(c) && roomLoud(s, c));
+    await selectServer(s.id, false, room ? { channelId: room.id } : null);
+    showView('chat');
+    requestAnimationFrame(() => { if (!isPhone()) $('#composer-input').focus(); });
+    return;
+  }
 }
 
 document.addEventListener('keydown', (e) => {
@@ -372,6 +410,9 @@ document.addEventListener('keydown', (e) => {
   } else if (mod && (e.key === '/' || e.key === '?')) {
     e.preventDefault();
     openShortcuts();
+  } else if (e.shiftKey && !mod && !e.altKey && e.key === 'Escape' && $('#modal').classList.contains('hidden')) {
+    const s = state.servers.get(state.serverId);
+    if (s) { e.preventDefault(); markServerRead(s); }
   } else if (e.altKey && !mod && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
     e.preventDefault();
     stepRoom(e.key === 'ArrowUp' ? -1 : 1, e.shiftKey);
@@ -844,7 +885,60 @@ function queueMessage(channelId, body) {
 }
 
 function renderOutbox() {
-  const list = readOutbox();
+  const all = readOutbox();
+  // This room's waiting messages show greyed out at the end of the chat; the box below lists the rest.
+  const here = all.filter((q) => q.channelId === state.channelId);
+  const list = all.filter((q) => q.channelId !== state.channelId);
+  const cancelButton = (q) => {
+    const cancel = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
+    cancel.setAttribute('aria-label', "Don't send");
+    cancel.onclick = () => { saveOutbox(readOutbox().filter((x) => x.id !== q.id)); renderOutbox(); };
+    return cancel;
+  };
+  const log = $('#messages');
+  log.querySelector('.waiting-lines')?.remove();
+  const going = sending.filter((x) => x.channelId === state.channelId);
+  if (here.length || going.length) {
+    const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
+    const wrap = document.createElement('div');
+    wrap.className = 'waiting-lines';
+    // Under someone else's message, your name goes above so it doesn't read as theirs.
+    if (state.messages.at(-1)?.authorId !== state.me.id) {
+      const head = document.createElement('div');
+      head.className = 'waiting-head';
+      head.textContent = nameOfPerson(state.me);
+      wrap.append(head);
+    }
+    const line = (content, noteText, buttons) => {
+      const row = document.createElement('div');
+      row.className = 'waiting-line';
+      const text = document.createElement('span');
+      text.className = 'waiting-text';
+      text.textContent = content;
+      row.append(text);
+      if (noteText) {
+        const note = document.createElement('span');
+        note.className = 'waiting-note';
+        note.textContent = noteText;
+        row.append(note);
+      }
+      row.append(...buttons);
+      return row;
+    };
+    wrap.append(...going.map((x) => {
+      if (!x.failed) return line(x.content, '', []);
+      const retry = Object.assign(document.createElement('button'), { type: 'button', className: 'link-btn small', textContent: 'Try again' });
+      retry.onclick = () => { dropSending(x.key); sendMessage(x.channelId, x.body, alertError).catch(alertError); };
+      const drop = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
+      drop.setAttribute('aria-label', "Don't send");
+      drop.onclick = () => dropSending(x.key);
+      const row = line(x.content, 'Not sent', [retry, drop]);
+      row.classList.add('failed');
+      return row;
+    }), ...here.map((q) => line(q.body.content, 'Waiting to send', [cancelButton(q)])));
+    log.append(wrap);
+    if (nearBottom) log.scrollTop = log.scrollHeight;
+  }
   const box = $('#outbox');
   box.classList.toggle('hidden', !list.length);
   if (!list.length) return box.replaceChildren();
@@ -858,9 +952,7 @@ function renderOutbox() {
     const label = document.createElement('span');
     label.className = 'outbox-text';
     label.textContent = (where ? `${isDm(where.s) ? dmTitle(where.s) : '#' + where.c.name}: ` : '') + q.body.content;
-    const cancel = Object.assign(document.createElement('button'), { type: 'button', className: 'icon-btn', title: "Don't send", textContent: '✕' });
-    cancel.onclick = () => { saveOutbox(readOutbox().filter((x) => x.id !== q.id)); renderOutbox(); };
-    row.append(label, cancel);
+    row.append(label, cancelButton(q));
     return row;
   }));
 }

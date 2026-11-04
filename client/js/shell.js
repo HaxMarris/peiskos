@@ -117,7 +117,7 @@ function showView(view) {
   $('#app').dataset.view = view;
   // The open room's badges depend on whether its chat is showing (see readingNow).
   if (changed && state.me) { renderServers(); renderChannels(); }
-  if (view === 'rooms') memberPane.classList.remove('open');
+  if (view === 'rooms') { memberPane.classList.remove('open'); closeHome(); }
   if (view === 'chat') markReadSoon();
 }
 $('#chat-back').onclick = () => showView('rooms');
@@ -145,6 +145,7 @@ function toggleMeMenu(anchor) {
 function closeMeMenu() {
   const menu = $('#me-menu');
   if (menu.classList.contains('hidden')) return;
+  fadeOut(menu, 'menu');
   menu.classList.add('hidden');
   menu.anchor?.setAttribute('aria-expanded', 'false');
 }
@@ -160,11 +161,21 @@ $('#scheduled-btn').onclick = () => openScheduledList();
 document.addEventListener('click', closeMeMenu);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeMeMenu(); });
 
+// A short drop goes unnoticed; one that lasts a few seconds gets a strip at the top.
+let connBarTimer = null;
 function setConnected(ok, text) {
   $('#conn-status').classList.toggle('ok', ok);
   $('#conn-status').textContent = text;
   $('#me-btn').classList.toggle('offline', !ok);
+  if (ok || text !== 'Reconnecting…') {
+    clearTimeout(connBarTimer);
+    connBarTimer = null;
+    return $('#conn-bar').classList.add('hidden');
+  }
+  // Each failed retry lands here again; the first one starts the clock.
+  connBarTimer ??= setTimeout(() => $('#conn-bar').classList.toggle('hidden', !state.token || offline), 3000);
 }
+$('#conn-retry').onclick = () => { clearTimeout(wsTimer); connect(); };
 
 // Where you can get back to the voice room from: the chip in the top bar, and the pill above a phone's chat.
 function renderVoicePlaces() {
@@ -281,8 +292,7 @@ function openPerson(s, m) {
         <input type="range" id="pv-voice" min="0" max="200" step="5" value="${Math.round(volumeFor(m.id) * 100)}" /></label>
       <span class="small muted">Only changes it for you.</span>
     </div>` : ''}
-    <div class="person-actions" id="person-actions"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`, 'sheet profile-modal');
+    <div class="person-actions" id="person-actions"></div>`, 'sheet profile-modal');
   const card = $('#profile-card');
   let profile = { ...m };
   const draw = () => card.replaceChildren(profileHeader(profile, s));
@@ -469,8 +479,7 @@ function openFriends(tab) {
     <div class="error" id="add-friend-error"></div>
     <div class="tabs" role="tablist" id="friends-tabs"></div>
     <ul class="friend-list" id="friend-list"></ul>
-  </div>
-  <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'sheet');
+  </div>`, 'sheet');
   $('#add-friend').onsubmit = async (e) => {
     e.preventDefault();
     $('#add-friend-error').textContent = '';
@@ -532,3 +541,74 @@ function renderFriendsPanel() {
 if (resetLinkToken && !isApp) showAuth();
 else if (state.token && state.serverUrl) resolveServerUrl().then(enterApp).catch((err) => startOffline(err) || showAuth());
 else showAuth();
+
+// Buttons with a keyboard shortcut say so when you point at them.
+$('#search-btn').title = withKey('Search messages', 'Ctrl+F');
+$('#burrow-switch').title = withKey('Go to a room, conversation or hearth', 'Ctrl+K');
+
+// ---- hover cards: pointing at someone's name or picture for a moment shows who they are and
+// what they're up to, with a button to message them. Clicking still opens their full card.
+let hoverTimer = null;
+let hoverFor = null;
+function closeHoverCard() {
+  clearTimeout(hoverTimer);
+  hoverFor = null;
+  $('#hover-card')?.remove();
+}
+function showHoverCard(anchor, userId) {
+  const s = state.servers.get(state.serverId);
+  const m = s?.members.find((x) => x.id === userId)
+    ?? [...state.servers.values()].flatMap((x) => x.members).find((x) => x.id === userId);
+  if (!m || m.deleted) return;
+  closeHoverCard();
+  hoverFor = anchor;
+  const card = document.createElement('div');
+  card.id = 'hover-card';
+  card.className = 'hover-card';
+  card.setAttribute('role', 'tooltip');
+  const av = document.createElement('span');
+  av.className = 'avatar lg';
+  setAvatar(av, nameOfPerson(m), avatarOf(m.id, m.avatar));
+  const text = document.createElement('div');
+  text.className = 'hover-text';
+  const status = m.online ? STATUS_LABELS[statusOf(m)] : 'Offline';
+  text.innerHTML = `<b>${escapeHtml(nameOfPerson(m))}</b><span class="small muted">@${escapeHtml(m.username)}</span>
+    <span class="small hover-status"><span class="status-dot ${statusOf(m)}"></span>${escapeHtml(status)}</span>
+    ${presenceLine(m) ? `<span class="small muted">${presenceLine(m)}</span>` : ''}`;
+  const top = document.createElement('div');
+  top.className = 'hover-top';
+  top.append(av, text);
+  const actions = document.createElement('div');
+  actions.className = 'hover-actions';
+  if (m.id !== state.me.id) {
+    const msg = Object.assign(document.createElement('button'), { type: 'button', className: 'btn', textContent: 'Message' });
+    msg.onclick = () => { closeHoverCard(); openDm(m.id); };
+    actions.append(msg);
+  }
+  const more = Object.assign(document.createElement('button'), { type: 'button', className: 'btn secondary', textContent: 'Profile' });
+  more.onclick = () => { closeHoverCard(); openPersonById(m.id); };
+  actions.append(more);
+  card.append(top, actions);
+  document.body.append(card);
+  // Beside what you pointed at, kept on screen.
+  const r = anchor.getBoundingClientRect();
+  const w = card.offsetWidth, h = card.offsetHeight;
+  const left = r.right + 8 + w < innerWidth ? r.right + 8 : Math.max(8, r.left - w - 8);
+  card.style.left = `${left}px`;
+  card.style.top = `${Math.min(Math.max(8, r.top - 8), innerHeight - h - 8)}px`;
+  card.onmouseleave = (e) => { if (!anchor.contains(e.relatedTarget)) closeHoverCard(); };
+}
+document.addEventListener('mouseover', (e) => {
+  if (isPhone() || !matchMedia('(hover: hover)').matches) return;
+  if (e.target.closest('#hover-card')) return clearTimeout(hoverTimer);
+  const el = e.target.closest('[data-hover-user]');
+  if (el === hoverFor) return;
+  clearTimeout(hoverTimer);
+  if (!el) {
+    if (hoverFor) hoverTimer = setTimeout(closeHoverCard, 250);
+    return;
+  }
+  hoverTimer = setTimeout(() => showHoverCard(el, Number(el.dataset.hoverUser)), 450);
+});
+document.addEventListener('mousedown', (e) => { if (!e.target.closest('#hover-card')) closeHoverCard(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHoverCard(); });

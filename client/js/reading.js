@@ -26,6 +26,17 @@ const readingNow = (id) => id != null && id === state.channelId && !(isPhone() &
 const isUnread = (c) => !!c && c.kind !== 'voice' && (c.unread ?? 0) > 0 && !readingNow(c.id);
 // Muted rooms, and ones set to @mentions or nothing, don't light up the burrow. Mentions still count unless it's nothing.
 const serverUnread = (s) => !!s && [...s.channels, ...(s.threads ?? [])].some((c) => isUnread(c) && roomLoud(s, c));
+/** Everything in a hearth (or a conversation) counts as read, on every device. */
+function markServerRead(s) {
+  const rooms = [...s.channels, ...(s.threads ?? [])].filter((c) => c.kind !== 'voice' && (c.unread || c.mentions));
+  for (const c of rooms) {
+    Object.assign(c, { unread: 0, mentions: 0 });
+    // The server stops at the room's newest message, so a number past it means "all of it".
+    api(`/api/channels/${c.id}/read`, { method: 'POST', body: { lastReadId: Number.MAX_SAFE_INTEGER } }).catch(() => {});
+  }
+  renderServers();
+  renderChannels();
+}
 const serverMentions = (s) =>
   [...s.channels, ...(s.threads ?? [])].reduce((n, c) => n + (readingNow(c.id) || notifyState(s, c).level === 'none' ? 0 : c.mentions ?? 0), 0);
 function pingCount(n) {
@@ -277,11 +288,43 @@ window.addEventListener('beforeunload', saveDraft);
 const unconfirmed = new Map();
 
 /** Sends a message. If the server turns it down after it went out, onFail gets the error. */
+// Messages you just sent, shown faded at the end of the chat until the server sends them back.
+// { key, channelId, content, body, failed }
+let sending = [];
+function dropSending(key) {
+  const before = sending.length;
+  sending = sending.filter((x) => x.key !== key);
+  if (sending.length !== before) renderOutbox();
+}
+/** Your own message arrived: the faded copy it replaces goes. */
+function confirmSending(m) {
+  const here = sending.filter((x) => x.channelId === m.channelId);
+  // The same text, or (if the server changed it, say a word filter) the oldest one still going to that room.
+  const hit = here.find((x) => x.content === (m.content ?? '')) ?? (m.attachments?.length ? null : here[0]);
+  if (!hit) return;
+  sending = sending.filter((x) => x !== hit);
+  // Only for what you sent from here, once the server has it.
+  playSound('sent');
+}
+
 async function sendMessage(channelId, body, onFail) {
   if (state.ws?.readyState === WebSocket.OPEN) {
     const nonce = onFail ? Math.random().toString(36).slice(2) : undefined;
+    const key = nonce ?? Math.random().toString(36).slice(2);
+    // Text shows right away; anything with files waits for the real message, since the files are already up.
+    const shown = body.content && !body.attachmentIds?.length;
+    const failed = () => {
+      const x = sending.find((y) => y.key === key);
+      if (x) { x.failed = true; renderOutbox(); }
+    };
+    if (shown) {
+      sending.push({ key, channelId, content: body.content, body });
+      renderOutbox();
+      // No answer at all in 15 seconds: it's marked as not sent, with a way to try again.
+      setTimeout(failed, 15000);
+    }
     if (nonce) {
-      unconfirmed.set(nonce, onFail);
+      unconfirmed.set(nonce, (err) => { dropSending(key); onFail(err); });
       setTimeout(() => unconfirmed.delete(nonce), 30000);
     }
     return state.ws.send(JSON.stringify({ type: 'send', channelId, ...body, nonce }));
@@ -293,6 +336,9 @@ async function sendMessage(channelId, body, onFail) {
     if (!(err instanceof TypeError) || !queueMessage(channelId, body)) throw err;
   }
 }
+
+/** What an empty list says: a short title and how to fill it. */
+const emptyNote = (title, text) => `<div class="empty-note"><b>${escapeHtml(title)}</b><span>${escapeHtml(text)}</span></div>`;
 
 // ---- small pop-up menus and notes
 
@@ -321,6 +367,7 @@ function openMenu(anchor, items) {
 }
 function outsideMenu(e) { if (!e.target.closest('#pop-menu')) closeMenu(); }
 function closeMenu() {
+  fadeOut($('#pop-menu'), 'menu');
   $('#pop-menu')?.remove();
   document.removeEventListener('mousedown', outsideMenu);
 }
@@ -447,13 +494,12 @@ function messageMenuItems(m) {
 $('#pins-btn').onclick = async () => {
   const channelId = state.channelId;
   if (!channelId) return;
-  modal(`<h2>Pinned messages</h2><div id="pin-list" class="card-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+  modal(`<h2>Pinned messages</h2><div id="pin-list" class="card-list"><p class="muted">Loading…</p></div>`);
   try {
     const pins = await api(`/api/channels/${channelId}/pins`);
     const list = $('#pin-list');
     if (!list) return;
-    if (!pins.length) return (list.innerHTML = '<p class="muted">Nothing pinned yet. Pin a message from its ⋯ menu so everyone can find it again.</p>');
+    if (!pins.length) return (list.innerHTML = emptyNote('Nothing pinned yet', 'Pin a message from its ⋯ menu so everyone in the room can find it again.'));
     list.replaceChildren(...pins.map((m) => messageCard(m, null, {
       onOpen: () => jumpTo(channelId, m.id),
       buttons: [['Unpin', (b) => { b.disabled = true; api(`/api/messages/${m.id}/pin`, { method: 'POST', body: { pinned: false } }).then(() => b.closest('.msg-card').remove()).catch(alertError); }]],
@@ -464,8 +510,7 @@ $('#pins-btn').onclick = async () => {
 // ---- edit history
 
 async function openEditHistory(m) {
-  modal(`<h2>Edit history</h2><div id="edit-list" class="card-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+  modal(`<h2>Edit history</h2><div id="edit-list" class="card-list"><p class="muted">Loading…</p></div>`);
   try {
     const edits = await api(`/api/messages/${m.id}/edits`);
     const list = $('#edit-list');
@@ -600,13 +645,12 @@ function showReminder(ev) {
 
 async function openSaved() {
   modal(`<h2>Saved messages</h2><p class="muted small">Save a message from its ⋯ menu.</p>
-    <div id="saved-list" class="card-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div id="saved-list" class="card-list"><p class="muted">Loading…</p></div>`);
   try {
     const items = await api('/api/me/saved');
     const list = $('#saved-list');
     if (!list) return;
-    if (!items.length) return (list.innerHTML = '<p class="muted">Nothing saved yet.</p>');
+    if (!items.length) return (list.innerHTML = emptyNote('Nothing saved yet', 'Save a message from its ⋯ menu to keep it here for later.'));
     list.replaceChildren(...items.map((it) => messageCard(it.message, it.place, {
       note: it.remindAt ? (it.reminded ? `Reminded ${new Date(it.remindAt).toLocaleString()}` : `Reminder ${new Date(it.remindAt).toLocaleString()}`) : '',
       onOpen: () => jumpTo(it.message.channelId, it.message.id),
@@ -674,8 +718,7 @@ function bulkDeleteFrom(m) {
 
 async function openReports(serverId) {
   modal(`<h2>Reports</h2><p class="muted small">Messages people reported, and ones the word filter caught. Handled reports stay here for a week.</p>
-    <div id="report-list" class="card-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div id="report-list" class="card-list"><p class="muted">Loading…</p></div>`);
   try {
     const reports = await api(`/api/servers/${serverId}/reports`);
     const list = $('#report-list');
@@ -731,7 +774,7 @@ const AUDIT_LABELS = {
 async function openAudit(serverId) {
   modal(`<h2>Audit log</h2><p class="muted small">Who did what in this hearth, newest first.</p>
     <div id="audit-list" class="audit-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary hidden" id="audit-more">Show older</button><button class="btn secondary" data-close>Close</button></div>`);
+    <div class="modal-row"><button class="btn secondary hidden" id="audit-more">Show older</button></div>`);
   const list = $('#audit-list');
   let first = true;
   const load = async (before) => {
@@ -800,8 +843,7 @@ function openScheduledList() {
       return el;
     }));
   };
-  modal(`<h2>Scheduled messages</h2><div id="sched-list" class="card-list"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+  modal(`<h2>Scheduled messages</h2><div id="sched-list" class="card-list"></div>`);
   render();
 }
 

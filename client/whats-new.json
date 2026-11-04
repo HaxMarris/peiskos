@@ -2,6 +2,23 @@
   "about": "What changed, in words for friends, newest first. Add a line to the top entry as things merge; start a new entry (the next id) after a release. Each release's notes start with the entries it adds, and the app shows people the ones they haven't seen.",
   "entries": [
     {
+      "id": 3,
+      "items": [
+        "New Home page: who's at a fire, what's for you, what's new, today's events and which friends are online, across all your hearths.",
+        "Settings fill the window and have a search box, so you can find a setting without knowing where it lives.",
+        "Sounds are softer and match each other, with a quiet one when a message you sent goes through (you can turn it off under Sounds).",
+        "Peiskos opens noticeably faster on phones and slow connections.",
+        "Going back to a room shows it at once, right where you were reading.",
+        "Point at someone's name for a moment to see who they are and message them. Ctrl+K can now do things too, like inviting people or joining the fire.",
+        "Messages show up the moment you send them, faded until they're delivered, with Try again if one doesn't go through.",
+        "When two friends sit down at a fire, the rest of the hearth gets a note with a Join button. Set a hearth to only @mentions to turn it off.",
+        "Right-click a hearth to mark it as read, or press Shift+Esc. Alt+Shift+↓ now jumps to the next unread room in any hearth.",
+        "Deleting your own message no longer asks first. You get a few seconds to undo it instead.",
+        "If you lose your connection for more than a few seconds, a bar at the top says so, with a button to try again. Messages waiting to send show greyed out in the chat.",
+        "Messages has a proper empty screen until you start a conversation, and a new hearth has an Invite friends button."
+      ]
+    },
+    {
       "id": 2,
       "items": [
         "In the desktop app, the update button lists what the new version brings, and \"What's new\" waits until you've updated."

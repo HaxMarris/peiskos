@@ -43,6 +43,7 @@ async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
     <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>`, 'admin-modal side-tabs');
   onModalClose = () => { clearInterval(updatePoll); updatePoll = null; };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => showAdminTab(b.dataset.tab);
+  addSettingsSearch(() => showAdminTab(adminTab));
   try {
     adminData = await api('/api/admin');
   } catch (err) {
@@ -334,8 +335,7 @@ async function openBots(serverId) {
       <input id="bot-name" maxlength="32" placeholder="Name, e.g. Dice bot" required />
       <button type="submit" class="btn">Add bot</button>
     </form>
-    <div id="bot-secret" class="bot-secret hidden"></div>
-    <div class="modal-row"><button type="button" class="btn secondary" data-close>Close</button></div>`, 'bots-modal');
+    <div id="bot-secret" class="bot-secret hidden"></div>`, 'bots-modal');
   const showSecret = (title, value, note) => {
     const box = $('#bot-secret');
     box.classList.remove('hidden');

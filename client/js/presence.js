@@ -180,7 +180,7 @@ async function openInbox() {
   modal(`<h2>Mentions and replies</h2>
     <p class="muted small">Everything that @mentioned you, replied to you, or pinged @everyone or one of your roles.</p>
     <div id="inbox-list" class="card-list"><p class="muted">Loading…</p></div>
-    <div class="modal-row"><button class="btn secondary" id="inbox-more" hidden>Show older</button><span class="spacer"></span><button class="btn secondary" data-close>Close</button></div>`);
+    <div class="modal-row"><button class="btn secondary" id="inbox-more" hidden>Show older</button><span class="spacer"></span></div>`);
   let before = 0;
   const load = async () => {
     const list = $('#inbox-list');
@@ -395,6 +395,8 @@ function wireNotificationSettings() {
 // a game, but only while you're in a voice room.
 
 const isMac = /Mac/.test(navigator.platform);
+/** A button's tooltip with its keyboard shortcut: "Search messages (Ctrl+F)", or ⌘F on a Mac. */
+const withKey = (label, keys) => (isPhone() ? label : `${label} (${isMac ? keys.replace(/Ctrl\+/g, '⌘').replace(/Shift\+/g, '⇧').replace(/Alt\+/g, '⌥') : keys})`);
 const KEY_NAMES = {
   Backquote: '`', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Backslash: '\\', Semicolon: ';', Quote: "'",
   Comma: ',', Period: '.', Slash: '/', Space: 'Space', CapsLock: 'Caps Lock', Mouse4: 'Mouse back', Mouse5: 'Mouse forward',

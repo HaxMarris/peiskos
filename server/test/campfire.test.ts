@@ -502,3 +502,32 @@ test('each game has its own player limit: Stockpile seats eight', async () => {
   await rest[7].next((ev) => ev.type === 'error' && /full \(8 players\)/.test(ev.error));
   for (const s of sockets) s.ws.close();
 });
+
+test('when a second friend sits down at a fire, the rest of the hearth hears it, once', async () => {
+  const [host, bob, carol, dave] = await people('host', 'bob', 'carol', 'dave');
+  const { server, fire } = await burrow(host, bob, carol, dave);
+  await call('/api/notify', { body: { serverId: server.id, level: 'mentions' }, token: dave.token });
+  const h = await socket(host.token);
+  const d = await socket(dave.token);
+  const b = await socket(bob.token);
+  const c = await socket(carol.token);
+  b.send({ type: 'voice_join', channelId: fire });
+  await b.next((e) => e.type === 'voice_state' && e.userIds.includes(bob.user.id));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!h.events.some((e) => e.type === 'fire_gathered'), 'one person alone is not a gathering');
+  c.send({ type: 'voice_join', channelId: fire });
+  const note = await h.next((e) => e.type === 'fire_gathered');
+  assert.equal(note.channelId, fire);
+  assert.match(note.text, /bob\d+ and carol\d+ are at the fire in Den/);
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!d.events.some((e) => e.type === 'fire_gathered'), 'a hearth set to only @mentions stays quiet');
+  assert.ok(!b.events.some((e) => e.type === 'fire_gathered') && !c.events.some((e) => e.type === 'fire_gathered'));
+  // Getting up and sitting back down doesn't ring everyone again.
+  c.send({ type: 'voice_leave' });
+  await h.next((e) => e.type === 'voice_state' && !e.userIds.includes(carol.user.id));
+  c.send({ type: 'voice_join', channelId: fire });
+  await h.next((e) => e.type === 'voice_state' && e.userIds.includes(carol.user.id));
+  await new Promise((r) => setTimeout(r, 100));
+  assert.ok(!h.events.some((e) => e.type === 'fire_gathered'));
+  for (const s of [h, d, b, c]) s.ws.close();
+});

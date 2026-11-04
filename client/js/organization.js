@@ -47,8 +47,10 @@ function openNotifyMenu(anchor, s, c = null, first = []) {
     { label: tick(level === 'none', 'Nothing'), run: () => set({ level: 'none' }) },
   ];
   const later = (ms) => Date.now() + ms;
+  const unread = !c && [...s.channels, ...(s.threads ?? [])].some((x) => x.kind !== 'voice' && (x.unread || x.mentions));
   openMenu(anchor, [
     ...first,
+    unread && { label: 'Mark as read', run: () => markServerRead(s) },
     ...levels,
     muted
       ? { label: `Unmute (muted ${muteLabel(pref.mutedUntil)})`, run: () => set({ mutedUntil: null }) }
@@ -414,7 +416,7 @@ function openEditBurrow(serverId) {
   const host = isHost(s, state.me.id);
   const rooms = s.channels.filter((c) => c.kind === 'text' && !c.private && !c.archived);
   const others = s.members.filter((m) => m.id !== state.me.id);
-  modal(`<h2>Edit ${escapeHtml(s.name)}</h2>
+  modal(`<h2>Overview</h2>
     <form id="burrow-form">
       <label>Name<input id="burrow-name" maxlength="64" required value="${escapeHtml(s.name)}" /></label>
       <label>Description<textarea id="burrow-desc" maxlength="300" rows="2" placeholder="What's this hearth for?">${escapeHtml(s.description ?? '')}</textarea></label>
@@ -551,8 +553,7 @@ function openInvites(serverId) {
     </div>
     <div id="inv-new"></div>
     <div id="inv-list"></div>
-    <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div class="error" id="modal-error"></div>`);
   copyButton($('#copy-invite'), inviteLink(s.inviteCode));
   $('#new-code')?.addEventListener('click', async () => {
     if (!(await askConfirm('Make a new permanent link? The old link and code stop working.', { ok: 'New link' }))) return;
@@ -636,8 +637,7 @@ async function openPendingInvite() {
   let p;
   try { p = await invitePreview(code); }
   catch (err) {
-    return modal(`<h2>That invite doesn't work</h2><p class="muted">${escapeHtml(err.message)}. Ask whoever sent it for a new one.</p>
-      <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    return modal(`<h2>That invite doesn't work</h2><p class="muted">${escapeHtml(err.message)}. Ask whoever sent it for a new one.</p>`);
   }
   modal(`<div class="invite-card">${inviteCardHtml(p)}</div>
     <div class="error" id="modal-error"></div>
@@ -694,7 +694,7 @@ function openEventList(serverId) {
   const s = state.servers.get(serverId);
   modal(`<h2>Events in ${escapeHtml(s.name)}</h2>
     <ul class="event-list big">${s.events.map((e) => `<li class="event-row" data-ev="${e.id}">${CALENDAR_ICON}<span class="event-text"><b>${escapeHtml(e.title)}</b><span class="small muted">${escapeHtml(eventWhen(e.startsAt))} · ${going(e)} going</span></span></li>`).join('')}</ul>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button><button class="btn" id="ev-new">Plan an event</button></div>`);
+    <div class="modal-row"><button class="btn" id="ev-new">Plan an event</button></div>`);
   $('#modal-card').querySelectorAll('[data-ev]').forEach((li) => (li.onclick = () => openEvent(serverId, Number(li.dataset.ev))));
   $('#ev-new').onclick = () => openEventEditor(serverId, null);
 }
@@ -702,7 +702,7 @@ function openEventList(serverId) {
 function openEvent(serverId, eventId) {
   const s = state.servers.get(serverId);
   const e = s?.events?.find((x) => x.id === eventId);
-  if (!e) return modal('<h2>Event</h2><p class="muted">This event is over or was cancelled.</p><div class="modal-row"><button class="btn secondary" data-close>Close</button></div>');
+  if (!e) return modal('<h2>Event</h2><p class="muted">This event is over or was cancelled.</p>');
   const room = e.channelId ? s.channels.find((c) => c.id === e.channelId) : null;
   const mine = e.rsvps.find((r) => r.userId === state.me.id)?.status ?? null;
   const names = (status) => e.rsvps.filter((r) => r.status === status).map((r) => nameOf(r.userId, 'someone'));
@@ -719,7 +719,7 @@ function openEvent(serverId, eventId) {
     <div class="error" id="modal-error"></div>
     <div class="modal-row">
       ${editable ? '<button class="btn danger" id="ev-delete">Cancel event</button><button class="btn secondary" id="ev-edit">Edit</button>' : ''}
-      <span class="spacer"></span><button class="btn secondary" data-close>Close</button>
+      <span class="spacer"></span>
     </div>`);
   const card = $('#modal-card');
   card.querySelectorAll('[data-rsvp]').forEach((b) => (b.onclick = async () => {
@@ -818,7 +818,7 @@ function peoplePicker({ title, intro = '', list, button, onDone, extra = '', wir
     <ul class="people-picker" id="dm-people"></ul>
     ${extra}
     <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button><button class="btn" id="people-go" disabled>${escapeHtml(button(0))}</button></div>`);
+    <div class="modal-row"><button class="btn" id="people-go" disabled>${escapeHtml(button(0))}</button></div>`);
   const picked = new Set();
   const update = () => {
     $('#people-go').disabled = !picked.size;
@@ -874,7 +874,6 @@ function openGroupSettings(s) {
       <button class="btn danger" id="group-leave">Leave conversation</button>
       <span class="spacer"></span>
       <button class="btn secondary" id="group-add">Add people</button>
-      <button class="btn secondary" data-close>Close</button>
     </div>`);
   $('#modal-card').querySelectorAll('[data-avatar]').forEach((li) => {
     const m = s.members.find((x) => x.id === Number(li.dataset.avatar));

@@ -30,7 +30,7 @@ const ROLE_COLORS = [
   '#3f6fa8', '#5262c4', '#7a5aa6', '#9a4fb0', '#d0457a', '#b0527a', '#8a6a4a', '#5c6670', '#8a8f87',
 ];
 
-const FLAME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5c.6 3.2 5 5.4 5 10.6a5 5 0 0 1-10 0c0-2.4 1.3-4 2.5-5 .1 1.7.9 2.8 2.1 3.1-.4-3-.2-5.9.4-8.7Z"/></svg>';
+const FLAME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c.5 3 2.4 5 4.2 6.8A7.5 7.5 0 0 1 12 22a7.5 7.5 0 0 1-4.6-13.4c.2 1.6 1 2.9 2.3 3.6C9.6 8.5 10.4 5 12 2Z"/></svg>';
 
 const isHost = (s, id) => s?.ownerId === id && !isDm(s);
 const rolesOf = (s, m) => (s?.roles ?? []).filter((r) => m?.roleIds?.includes(r.id));
@@ -202,8 +202,7 @@ function openMemberMenu(s, m) {
     ${removable && can(s, 'remove') ? '<button class="btn secondary" id="member-remove">Remove from hearth</button>' : ''}
     ${removable && can(s, 'ban') ? '<button class="btn danger" id="member-ban">Ban from hearth</button>' : ''}
     ${removable && (can(s, 'remove') || can(s, 'ban')) ? `<p class="small muted">Removed people can come back with the invite code. Banned people can't, until they're unbanned in the hearth's settings.</p>` : ''}
-    <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div class="error" id="modal-error"></div>`);
   const act = async (path, body) => {
     try { await api(`/api/servers/${s.id}/members/${m.id}/${path}`, { method: 'POST', body }); closeModal(); }
     catch (err) { $('#modal-error').textContent = err.message; }
@@ -252,7 +251,7 @@ function openRoles(serverId) {
     }).join('')}</ul>
     ${s.roles.length ? '' : '<p class="muted">No roles yet.</p>'}
     <div class="error" id="modal-error"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button><button class="btn" id="role-new">New role</button></div>`);
+    <div class="modal-row"><button class="btn" id="role-new">New role</button></div>`);
   const refresh = (updated) => { state.servers.set(updated.id, updated); openRoles(serverId); };
   $('#modal-card').querySelectorAll('[data-move]').forEach((b) => (b.onclick = async () => {
     try { refresh(await api(`/api/roles/${b.dataset.id}`, { method: 'PATCH', body: { move: b.dataset.move } })); }
@@ -588,6 +587,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
   };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => show(b.dataset.tab);
   show(tab);
+  addSettingsSearch(() => show(store.get('accountTab') || 'profile'));
   wireProfileSettings();
   wireThemeSettings();
   $('#read-receipts').onchange = async (e) => {
@@ -1016,6 +1016,7 @@ function renderReactions(m) {
   for (const r of m.reactions) {
     const b = document.createElement('button');
     b.className = 'reaction' + (r.userIds.includes(state.me.id) ? ' mine' : '');
+    if (popReaction?.id === m.id && popReaction.emoji === r.emoji) { b.classList.add('pop'); popReaction = null; }
     const server = state.servers.get(state.serverId);
     b.title = r.userIds.map((id) => nameOfPerson(server?.members.find((x) => x.id === id))).join(', ');
     b.innerHTML = `<span class="r-emoji">${emojiHtml(r.emoji)}</span><span class="r-count">${r.userIds.length}</span>`;
@@ -1031,12 +1032,24 @@ function renderReactions(m) {
   return row;
 }
 
+// The reaction changes at once; the server's answer (or an error) settles it.
 function toggleReaction(m, emoji) {
   haptic();
+  const before = m.reactions ?? [];
+  const me = state.me.id;
+  const had = before.find((r) => r.emoji === emoji)?.userIds.includes(me);
+  m.reactions = had
+    ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: r.userIds.filter((id) => id !== me) } : r)).filter((r) => r.userIds.length)
+    : before.some((r) => r.emoji === emoji)
+      ? before.map((r) => (r.emoji === emoji ? { ...r, userIds: [...r.userIds, me] } : r))
+      : [...before, { emoji, userIds: [me] }];
+  popReaction = had ? null : { id: m.id, emoji };
+  refreshLine(m.id);
   api(`/api/messages/${m.id}/reactions`, { method: 'POST', body: { emoji } })
     .then(({ reactions }) => { m.reactions = reactions; refreshLine(m.id); })
-    .catch(alertError);
+    .catch((err) => { m.reactions = before; refreshLine(m.id); alertError(err); });
 }
+let popReaction = null; // the reaction you just added, which pops once
 
 function openEmojiPicker(anchor, m) {
   closeEmojiPicker();

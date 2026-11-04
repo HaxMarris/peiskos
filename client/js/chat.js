@@ -25,6 +25,11 @@ function renderMessages({ stick = false } = {}) {
     } else start.innerHTML = isDm(server)
       ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
       : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
+    // Nobody else here yet: the next step is getting friends in.
+    if (!isDm(server) && !where.thread && (server.members?.length ?? 0) < 2) {
+      start.insertAdjacentHTML('beforeend', '<div class="history-start-actions"><button type="button" class="btn" data-invite>Invite friends</button><span class="muted small">It\'s just you here so far.</span></div>');
+      start.querySelector('[data-invite]').addEventListener('click', () => openInvites(server.id));
+    }
     start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
     frag.append(start);
   }
@@ -40,6 +45,8 @@ function renderMessages({ stick = false } = {}) {
   if (stick || (nearBottom && state.reachedEnd)) messagesEl.scrollTop = messagesEl.scrollHeight;
   else messagesEl.scrollTop = scrollTop;
   renderSeen();
+  hideDeleting();
+  renderOutbox();
 }
 
 // While a room's messages load: a few grey rows shaped like messages.
@@ -112,6 +119,7 @@ function addMessageNodes(parent, m, prev, body) {
     // Their name and picture open their card.
     av.classList.add('opens-card');
     av.onclick = body.querySelector('.author').onclick = () => openPersonById(m.authorId);
+    av.dataset.hoverUser = body.querySelector('.author').dataset.hoverUser = m.authorId;
     group.append(av, body);
     parent.append(group);
   }
@@ -133,7 +141,12 @@ function appendMessage(m, { stick = false } = {}) {
     return renderMessages({ stick: true });
   }
   if (!prev || !tailBody?.isConnected) return renderMessages({ stick });
+  const groupBefore = tailBody;
   tailBody = addMessageNodes(messagesEl, m, prev, tailBody);
+  // Someone else's new message eases in: the whole group when it starts one, otherwise just its line.
+  const line = messagesEl.querySelector(`.line[data-id="${m.id}"]`);
+  // Your own were already showing (faded) while sending, so they just settle in place.
+  if (m.authorId !== state.me.id) (tailBody !== groupBefore ? line?.closest('.group') ?? line : line)?.classList.add('arrive');
   if (stick || nearBottom) messagesEl.scrollTop = messagesEl.scrollHeight;
 }
 
@@ -240,13 +253,52 @@ function startEdit(m, contentEl, value = emojiToNames(m.content), focus = true) 
       e.preventDefault();
       const content = namesToEmoji(ta.value.trim());
       if (!content && !m.attachments?.length && !m.sticker) return confirmDelete(m);
-      if (content !== m.content) await api(`/api/messages/${m.id}`, { method: 'PATCH', body: { content } }).catch(alertError);
+      // The new text shows at once; if the server turns it down, the old text comes back.
+      const before = { content: m.content, editedAt: m.editedAt };
+      if (content !== m.content) {
+        Object.assign(m, { content, editedAt: m.editedAt ?? Date.now() });
+        api(`/api/messages/${m.id}`, { method: 'PATCH', body: { content } }).catch((err) => {
+          Object.assign(m, before);
+          refreshLine(m.id);
+          alertError(err);
+        });
+      }
       done();
     }
   };
 }
 
+// Your own messages go at once, with a few seconds to undo; anyone else's still asks first.
+const deleting = new Set();
+function hideDeleting() {
+  for (const id of deleting) messagesEl.querySelector(`.line[data-id="${id}"]`)?.classList.add('deleting');
+}
 function confirmDelete(m) {
+  if (m.authorId === state.me.id) {
+    deleting.add(m.id);
+    hideDeleting();
+    let undone = false;
+    const go = () => {
+      if (undone || !deleting.delete(m.id)) return;
+      api(`/api/messages/${m.id}`, { method: 'DELETE' }).catch((err) => {
+        messagesEl.querySelector(`.line[data-id="${m.id}"]`)?.classList.remove('deleting');
+        alertError(err);
+      });
+    };
+    const timer = setTimeout(go, 6000);
+    // Leaving the page before then still deletes it.
+    addEventListener('pagehide', go, { once: true });
+    toast('Message deleted.', {
+      action: 'Undo', timeout: 6000,
+      onAction: () => {
+        undone = true;
+        clearTimeout(timer);
+        deleting.delete(m.id);
+        messagesEl.querySelector(`.line[data-id="${m.id}"]`)?.classList.remove('deleting');
+      },
+    });
+    return;
+  }
   modal(`<h2>Delete message</h2><p>Are you sure you want to delete this message?</p>
     <div class="modal-row"><button class="btn secondary" data-close>Cancel</button><button class="btn danger" id="confirm-del">Delete</button></div>`);
   $('#confirm-del').onclick = async () => {
@@ -517,7 +569,7 @@ function modal(html, kind = '') {
   $('#modal-card').innerHTML = `<button type="button" class="icon-btn modal-x" data-close title="Close (Esc)" aria-label="Close">×</button>` + html;
   $('#modal').classList.remove('hidden');
   $('#modal-card').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
-  if (settingsFrame) wireSettingsFrame();
+  if (settingsFrame) { wireSettingsFrame(); addSettingsSearch(); }
   $('#modal-card').querySelector(settingsFrame ? '.settings-pane input' : 'input')?.focus();
 }
 
@@ -548,7 +600,7 @@ function settingsFrameHtml() {
   const rows = settingsFrame.items.map((i) => {
     const heading = i.group !== group ? `<span class="nav-group">${escapeHtml(i.group ?? '')}</span>` : '';
     group = i.group;
-    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}</button>`;
+    return `${heading}<button type="button" role="tab" data-section="${i.id}" aria-selected="${i.id === settingsFrame.active}"${i.keywords ? ` data-keywords="${escapeHtml(i.keywords)}"` : ''}${i.danger ? ' class="danger-item"' : ''}${i.action === 'menu' ? ' aria-haspopup="menu"' : ''}>${escapeHtml(i.label)}${i.count ? `<span class="count">${i.count}</span>` : ''}${i.value ? `<span class="nav-value">${escapeHtml(i.value)}</span>` : ''}</button>`;
   });
   return `<h2 class="frame-title">${escapeHtml(settingsFrame.title)}</h2><nav class="tabs" role="tablist" aria-label="${escapeHtml(settingsFrame.title)}">${rows.join('')}</nav>`;
 }
@@ -564,8 +616,123 @@ function wireSettingsFrame() {
     $('#modal-card .settings-pane').prepend(back);
   }
 }
+// ---- searching a settings page. The sections down the side narrow to the ones that match. On a
+// page that holds all its sections at once (Your account), the matching settings themselves show,
+// from every section together. `onClear` puts that page back the way it was.
+function addSettingsSearch(onClear) {
+  const card = $('#modal-card');
+  const nav = card.querySelector(':scope > .tabs');
+  if (!nav || card.querySelector(':scope > .settings-search')) return;
+  const box = document.createElement('input');
+  box.type = 'search';
+  box.className = 'settings-search';
+  box.placeholder = 'Search settings';
+  box.setAttribute('aria-label', 'Search settings');
+  box.autocomplete = 'off';
+  nav.before(box);
+  // A section's settings come in blocks, each starting at a heading.
+  const panes = [...card.querySelectorAll(':scope > [data-pane]')];
+  const blocks = panes.flatMap((pane) => {
+    const out = [];
+    for (const el of pane.children) {
+      if (el.tagName === 'H3' || !out.length) out.push({ pane, els: [] });
+      out.at(-1).els.push(el);
+    }
+    return out;
+  });
+  const tabs = [...nav.querySelectorAll('[role="tab"]')];
+  const labelOf = (pane) => tabs.find((t) => t.dataset.tab === pane.dataset.pane)?.textContent ?? '';
+  const run = () => {
+    const words = box.value.toLowerCase().split(/\s+/).filter(Boolean);
+    const hits = (text) => words.every((w) => text.toLowerCase().includes(w));
+    card.classList.toggle('searching', words.length > 0);
+    nav.querySelector('.settings-none')?.remove();
+    if (!words.length) {
+      for (const el of card.querySelectorAll('.search-miss')) el.classList.remove('search-miss');
+      for (const t of tabs) t.hidden = false;
+      for (const g of nav.querySelectorAll('.nav-group')) g.hidden = false;
+      onClear?.();
+      return;
+    }
+    for (const el of card.querySelectorAll('.search-miss')) el.classList.remove('search-miss');
+    const found = new Set();
+    for (const b of blocks) {
+      // A matching heading (or section name) shows its whole block; otherwise just the matching
+      // rows, each with the note under it, and the heading above them.
+      const whole = hits(`${labelOf(b.pane)} ${b.els[0].tagName === 'H3' ? b.els[0].textContent : ''}`);
+      const shown = whole ? new Set(b.els.filter((el) => el.tagName !== 'H3')) : filterRows(b.els.filter((el) => el.tagName !== 'H3'), hits);
+      for (const el of b.els) if (el.tagName !== 'H3') el.classList.toggle('search-miss', !shown.has(el));
+      const any = shown.size > 0;
+      if (b.els[0].tagName === 'H3') b.els[0].classList.toggle('search-miss', !any);
+      if (any) found.add(b.pane);
+    }
+    for (const p of panes) p.classList.toggle('hidden', !found.has(p));
+    for (const t of tabs) {
+      const pane = panes.find((p) => p.dataset.pane === t.dataset.tab);
+      t.hidden = !(pane ? found.has(pane) : hits(`${t.textContent} ${t.dataset.keywords ?? ''}`));
+      if (pane) t.setAttribute('aria-selected', 'false');
+    }
+    // Group headings with nothing left under them go too.
+    for (const g of nav.querySelectorAll('.nav-group')) {
+      let next = g.nextElementSibling, any = false;
+      for (; next && !next.classList.contains('nav-group'); next = next.nextElementSibling) if (!next.hidden) any = true;
+      g.hidden = !any;
+    }
+    if (!tabs.some((t) => !t.hidden)) {
+      const none = document.createElement('p');
+      none.className = 'settings-none small muted';
+      none.textContent = `Nothing matches "${box.value.trim()}".`;
+      nav.append(none);
+    }
+  };
+  box.oninput = run;
+  // Picking a section while searching ends the search, then shows that section.
+  nav.addEventListener('click', () => { if (box.value) { box.value = ''; run(); } }, true);
+  box.onkeydown = (e) => {
+    if (e.key === 'Escape' && box.value) { e.stopPropagation(); box.value = ''; run(); }
+    if (e.key === 'Enter') tabs.find((t) => !t.hidden)?.click();
+  };
+}
+
+// The rows that match, out of a run of settings: a row's note comes with it (and a matching note
+// brings its row), and a box of rows that matches is searched row by row inside.
+function filterRows(els, hits) {
+  const shown = new Set();
+  const isNote = (el) => el.matches('.small.muted, span.small, p.small');
+  els.forEach((el, i) => {
+    if (!hits(el.textContent)) return;
+    shown.add(el);
+    if (isNote(el)) {
+      // The setting this note is about: the nearest row above it.
+      for (let j = i - 1; j >= 0; j--) if (els[j].matches('label, .check')) { shown.add(els[j]); break; }
+    }
+    else if (els[i + 1] && isNote(els[i + 1])) shown.add(els[i + 1]);
+    const kids = [...el.children];
+    if (/^(DIV|FORM|SECTION|FIELDSET)$/.test(el.tagName) && kids.length > 1 && !el.matches('.check, .modal-row')) {
+      const inner = filterRows(kids, hits);
+      for (const k of kids) k.classList.toggle('search-miss', !inner.has(k));
+    }
+  });
+  return shown;
+}
+
+// Something closing fades away: a copy of it, with no ids and no clicks, plays the exit while the
+// real one is already gone, so nothing that checks whether it's open has to wait.
+function fadeOut(el, kind = 'layer') {
+  if (!el || el.classList.contains('hidden') || matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const ghost = el.cloneNode(true);
+  ghost.removeAttribute('id');
+  ghost.querySelectorAll('[id]').forEach((n) => n.removeAttribute('id'));
+  ghost.setAttribute('aria-hidden', 'true');
+  ghost.inert = true;
+  ghost.classList.add('leaving', `leaving-${kind}`);
+  el.after(ghost);
+  setTimeout(() => ghost.remove(), 200);
+}
+
 function closeModal() {
   settingsFrame = null;
+  fadeOut($('#modal'));
   $('#modal').classList.add('hidden');
   const closing = onModalClose;
   onModalClose = null;
@@ -718,22 +885,23 @@ function openHearthSettings(serverId, first) {
   const notifyLabel = n.muted ? 'muted' : { all: 'all messages', mentions: 'only @mentions', none: 'nothing' }[n.level];
   const emoji = can(s, 'emoji') && state.maxUploadBytes;
   openSettingsFrame(s.name, [
-    can(s, 'burrow') && { id: 'edit', group: 'Hearth', label: 'Overview', run: () => openEditBurrow(s.id) },
-    can(s, 'burrow') && { id: 'motd', group: 'Hearth', label: 'Message of the day', count: s.motd?.length, run: () => openMotd(s.id) },
-    emoji && { id: 'emoji', group: 'Hearth', label: 'Emoji and stickers', count: s.emoji?.length, run: () => openEmojiManager(s.id) },
-    emoji && { id: 'sounds', group: 'Hearth', label: 'Soundboard', count: s.sounds?.length, run: () => openSounds(s.id) },
-    can(s, 'burrow') && { id: 'bots', group: 'Hearth', label: 'Bots and webhooks', run: () => openBots(s.id) },
-    { id: 'invites', group: 'People', label: 'Invite people', run: () => openInvites(s.id) },
-    can(s, 'roles') && { id: 'roles', group: 'People', label: 'Roles', count: s.roles.length, run: () => openRoles(s.id) },
-    can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', count: s.openReports, run: () => openReports(s.id) },
-    can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', run: () => openAudit(s.id) },
-    can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', run: () => {
+    can(s, 'burrow') && { id: 'edit', group: 'Hearth', label: 'Overview', keywords: 'name picture icon description', run: () => openEditBurrow(s.id) },
+    can(s, 'burrow') && { id: 'motd', group: 'Hearth', label: 'Message of the day', keywords: 'announcement welcome', count: s.motd?.length, run: () => openMotd(s.id) },
+    emoji && { id: 'emoji', group: 'Hearth', label: 'Emoji and stickers', keywords: 'custom emoji stickers upload', count: s.emoji?.length, run: () => openEmojiManager(s.id) },
+    emoji && { id: 'sounds', group: 'Hearth', label: 'Soundboard', keywords: 'sounds clips', count: s.sounds?.length, run: () => openSounds(s.id) },
+    can(s, 'burrow') && { id: 'bots', group: 'Hearth', label: 'Bots and webhooks', keywords: 'integrations api', run: () => openBots(s.id) },
+    { id: 'invites', group: 'People', label: 'Invite people', keywords: 'invite link code join', run: () => openInvites(s.id) },
+    can(s, 'roles') && { id: 'roles', group: 'People', label: 'Roles', keywords: 'permissions colors admin moderator', count: s.roles.length, run: () => openRoles(s.id) },
+    can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', keywords: 'moderation flagged', count: s.openReports, run: () => openReports(s.id) },
+    can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', keywords: 'history changes who did', run: () => openAudit(s.id) },
+    can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', keywords: 'ban kick block unban', run: () => {
       modal('<h2>Bans</h2><div id="ban-list"><p class="muted">Loading…</p></div>');
       renderBans(s, true);
     } },
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
-    { id: 'notify', group: 'You', label: `Notifications: ${notifyLabel}`, action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
-    { id: 'review', group: 'You', label: 'Year in review', run: () => openYearReview(s.id) },
+    { id: 'notify', group: 'You', label: 'Notifications', keywords: 'mute mentions alerts', value: notifyLabel.charAt(0).toUpperCase() + notifyLabel.slice(1), action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
+    serverUnread(s) && { id: 'read', group: 'You', label: 'Mark as read', action: 'do', run: () => { markServerRead(s); closeModal(); } },
+    { id: 'review', group: 'You', label: 'Year in review', keywords: 'stats recap', run: () => openYearReview(s.id) },
     { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
   ], first);
 }
@@ -787,6 +955,8 @@ function wireBurrowPicture(s) {
     catch (err) { $('#burrow-picture-error').textContent = err.message; }
   };
 }
+
+$('#dm-empty-new').onclick = () => openNewDm();
 
 $('#add-channel').onclick = () => {
   if (state.inDms) return openNewDm();

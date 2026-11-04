@@ -237,8 +237,7 @@ function openEmojiManager(serverId) {
     <h3>Emoji · ${list('emoji').length} of 50</h3>
     ${list('emoji').length ? `<ul class="emoji-manage">${rows('emoji')}</ul>` : '<p class="muted small">None yet.</p>'}
     <h3>Stickers · ${list('sticker').length} of 20</h3>
-    ${list('sticker').length ? `<ul class="emoji-manage">${rows('sticker')}</ul>` : '<p class="muted small">None yet.</p>'}
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    ${list('sticker').length ? `<ul class="emoji-manage">${rows('sticker')}</ul>` : '<p class="muted small">None yet.</p>'}`);
   const fail = (err) => { $('#modal-error').textContent = err.message; };
   const done = (updated) => { state.servers.set(updated.id, updated); openEmojiManager(serverId); };
   $('#emoji-name').oninput = (e) => (e.target.value = e.target.value.replace(/[^\w]/g, ''));
@@ -288,8 +287,7 @@ function openStickers() {
   const groups = stickerGroups();
   modal(`<h2>Stickers</h2>
     ${groups.length ? '' : `<p class="muted">No stickers yet. People who can manage emoji add them in a hearth's settings.</p>`}
-    <div id="sticker-groups"></div>
-    <div class="modal-row"><button class="btn secondary" data-close>Close</button></div>`);
+    <div id="sticker-groups"></div>`);
   $('#sticker-groups').replaceChildren(...groups.flatMap((s) => {
     const h = document.createElement('h4');
     h.textContent = s.name;
@@ -684,7 +682,7 @@ function openSearch() {
     </form>
     <div id="search-status" class="muted small">Type a word, or pick a person or a kind of message.</div>
     <div id="search-results" class="card-list"></div>
-    <div class="modal-row"><button class="btn secondary hidden" id="search-more">More results</button><span class="spacer"></span><button class="btn secondary" data-close>Close</button></div>`, 'search-modal');
+    <div class="modal-row"><button class="btn secondary hidden" id="search-more">More results</button><span class="spacer"></span></div>`, 'search-modal');
   const scope = () => $('#search-in').value;
   const fillFilters = () => {
     const s = state.servers.get(Number(scope()));
@@ -731,7 +729,7 @@ function openSearch() {
       else list.replaceChildren(...cards);
       $('#search-more').classList.toggle('hidden', !hasMore);
       const count = list.children.length;
-      $('#search-status').textContent = count ? `${count}${hasMore ? '+' : ''} message${count === 1 ? '' : 's'}, newest first` : 'Nothing found.';
+      $('#search-status').textContent = count ? `${count}${hasMore ? '+' : ''} message${count === 1 ? '' : 's'}, newest first` : 'Nothing found. Try fewer words, or a different spelling.';
     } catch (err) {
       if (mine === seq) $('#search-status').textContent = err.message;
     }

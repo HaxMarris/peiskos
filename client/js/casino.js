@@ -219,8 +219,7 @@ async function openLeaders(board = 'chips') {
       <button type="button" role="tab" data-board="floats" aria-selected="${floats}">Lowest floats</button>
     </div>
     <p class="small muted">${floats ? 'The cleanest skins anyone here has unboxed. Lower is better.' : "Chips, plus what's in their inventory."}</p>
-    <ol class="leaders${floats ? ' float-leaders' : ''}" id="leaders"><li class="muted">Counting…</li></ol>
-    <div class="modal-row"><button type="button" class="btn" data-close>Close</button></div>`);
+    <ol class="leaders${floats ? ' float-leaders' : ''}" id="leaders"><li class="muted">Counting…</li></ol>`);
   $('#modal-card').querySelectorAll('.leader-tabs [data-board]').forEach((b) => b.addEventListener('click', () => b.dataset.board !== board && openLeaders(b.dataset.board)));
   const who = (userId) => {
     const av = document.createElement('span');
