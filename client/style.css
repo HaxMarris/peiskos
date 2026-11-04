@@ -28,7 +28,7 @@
   --text: #2f2620;
   --text-strong: #1f1813;   /* char */
   --muted: #6b5b4e;
-  --accent: #c4561c;        /* ember */
+  --accent: #b9501a;        /* ember, dark enough for white text on buttons */
   --accent-text: #a8420f;   /* ember dark enough to read as text on oat */
   --name-l: min(l, 0.5);    /* role-coloured names, darkened until they read on light cards */
   --banner-a: 26%; --banner-b: 12%; /* the role-coloured fade behind a member's row */
@@ -362,7 +362,7 @@ ul { list-style: none; margin: 0; padding: 0; }
 .member-pane h3 + ul { margin-bottom: 20px; }
 .member-pane li { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: var(--radius-md); font-weight: 600; }
 .member-pane li:hover { background: var(--hover); }
-.member-pane li.offline { opacity: .5; }
+.member-pane li.offline { opacity: .72; }
 .member-pane .avatar::after { content: ""; position: absolute; right: -3px; bottom: -3px; width: 12px; height: 12px; border-radius: 50%; border: 2.5px solid var(--bg); background: var(--muted); }
 .member-pane li.online .avatar::after { background: var(--online); }
 .owner-badge { font-size: 11px; font-weight: 800; color: var(--accent-text); background: var(--accent-soft); padding: 1px 7px; border-radius: var(--radius-pill); margin-left: auto; }

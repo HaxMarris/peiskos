@@ -951,7 +951,7 @@ function themeSettings() {
     return `<button type="button" class="swatch" data-preset="${i}" title="${p.name}" style="background: hsl(${c.h} ${c.s}% 42%)"></button>`;
   };
   const mode = store.get('theme') || 'system';
-  const opt = (id, label) => `<button type="button" role="radio" data-theme-mode="${id}" aria-selected="${mode === id}" aria-checked="${mode === id}">${label}</button>`;
+  const opt = (id, label) => `<button type="button" role="radio" data-theme-mode="${id}" aria-checked="${mode === id}">${label}</button>`;
   return `<h3>Light or dark</h3>
     <div class="tabs theme-mode" role="radiogroup" aria-label="Light or dark">${opt('light', 'Light')}${opt('dark', 'Dark')}${opt('system', 'Match this device')}</div>
     <h3>Theme color</h3>
@@ -1007,7 +1007,6 @@ function wireThemeSettings() {
   $('#modal-card').querySelectorAll('[data-theme-mode]').forEach((b) => (b.onclick = () => {
     setThemeMode(b.dataset.themeMode);
     for (const x of $('#modal-card').querySelectorAll('[data-theme-mode]')) {
-      x.setAttribute('aria-selected', x === b);
       x.setAttribute('aria-checked', x === b);
     }
   }));

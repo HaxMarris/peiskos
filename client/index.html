@@ -20,7 +20,7 @@
 </head>
 <body>
   <!-- Login / register -->
-  <div id="auth" class="auth hidden">
+  <div id="auth" class="auth hidden" role="main">
     <div class="auth-scene" aria-hidden="true">
       <svg viewBox="0 0 600 800" preserveAspectRatio="xMidYMax slice">
         <circle cx="430" cy="210" r="70" fill="var(--scene-sun)" />
@@ -149,7 +149,7 @@
       </button>
     </header>
 
-    <aside class="sidebar">
+    <aside class="sidebar" aria-label="Rooms">
       <div id="burrow-banner" class="burrow-banner hidden"></div>
       <div class="side-head">
         <div class="side-title">
@@ -253,7 +253,8 @@
           <button type="button" id="unread-jump" class="unread-jump"></button>
           <button type="button" id="unread-clear" class="unread-clear">Mark as read</button>
         </div>
-        <div id="messages" class="messages" role="log" aria-live="polite" aria-label="Messages"></div>
+        <div id="messages" class="messages" role="region" aria-label="Messages" tabindex="0"></div>
+        <div id="sr-announce" class="sr-only" aria-live="polite"></div>
         <button type="button" id="present-bar" class="present-bar hidden">You're looking at older messages <b>Jump to present</b></button>
       </div>
       <div class="composer-wrap">
@@ -479,7 +480,7 @@
       </div>
     </main>
 
-    <aside class="member-pane" id="member-pane">
+    <aside class="member-pane" id="member-pane" aria-label="Members">
       <header class="member-head">
         <h2>Who's here</h2>
         <button class="icon-btn" id="members-close" title="Close" aria-label="Close">×</button>
@@ -533,10 +534,10 @@
   </div>
 
   <!-- Modal -->
-  <div id="modal" class="modal hidden">
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true">
     <div class="modal-card" id="modal-card"></div>
   </div>
-  <div id="ask" class="modal ask hidden">
+  <div id="ask" class="modal ask hidden" role="alertdialog" aria-modal="true" aria-labelledby="ask-title">
     <div class="modal-card ask-card" id="ask-card" role="alertdialog" aria-modal="true" aria-labelledby="ask-title"></div>
   </div>
 

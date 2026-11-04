@@ -570,6 +570,8 @@ function modal(html, kind = '') {
   $('#modal').classList.remove('hidden');
   $('#modal-card').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   if (settingsFrame) { wireSettingsFrame(); addSettingsSearch(); }
+  // Screen readers name the dialog by its heading.
+  $('#modal').setAttribute('aria-label', $('#modal-card').querySelector('h2')?.textContent.trim() || 'Dialog');
   $('#modal-card').querySelector(settingsFrame ? '.settings-pane input' : 'input')?.focus();
 }
 
