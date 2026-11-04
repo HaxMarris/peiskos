@@ -558,7 +558,7 @@ function renderBlackjackControls() {
   }
   box.innerHTML = `<div class="bet-picker">
       <span class="bet-label small muted">Bet</span>
-      <div class="bet-chips">${[10, 50, 100, 500, 1000].map((v) => `<button type="button" class="bet-chip c${v}" data-add="${v}" title="Add ${v}">${v >= 1000 ? `${v / 1000}k` : v}</button>`).join('')}</div>
+      <div class="bet-chips">${[10, 50, 100, 500, 1000, 10_000, 50_000].map((v) => `<button type="button" class="bet-chip c${v}" data-add="${v}" title="Add ${chipsText(v)}">${v >= 1000 ? `${v / 1000}k` : v}</button>`).join('')}</div>
       <span class="bet-amount"><span class="chip-icon sm" aria-hidden="true"></span><b>${chipsText(bjBet)}</b></span>
       <button type="button" class="link-btn" data-bj-bet="half">½</button>
       <button type="button" class="link-btn" data-bj-bet="double">2×</button>
@@ -567,17 +567,20 @@ function renderBlackjackControls() {
     <button type="button" class="btn deal-btn" data-bj="deal">${g ? 'Deal again' : 'Deal'}</button>`;
 }
 
+/** The biggest blackjack bet the server takes (older servers didn't say: 10,000). */
+const bjMax = () => casino.data?.blackjackBets?.max ?? 10_000;
+
 async function onBlackjackClick(e) {
   const add = e.target.closest('[data-add]');
   if (add) {
-    bjBet = Math.min(10000, (bjBet === 0 ? 0 : bjBet) + Number(add.dataset.add));
+    bjBet = Math.min(bjMax(), (bjBet === 0 ? 0 : bjBet) + Number(add.dataset.add));
     store.set('bjBet', String(bjBet));
     return renderBlackjackControls();
   }
   const change = e.target.closest('[data-bj-bet]');
   if (change) {
     const how = change.dataset.bjBet;
-    bjBet = how === 'clear' ? 0 : how === 'half' ? Math.max(10, Math.floor(bjBet / 2)) : Math.min(10000, bjBet * 2);
+    bjBet = how === 'clear' ? 0 : how === 'half' ? Math.max(10, Math.floor(bjBet / 2)) : Math.min(bjMax(), bjBet * 2);
     store.set('bjBet', String(bjBet));
     return renderBlackjackControls();
   }
