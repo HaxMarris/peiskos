@@ -433,3 +433,39 @@ test('drafts follow you to your other devices, and go when sent', async () => {
   assert.deepEqual((await call('/api/drafts', { token: max.token })).data, []);
   other.ws.close();
 });
+
+test('best of: messages enough people put 🔥 on', async () => {
+  const [max, sam, ann, eve] = await people('max', 'sam', 'ann', 'eve');
+  const { server, room } = await burrow(max, sam, ann);
+  const loved = await say(room, max, 'the best one');
+  const meh = await say(room, max, 'just ok');
+  const fire = (id: number, who: any) => call(`/api/messages/${id}/reactions`, { body: { emoji: '🔥' }, token: who.token });
+  await fire(loved.id, max); // your own doesn't count
+  await fire(loved.id, sam);
+  let r = (await call(`/api/servers/${server.id}/best-of`, { token: sam.token })).data;
+  assert.equal(r.needs, 2);
+  assert.deepEqual(r.results, []);
+  await fire(loved.id, ann);
+  await fire(meh.id, sam);
+  r = (await call(`/api/servers/${server.id}/best-of`, { token: sam.token })).data;
+  assert.deepEqual(r.results.map((x: any) => x.message.id), [loved.id]);
+  assert.equal((await call(`/api/servers/${server.id}/best-of`, { token: eve.token })).data.results.length, 0, 'not in the hearth, nothing to see');
+});
+
+test('the photo album lists pictures from rooms you can see, without spoilers', async () => {
+  const [max, sam] = await people('max', 'sam');
+  const { server, room } = await burrow(max, sam);
+  const upload = () => fetch(`${base}/api/channels/${room}/attachments`, {
+    method: 'POST', headers: { authorization: `Bearer ${sam.token}`, 'content-type': 'image/png', 'x-filename': 'moose.png' }, body: PNG,
+  }).then((r) => r.json() as any);
+  const a = await upload();
+  const b = await upload();
+  const first = await say(room, sam, 'look', { attachmentIds: [a.id] });
+  await say(room, sam, 'secret', { attachmentIds: [b.id], spoilerIds: [b.id] });
+  await say(room, sam, 'words only');
+  const album = (await call(`/api/servers/${server.id}/album`, { token: max.token })).data;
+  assert.deepEqual(album.items.map((x: any) => x.id), [a.id]);
+  assert.equal(album.items[0].messageId, first.id);
+  assert.equal(album.more, false);
+  assert.deepEqual((await call(`/api/servers/${server.id}/album?before=${first.id}`, { token: max.token })).data.items, []);
+});
