@@ -40,7 +40,7 @@ async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
   adminTab = tab;
   modal(`<h2>Server admin</h2>
     <div class="tabs" role="tablist">${ADMIN_TABS.map(([id, label]) => `<button type="button" role="tab" data-tab="${id}">${label}</button>`).join('')}</div>
-    <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>`, 'admin-modal side-tabs');
+    <div id="admin-pane" class="admin-pane">${placeholder('lines', 5)}</div>`, 'admin-modal side-tabs');
   onModalClose = () => { clearInterval(updatePoll); updatePoll = null; };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => showAdminTab(b.dataset.tab);
   addSettingsSearch(() => showAdminTab(adminTab));
@@ -263,7 +263,7 @@ function adminBackups(pane) {
 
 // Reports people sent with Report to Peiskos, from any message, DMs included.
 async function adminReports(pane) {
-  pane.innerHTML = '<p class="muted">Loading…</p>';
+  pane.innerHTML = placeholder('cards', 3);
   let reports = [];
   try { reports = await api('/api/admin/reports'); } catch (err) { pane.textContent = err.message; return; }
   pane.innerHTML = `<p class="small muted">Messages people reported to you, from anywhere, DMs included. Child safety reports come first. Handled ones stay here for 30 days.</p>
@@ -301,7 +301,7 @@ async function adminReports(pane) {
 }
 
 async function adminErrors(pane) {
-  pane.innerHTML = '<p class="muted">Loading…</p>';
+  pane.innerHTML = placeholder('cards', 3);
   let errors = [];
   try { errors = (await api('/api/admin/errors')).errors; } catch (err) { pane.textContent = err.message; return; }
   pane.innerHTML = `<p class="small muted">Crashes in people's apps, the same one counted once.</p>
@@ -315,7 +315,7 @@ async function adminErrors(pane) {
 
 // What people sent with Send feedback, newest first; ones marked done go to the bottom.
 async function adminFeedback(pane) {
-  pane.innerHTML = '<p class="muted">Loading…</p>';
+  pane.innerHTML = placeholder('cards', 3);
   let list = [];
   try { list = (await api('/api/admin/feedback')).feedback; } catch (err) { pane.textContent = err.message; return; }
   const draw = () => {

@@ -558,7 +558,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
       <h3>Passkeys</h3>
       <div id="passkey-box"></div>
       <h3>Your devices</h3>
-      <div id="device-box"><span class="small muted">Loading…</span></div>
+      <div id="device-box">${placeholder('lines', 2)}</div>
     </section>
     <section data-pane="data" class="account-pane">
       <p class="small muted">What Peiskos keeps and who can see it: <a href="${escapeHtml(legalUrl('privacy'))}" target="_blank" rel="noopener">Privacy policy</a> · <a href="${escapeHtml(legalUrl('terms'))}" target="_blank" rel="noopener">Terms</a></p>

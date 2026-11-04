@@ -95,7 +95,7 @@ async function openEmojiPanel(anchor, onPick) {
   panel.className = 'emoji-panel';
   panel.setAttribute('role', 'dialog');
   panel.setAttribute('aria-label', 'Emoji');
-  panel.innerHTML = '<input type="search" placeholder="Find an emoji" autocomplete="off" /><div class="emoji-tabs"></div><div class="emoji-scroll"><p class="muted small">Loading…</p></div>';
+  panel.innerHTML = '<input type="search" placeholder="Find an emoji" autocomplete="off" /><div class="emoji-tabs"></div><div class="emoji-scroll">' + placeholder('grid', 40) + '</div>';
   panel.anchor = anchor;
   document.body.append(panel);
   const r = anchor.getBoundingClientRect();
@@ -638,7 +638,7 @@ function textPreview(a, url) {
   box.className = 'att-text collapsed';
   box.innerHTML = `<div class="att-text-head"><span class="file-icon">${FILE_ICON}</span><span class="att-file-name"></span>
     <span class="muted small">${formatSize(a.size)}</span><span class="spacer"></span><a class="btn secondary" target="_blank" rel="noopener">Open</a></div>
-    <pre class="att-text-body muted">Loading…</pre><button type="button" class="att-text-more hidden">Show all</button>`;
+    <pre class="att-text-body muted">${placeholder('lines', 3)}</pre><button type="button" class="att-text-more hidden">Show all</button>`;
   box.querySelector('.att-file-name').textContent = a.name;
   box.querySelector('a').href = url;
   const body = box.querySelector('pre');

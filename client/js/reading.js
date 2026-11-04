@@ -526,7 +526,7 @@ function messageMenuItems(m) {
 $('#pins-btn').onclick = async () => {
   const channelId = state.channelId;
   if (!channelId) return;
-  modal(`<h2>Pinned messages</h2><div id="pin-list" class="card-list"><p class="muted">Loading…</p></div>`);
+  modal(`<h2>Pinned messages</h2><div id="pin-list" class="card-list">${placeholder('cards', 3)}</div>`);
   try {
     const pins = await api(`/api/channels/${channelId}/pins`);
     const list = $('#pin-list');
@@ -542,7 +542,7 @@ $('#pins-btn').onclick = async () => {
 // ---- edit history
 
 async function openEditHistory(m) {
-  modal(`<h2>Edit history</h2><div id="edit-list" class="card-list"><p class="muted">Loading…</p></div>`);
+  modal(`<h2>Edit history</h2><div id="edit-list" class="card-list">${placeholder('cards', 3)}</div>`);
   try {
     const edits = await api(`/api/messages/${m.id}/edits`);
     const list = $('#edit-list');
@@ -677,7 +677,7 @@ function showReminder(ev) {
 
 async function openSaved() {
   modal(`<h2>Saved messages</h2><p class="muted small">Save a message from its ⋯ menu.</p>
-    <div id="saved-list" class="card-list"><p class="muted">Loading…</p></div>`);
+    <div id="saved-list" class="card-list">${placeholder('cards', 3)}</div>`);
   try {
     const items = await api('/api/me/saved');
     const list = $('#saved-list');
@@ -750,7 +750,7 @@ function bulkDeleteFrom(m) {
 
 async function openReports(serverId) {
   modal(`<h2>Reports</h2><p class="muted small">Messages people reported, and ones the word filter caught. Handled reports stay here for a week.</p>
-    <div id="report-list" class="card-list"><p class="muted">Loading…</p></div>`);
+    <div id="report-list" class="card-list">${placeholder('cards', 3)}</div>`);
   try {
     const reports = await api(`/api/servers/${serverId}/reports`);
     const list = $('#report-list');
@@ -805,7 +805,7 @@ const AUDIT_LABELS = {
 
 async function openAudit(serverId) {
   modal(`<h2>Audit log</h2><p class="muted small">Who did what in this hearth, newest first.</p>
-    <div id="audit-list" class="audit-list"><p class="muted">Loading…</p></div>
+    <div id="audit-list" class="audit-list">${placeholder('lines', 5)}</div>
     <div class="modal-row"><button class="btn secondary hidden" id="audit-more">Show older</button></div>`);
   const list = $('#audit-list');
   let first = true;

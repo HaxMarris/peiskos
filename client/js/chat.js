@@ -898,7 +898,7 @@ function openHearthSettings(serverId, first) {
     can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', keywords: 'moderation flagged', count: s.openReports, run: () => openReports(s.id) },
     can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', keywords: 'history changes who did', run: () => openAudit(s.id) },
     can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', keywords: 'ban kick block unban', run: () => {
-      modal('<h2>Bans</h2><div id="ban-list"><p class="muted">Loading…</p></div>');
+      modal('<h2>Bans</h2><div id="ban-list">' + placeholder('cards', 2) + '</div>');
       renderBans(s, true);
     } },
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
