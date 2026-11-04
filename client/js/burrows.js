@@ -337,6 +337,7 @@ function renderChannels() {
   $('#add-channel').title = state.inDms ? 'New message' : 'New room, heading or order';
   renderBurrowHead(state.inDms ? null : s);
   renderEvents(state.inDms ? null : s);
+  renderEventPill();
   renderToday(state.inDms ? null : s);
   if (state.inDms) {
     $('#archived-section').classList.add('hidden');

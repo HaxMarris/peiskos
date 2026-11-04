@@ -674,6 +674,39 @@ function eventWhen(t) {
 }
 const going = (e) => e.rsvps.filter((r) => r.status === 'going').length;
 
+/** "in 3 days", "in 5 hours", "in 20 minutes", or "now". */
+function countdown(t) {
+  const ms = t - Date.now();
+  if (ms <= 60e3) return 'now';
+  const mins = Math.round(ms / 60e3);
+  if (mins < 60) return `in ${mins} minute${mins === 1 ? '' : 's'}`;
+  const hours = Math.round(ms / 3600e3);
+  if (hours < 36) return `in ${hours} hour${hours === 1 ? '' : 's'}`;
+  const days = Math.round(ms / 864e5);
+  return `in ${days} days`;
+}
+
+// Above the chat: the hearth's next event in the coming three days, counting down. Hidden for
+// events you said no to, and once you close it for that event.
+function renderEventPill() {
+  const pill = $('#event-pill');
+  const s = state.inDms ? null : state.servers.get(state.serverId);
+  const hidden = (store.get('eventPillHidden') ?? '').split(',');
+  const e = (s?.events ?? []).find((x) => x.startsAt > Date.now() - 3600e3 && x.startsAt < Date.now() + 3 * 864e5
+    && x.rsvps.find((r) => r.userId === state.me.id)?.status !== 'no' && !hidden.includes(String(x.id)));
+  pill.classList.toggle('hidden', !e);
+  if (!e) return;
+  const mine = e.rsvps.find((r) => r.userId === state.me.id)?.status;
+  $('#event-pill-open').innerHTML = `${CALENDAR_ICON}<span><b></b> ${e.startsAt <= Date.now() ? 'is happening now' : countdown(e.startsAt)}<span class="muted"> · ${going(e)} going${mine ? '' : ' · Coming?'}</span></span>`;
+  $('#event-pill-open b').textContent = e.title;
+  $('#event-pill-open').onclick = () => openEvent(s.id, e.id);
+  $('#event-pill-hide').onclick = () => {
+    store.set('eventPillHidden', [...hidden.filter(Boolean).slice(-30), String(e.id)].join(','));
+    renderEventPill();
+  };
+}
+setInterval(() => { if (state.me) renderEventPill(); }, 60e3);
+
 function renderEvents(s) {
   const section = $('#events-section');
   section.classList.toggle('hidden', !s || isDm(s));
@@ -719,7 +752,7 @@ function openEvent(serverId, eventId) {
   const names = (status) => e.rsvps.filter((r) => r.status === status).map((r) => nameOf(r.userId, 'someone'));
   const editable = e.createdBy === state.me.id || can(s, 'burrow');
   modal(`<h2>${escapeHtml(e.title)}</h2>
-    <p class="event-when">${CALENDAR_ICON}<span>${escapeHtml(new Date(e.startsAt).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))}${e.startsAt <= Date.now() ? ' · happening now' : ''}</span></p>
+    <p class="event-when">${CALENDAR_ICON}<span>${escapeHtml(new Date(e.startsAt).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))} · ${e.startsAt <= Date.now() ? 'happening now' : escapeHtml(countdown(e.startsAt))}</span></p>
     ${room ? `<p class="small">Where: <button type="button" class="link-btn" id="ev-room">${room.kind === 'voice' ? escapeHtml(room.name) : '#' + escapeHtml(room.name)}</button></p>` : ''}
     ${e.details ? `<div class="event-details">${formatContent(e.details)}</div>` : ''}
     <p class="small muted">Planned by ${escapeHtml(nameOf(e.createdBy, 'someone'))}</p>

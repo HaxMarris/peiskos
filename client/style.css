@@ -2129,3 +2129,9 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .list-add { display: flex; gap: 6px; margin-top: 4px; }
 .list-add input { flex: 1; min-width: 0; padding: 7px 10px; border: 1.5px solid var(--field-line); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: inherit; }
 .list-add .btn { padding: 7px 14px; }
+/* The next event, counting down above the chat. */
+.event-pill { display: flex; align-items: center; gap: 4px; margin: 6px 16px 0; padding: 4px 4px 4px 12px; border-radius: var(--radius-pill); background: var(--surface-2); border: 1px solid var(--line); }
+.event-pill-open { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; border: 0; background: none; color: var(--text); font: inherit; font-size: 14px; text-align: left; padding: 2px 0; cursor: pointer; }
+.event-pill-open > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.event-pill-open svg { width: 18px; height: 18px; flex: none; fill: var(--accent-text); }
+.event-pill .icon-btn { padding: 4px 8px; font-size: 18px; line-height: 1; }

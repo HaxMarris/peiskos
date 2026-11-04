@@ -808,6 +808,13 @@ function renderHome() {
       .map((m) => row(`data-person="${m.id}"`, `${escapeHtml(nameOfPerson(m))}'s birthday`, 'Today')),
   ];
 
+  // Coming up: what you're going to (or might) in the next two weeks, after today's.
+  const comingUp = hearths.flatMap((s) => (s.events ?? [])
+    .filter((e) => e.startsAt > soon && e.startsAt < Date.now() + 14 * 864e5 && ['going', 'maybe'].includes(e.rsvps.find((r) => r.userId === state.me.id)?.status))
+    .map((e) => ({ s, e })))
+    .sort((a, b) => a.e.startsAt - b.e.startsAt)
+    .map(({ s, e }) => row(`data-event="${s.id}:${e.id}"`, escapeHtml(e.title), `${escapeHtml(countdown(e.startsAt))} · ${escapeHtml(s.name)}`));
+
   // Friends who are around.
   const friends = (state.friends?.friends ?? []).filter((f) => f.online)
     .map((f) => row(`data-dm="${f.id}"`, escapeHtml(nameOfPerson(f)), presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
@@ -818,6 +825,7 @@ function renderHome() {
     section('For you', forYou),
     section('New messages', unread.slice(0, 12)),
     section('Today', today),
+    section('Coming up', comingUp.slice(0, 6)),
     section('Friends online', friends),
   ].join('');
   const view = $('#home-view');
