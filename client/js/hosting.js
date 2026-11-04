@@ -43,6 +43,7 @@ async function openAdmin(tab = state.me?.adminReports ? 'reports' : adminTab) {
     <div id="admin-pane" class="admin-pane"><p class="muted">Loading…</p></div>`, 'admin-modal side-tabs');
   onModalClose = () => { clearInterval(updatePoll); updatePoll = null; };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => showAdminTab(b.dataset.tab);
+  addSettingsSearch(() => showAdminTab(adminTab));
   try {
     adminData = await api('/api/admin');
   } catch (err) {

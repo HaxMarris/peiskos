@@ -586,6 +586,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
   };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => show(b.dataset.tab);
   show(tab);
+  addSettingsSearch(() => show(store.get('accountTab') || 'profile'));
   wireProfileSettings();
   wireThemeSettings();
   $('#read-receipts').onchange = async (e) => {
