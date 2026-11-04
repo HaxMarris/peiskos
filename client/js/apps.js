@@ -307,6 +307,7 @@ function quickActions() {
   const fire = hearth?.channels.find((c) => c.kind === 'voice');
   const act = (label, go) => ({ kind: 'action', label, sub: 'Action', go });
   return [
+    act('Home', () => openHome()),
     act('New message', () => openNewDm()),
     act('Search messages', () => openSearch()),
     s && serverUnread(s) && act(`Mark ${hearth ? hearth.name : 'this conversation'} as read`, () => markServerRead(s)),

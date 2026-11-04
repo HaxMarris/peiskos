@@ -11,7 +11,7 @@ import { createApp } from '../src/app.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'burrow-static-'));
 const script = 'console.log("hello burrow");\n'.repeat(200);
-writeFileSync(join(dir, 'index.html'), '<!doctype html><title>Burrow</title>');
+writeFileSync(join(dir, 'index.html'), '<!doctype html><meta http-equiv="Content-Security-Policy" content="default-src \'self\' file:" /><title>Burrow</title>');
 writeFileSync(join(dir, 'app.js'), script);
 mkdirSync(join(dir, 'vendor', 'noto-emoji'), { recursive: true });
 writeFileSync(join(dir, 'vendor', 'noto-emoji', '1f525.webp'), Buffer.from('RIFF\0\0\0\0WEBP'));
@@ -146,4 +146,11 @@ test('emoji pictures are sent as WebP and kept by the browser for a week', async
   assert.equal(res.status, 200);
   assert.equal(res.headers['content-type'], 'image/webp');
   assert.equal(res.headers['cache-control'], 'public, max-age=604800');
+});
+
+test("the page's own <meta> security policy is left out when served (the header carries it)", async () => {
+  const res = await get('/');
+  assert.equal(res.status, 200);
+  assert.ok(!res.body.toString().includes('http-equiv'), 'a <meta> policy stops browsers fetching the scripts in parallel');
+  assert.match(String(res.headers['content-security-policy']), /script-src 'self'/);
 });

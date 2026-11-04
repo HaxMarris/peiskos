@@ -12,8 +12,15 @@ function renderServers() {
   const hasUnread = serverUnread;
   const dmUnread = state.dmOrder.some((id) => hasUnread(state.servers.get(id)));
 
+  const homePill = document.createElement('button');
+  homePill.className = 'pill home-pill' + (state.atHome ? ' on' : '');
+  homePill.innerHTML = `<span class="tile home-tile">${HOME_ICON}</span><span class="pill-name">Home</span>`;
+  homePill.title = 'Home: what\'s happening everywhere';
+  homePill.onclick = openHome;
+  if (state.atHome) homePill.setAttribute('aria-current', 'true');
+
   const dmPill = document.createElement('button');
-  dmPill.className = 'pill dm-pill' + (state.inDms ? ' on' : '') + (!state.inDms && dmUnread ? ' unread' : '');
+  dmPill.className = 'pill dm-pill' + (state.inDms && !state.atHome ? ' on' : '') + (!state.inDms && dmUnread ? ' unread' : '');
   dmPill.innerHTML = `<span class="tile dm-tile">${CHAT_ICON}</span><span class="pill-name">Messages</span>`;
   dmPill.title = 'Direct messages';
   dmPill.onclick = openDms;
@@ -27,7 +34,7 @@ function renderServers() {
   const pills = inBar.map((id) => {
     const srv = state.servers.get(id);
     const b = document.createElement('button');
-    const on = id === state.serverId && !state.inDms;
+    const on = id === state.serverId && !state.inDms && !state.atHome;
     b.className = 'pill' + (on ? ' on' : '') + (!on && hasUnread(srv) ? ' unread' : '');
     b.dataset.id = id;
     b.title = srv.name;
@@ -59,7 +66,8 @@ function renderServers() {
   add.textContent = '+';
   add.onclick = openAddServer;
 
-  $('#burrow-nav').replaceChildren(dmPill, ...pills, more, add);
+  $('#burrow-nav').replaceChildren(homePill, dmPill, ...pills, more, add);
+  if (state.atHome) renderHome();
   fitPills();
 
   // The phone's burrow button.
@@ -248,6 +256,11 @@ function renderSwitcher() {
   const inFolders = new Set(state.folders.flatMap((f) => f.serverIds));
   const others = state.serverOrder.filter((id) => !favs.includes(id) && !inFolders.has(id));
   const rows = [];
+  const home = document.createElement('button');
+  home.className = 'switch-home';
+  home.innerHTML = `<span class="tile home-tile">${HOME_ICON}</span><b>Home</b>`;
+  home.onclick = () => { closeSwitcher(); openHome(); };
+  rows.push(home);
   if (favs.length) rows.push(heading(`Favorites · ${favs.length} of ${MAX_FAVORITES}`), ...favs.map(row));
   else {
     const hint = document.createElement('p');
@@ -292,6 +305,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeSwitc
 window.addEventListener('resize', placeSwitcher);
 
 async function selectServer(id, initial = false, open = null) {
+  closeHome();
   const s = state.servers.get(id);
   if (!initial) showView('rooms');
   if (s) state.inDms = isDm(s);

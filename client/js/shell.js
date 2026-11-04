@@ -117,7 +117,7 @@ function showView(view) {
   $('#app').dataset.view = view;
   // The open room's badges depend on whether its chat is showing (see readingNow).
   if (changed && state.me) { renderServers(); renderChannels(); }
-  if (view === 'rooms') memberPane.classList.remove('open');
+  if (view === 'rooms') { memberPane.classList.remove('open'); closeHome(); }
   if (view === 'chat') markReadSoon();
 }
 $('#chat-back').onclick = () => showView('rooms');

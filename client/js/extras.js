@@ -543,3 +543,83 @@ function onCasinoPet(ev) {
   if (m) m.pet = ev.pet;
   if (state.voice) renderFire();
 }
+
+// ---------------------------------------------------------------- Home
+// One page for what's happening across every hearth: who's at a fire, what's for you, what's
+// unread, today's events and birthdays, and which friends are around. Everything comes from what
+// the app already knows, so it opens at once and keeps itself up to date.
+
+const HOME_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.5 11h2.7v9.5h5.3v-6h3v6h5.3V11h2.7L12 3Z"/></svg>';
+
+function openHome() {
+  closeSwitcher();
+  state.atHome = true;
+  $('#app').classList.add('at-home');
+  $('#home-view').classList.remove('hidden');
+  renderServers();
+  renderHome();
+  showView('chat');
+}
+function closeHome() {
+  if (!state.atHome) return;
+  state.atHome = false;
+  $('#app').classList.remove('at-home');
+  $('#home-view').classList.add('hidden');
+}
+
+function renderHome() {
+  const hearths = state.serverOrder.map((id) => state.servers.get(id)).filter(Boolean);
+  const section = (title, items) => (items.length ? `<section class="home-section"><h3>${escapeHtml(title)}</h3><ul>${items.join('')}</ul></section>` : '');
+  const row = (data, main, sub, button = '') =>
+    `<li><button type="button" class="home-row" ${data}><span class="home-main">${main}</span><span class="small muted">${sub}</span></button>${button}</li>`;
+
+  // Fires with people at them.
+  const fires = hearths.flatMap((s) => s.channels.filter((c) => c.kind === 'voice' && c.voiceUsers?.length).map((c) => {
+    const names = c.voiceUsers.map((id) => nameOfPerson(s.members.find((m) => m.id === id))).filter(Boolean);
+    const here = state.voice?.channelId === c.id;
+    return row(`data-hearth="${s.id}"`, escapeHtml(names.slice(0, 3).join(', ') + (names.length > 3 ? ` and ${names.length - 3} more` : '')),
+      `${escapeHtml(fireName(c))} in ${escapeHtml(s.name)}`,
+      here ? '<span class="small muted home-side">You\'re here</span>' : state.voiceEnabled ? `<button type="button" class="btn tiny-btn home-side" data-join="${c.id}">Join</button>` : '');
+  }));
+
+  // Mentions and replies waiting, room by room; then rooms with anything new.
+  const rooms = [...hearths, ...state.dmOrder.map((id) => state.servers.get(id))].filter(Boolean)
+    .flatMap((s) => [...s.channels, ...(s.threads ?? [])].map((c) => ({ s, c })));
+  const placeName = ({ s, c }) => (isDm(s) ? escapeHtml(dmTitle(s)) : `#${escapeHtml(c.name)} <span class="muted">in ${escapeHtml(s.name)}</span>`);
+  const forYou = rooms.filter(({ s, c }) => c.mentions && notifyState(s, c).level !== 'none')
+    .map((r) => row(`data-room="${r.c.id}"`, placeName(r), `${r.c.mentions} for you`));
+  const unread = rooms.filter(({ s, c }) => !c.mentions && isUnread(c) && roomLoud(s, c))
+    .map((r) => row(`data-room="${r.c.id}"`, placeName(r), `${r.c.unread > 99 ? '99+' : r.c.unread} new`));
+
+  // Today: events starting in the next day, and birthdays.
+  const soon = Date.now() + 24 * 3600e3;
+  const today = [
+    ...hearths.flatMap((s) => (s.events ?? []).filter((e) => e.startsAt <= soon).map((e) =>
+      row(`data-event="${s.id}:${e.id}"`, escapeHtml(e.title), `${e.startsAt <= Date.now() ? 'Happening now' : escapeHtml(formatTime(new Date(e.startsAt), { short: true }))} · ${escapeHtml(s.name)}`))),
+    ...[...new Map(hearths.flatMap((s) => s.members.filter((m) => !m.deleted && m.id !== state.me.id && isBirthdayToday(m.birthday)).map((m) => [m.id, m]))).values()]
+      .map((m) => row(`data-person="${m.id}"`, `${escapeHtml(nameOfPerson(m))}'s birthday`, 'Today')),
+  ];
+
+  // Friends who are around.
+  const friends = (state.friends?.friends ?? []).filter((f) => f.online)
+    .map((f) => row(`data-dm="${f.id}"`, escapeHtml(nameOfPerson(f)), presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
+
+  const parts = [
+    section('At a fire now', fires),
+    section('For you', forYou),
+    section('New messages', unread.slice(0, 12)),
+    section('Today', today),
+    section('Friends online', friends),
+  ].join('');
+  const view = $('#home-view');
+  view.innerHTML = `<header class="home-head"><h2>Home</h2>${unread.length || forYou.length ? '<button type="button" class="btn secondary tiny-btn" id="home-read-all">Mark everything as read</button>' : ''}</header>
+    ${parts || '<div class="empty-note"><b>Nothing new</b><span>No unread messages, mentions or fires right now.</span></div>'}`;
+  view.querySelectorAll('[data-room]').forEach((b) => (b.onclick = () => { const w = roomById(Number(b.dataset.room)); if (w) selectServer(w.s.id, false, { channelId: w.c.id }).then(() => showView('chat')); }));
+  view.querySelectorAll('[data-hearth]').forEach((b) => (b.onclick = () => selectServer(Number(b.dataset.hearth))));
+  view.querySelectorAll('[data-join]').forEach((b) => (b.onclick = () => joinVoice(Number(b.dataset.join))));
+  view.querySelectorAll('[data-event]').forEach((b) => (b.onclick = () => { const [s, e] = b.dataset.event.split(':').map(Number); openEvent(s, e); }));
+  view.querySelectorAll('[data-person]').forEach((b) => (b.onclick = () => openPersonById(Number(b.dataset.person))));
+  view.querySelectorAll('[data-dm]').forEach((b) => (b.onclick = () => openDm(Number(b.dataset.dm))));
+  const all = $('#home-read-all');
+  if (all) all.onclick = () => { for (const s of state.servers.values()) if (serverUnread(s) || [...s.channels, ...(s.threads ?? [])].some((c) => c.mentions)) markServerRead(s); };
+}
