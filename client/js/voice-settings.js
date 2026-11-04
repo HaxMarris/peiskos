@@ -1017,6 +1017,7 @@ function wireThemeSettings() {
 function soundSettings() {
   return `<h3>Sounds</h3>
     <label class="check"><input type="checkbox" id="sound-messages" ${soundPrefs.messages ? 'checked' : ''} /> New messages</label>
+    <label class="check"><input type="checkbox" id="sound-sent" ${soundPrefs.sent ? 'checked' : ''} /> Sending a message</label>
     <label class="check"><input type="checkbox" id="sound-voice" ${soundPrefs.voice ? 'checked' : ''} /> People joining and leaving voice</label>
     <label>Sound volume
       <div class="sound-volume"><input type="range" id="sound-volume" min="0" max="100" step="5" value="${Math.round(soundPrefs.volume * 100)}" /><button type="button" class="btn secondary" id="sound-test">Test</button></div>
@@ -1024,6 +1025,7 @@ function soundSettings() {
 }
 function wireSoundSettings() {
   $('#sound-messages').onchange = (e) => { soundPrefs.messages = e.target.checked; saveSoundPrefs(); };
+  $('#sound-sent').onchange = (e) => { soundPrefs.sent = e.target.checked; saveSoundPrefs(); if (e.target.checked) playSound('sent', true); };
   $('#sound-voice').onchange = (e) => { soundPrefs.voice = e.target.checked; saveSoundPrefs(); };
   $('#sound-volume').oninput = (e) => { soundPrefs.volume = Number(e.target.value) / 100; saveSoundPrefs(); };
   $('#sound-volume').onchange = () => playSound('message', true);

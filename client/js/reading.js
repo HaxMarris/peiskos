@@ -301,7 +301,10 @@ function confirmSending(m) {
   const here = sending.filter((x) => x.channelId === m.channelId);
   // The same text, or (if the server changed it, say a word filter) the oldest one still going to that room.
   const hit = here.find((x) => x.content === (m.content ?? '')) ?? (m.attachments?.length ? null : here[0]);
-  if (hit) sending = sending.filter((x) => x !== hit);
+  if (!hit) return;
+  sending = sending.filter((x) => x !== hit);
+  // Only for what you sent from here, once the server has it.
+  playSound('sent');
 }
 
 async function sendMessage(channelId, body, onFail) {
