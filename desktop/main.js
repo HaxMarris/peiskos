@@ -1,6 +1,6 @@
 // Desktop wrapper: loads the bundled chat client, which asks the user for the
 // server address on first launch and remembers it.
-const { app, BrowserWindow, shell, Menu, desktopCapturer, ipcMain, nativeImage, powerMonitor } = require('electron');
+const { app, BrowserWindow, shell, Menu, desktopCapturer, ipcMain, nativeImage, nativeTheme, powerMonitor } = require('electron');
 const path = require('node:path');
 const { startUpdateChecks } = require('./updater');
 const appAudio = require('./app-audio');
@@ -9,6 +9,7 @@ const activity = require('./activity');
 const drawOverlay = require('./draw-overlay');
 const tray = require('./tray');
 const { fixOldShortcuts, refreshIcons } = require('./shortcuts');
+const windowState = require('./window-state');
 
 // Peiskos used to be called Burrow. Keep the old settings folder (logins, servers, settings),
 // which is named after the app, so renaming it doesn't log anyone out.
@@ -40,13 +41,17 @@ function showWindow() {
 }
 
 function createWindow({ hidden = false } = {}) {
+  const last = windowState.load();
   const win = new BrowserWindow({
-    show: !hidden,
-    width: 1280,
-    height: 800,
+    // Shown once the page has drawn, so it opens on the app rather than a blank window.
+    show: false,
+    width: last.width ?? 1280,
+    height: last.height ?? 800,
+    ...(last.x !== undefined ? { x: last.x, y: last.y } : {}),
     minWidth: 480,
     minHeight: 400,
-    backgroundColor: '#f3f1ea',
+    // The app's own background, light or dark, for the moment before the page paints.
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#1c1612' : '#f6f0e7',
     title: 'Peiskos',
     autoHideMenuBar: true,
     webPreferences: {
@@ -56,6 +61,19 @@ function createWindow({ hidden = false } = {}) {
       preload: path.join(__dirname, 'preload.js'),
     },
   });
+
+  windowState.track(win);
+  // Maximizing shows a window, so it waits until the window is shown anyway.
+  win.once('show', () => {
+    if (last.maximized) win.maximize();
+    if (last.fullScreen) win.setFullScreen(true);
+  });
+  if (!hidden) {
+    // Never left waiting on a page that's slow to draw.
+    const fallback = setTimeout(() => { if (!win.isDestroyed()) win.show(); }, 3000);
+    win.once('ready-to-show', () => { clearTimeout(fallback); win.show(); });
+    win.once('show', () => clearTimeout(fallback));
+  }
 
   // What was last picked to share, so its sound can follow (and, for a whole screen, which one it is).
   let pickedSource = null;
