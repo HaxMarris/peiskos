@@ -291,5 +291,5 @@ function spinRound(b, r, into) {
     strip.style.transition = `transform ${ms}ms cubic-bezier(.1,.65,.15,1)`;
     strip.style.transform = `translateY(${-land}px)`;
   });
-  if (ms > 200 && best && ['covert', 'rare'].includes(best.rarity)) battles.playing.timers.push(setTimeout(() => playSound('message'), ms));
+  if (ms > 200 && best && ['covert', 'rare'].includes(best.rarity)) battles.playing.timers.push(setTimeout(() => playSound('win'), ms));
 }

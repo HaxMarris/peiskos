@@ -727,7 +727,7 @@ function handleEvent(ev) {
       if (mine) startSlowWait(m.channelId);
       if (!mine && !isBlocked(m.authorId) && (document.hidden || !readingNow(m.channelId)) && !quietFor(m) && !hushed()) {
         notify(m);
-        playSound('message');
+        playSound(soundPrefs.mention && (isDm(where?.s) || mentionsMe(m)) ? 'mention' : 'message');
       }
       break;
     }

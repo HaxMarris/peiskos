@@ -137,6 +137,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
         const R = LK.DisconnectReason ?? {};
         const final = [R.CLIENT_INITIATED, R.DUPLICATE_IDENTITY, R.PARTICIPANT_REMOVED, R.ROOM_DELETED].includes(reason);
         if (final) return leaveVoice();
+        playSound('lost');
         const again = { channelId: voice.channelId, muted: voice.deafened ? voice.mutedBeforeDeafen : voice.muted, deafened: voice.deafened };
         leaveVoice(true);
         scheduleRejoin(again);
@@ -154,6 +155,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     await room.connect(url || state.serverUrl.replace(/^http/, 'ws'), token);
     voice.reaching = false;
     voice.connected = true;
+    voice.connectedAt = Date.now();
     if (state.voice !== voice) return room.disconnect();
     await room.setE2EEEnabled(true);
     startKeyExchange(voice);
@@ -166,8 +168,8 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     renderVoiceBar();
     renderChannels();
     syncHotkeys();
-    if (rejoin) cancelRejoin();
-    else playSound('join');
+    if (rejoin) { cancelRejoin(); playSound('back'); }
+    else playSound('joined');
   } catch (err) {
     // Left while connecting: LiveKit calls that cancelling an error, but there's nothing to tell.
     if (state.voice !== voice) { voice.room?.disconnect().catch(() => {}); return; }
@@ -366,8 +368,10 @@ function toggleMute() {
   if (!voice?.room) return;
   if (voice.serverMuted) return toast('A moderator muted you here.');
   // Unmuting while deafened turns your sound back on too, like Discord.
-  if (voice.deafened && voice.muted) setDeafened(voice, false);
+  const wasDeafened = voice.deafened && voice.muted;
+  if (wasDeafened) setDeafened(voice, false);
   setMicMuted(voice, !voice.muted);
+  playSound(voice.muted ? 'mute' : wasDeafened ? 'undeafen' : 'unmute');
   haptic();
   voiceChanged();
 }
@@ -384,6 +388,7 @@ function toggleDeafen() {
     setDeafened(voice, true);
     setMicMuted(voice, true);
   }
+  playSound(voice.deafened ? 'deafen' : 'undeafen');
   haptic();
   voiceChanged();
 }
@@ -765,6 +770,12 @@ function renderStage() {
   $('#voice-watch').classList.toggle('on', state.stageOpen);
   $('#voice-watch').title = state.stageOpen ? 'Back to chat' : 'Open the fire';
   $('#stage-video').classList.toggle('hidden', !sharing.size);
+  // A friend starting to share their screen gets a sound, but not the shares already going when you sit down.
+  if (state.voice) {
+    const screens = new Set([...sharing].filter(([id, s]) => s.screen && id !== state.me?.id).map(([id]) => id));
+    if (state.voice.screens && Date.now() - state.voice.connectedAt > 3000 && [...screens].some((id) => !state.voice.screens.has(id))) playSound('share');
+    if (state.voice.connected) state.voice.screens = screens;
+  }
   if (JSON.stringify([...sharing]) !== JSON.stringify([...state.sharing])) {
     state.sharing = sharing;
     renderChannels();
