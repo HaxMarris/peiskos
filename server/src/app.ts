@@ -18,6 +18,8 @@ import { createFcm, type FcmConfig } from './fcm.ts';
 import { looksLikeEmail, sendMail, type MailConfig } from './mail.ts';
 import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
+import { trivia } from './trivia.ts';
+import { fileURLToPath } from 'node:url';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
@@ -56,6 +58,8 @@ export interface AppOptions {
   mail?: MailConfig;
   /** The address people open Burrow at, for links in emails. */
   publicUrl?: string;
+  /** Where Fireside Trivia's question packs are (server/trivia). */
+  triviaDir?: string;
   /** Who push services can contact about this server's pushes (a mailto: or https: address). */
   pushContact?: string;
   /** Push services Burrow will send to. Tests add their own. */
@@ -799,6 +803,11 @@ export function createApp(opts: AppOptions): Server {
     isMember, can, canSee, channelById, inVoice, sendServerUpdate, broadcastToChannel,
     allowed: (serverId, user, perm) => allowed(serverId, user as User, perm),
     userChanged: (userId) => userChanged(userId),
+  });
+  trivia({
+    db, route, fail: (status, message) => new HttpError(status, message), isMember, can,
+    isBurrow: (serverId) => isBurrow(serverId),
+    packDir: opts.triviaDir ?? fileURLToPath(new URL('../trivia/', import.meta.url)),
   });
 
   route(

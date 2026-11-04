@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Sketch &amp; Guess</title>
+<link rel="stylesheet" href="../shared/game.css">
+<link rel="stylesheet" href="../shared/canvas.css">
+<style>
+  #play { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 260px; grid-template-rows: auto 1fr auto; gap: 6px 10px; padding: 8px 10px 10px; }
+  .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
+  .top .spacer { flex: 1; }
+  #word { font-family: 'Fraunces', Georgia, serif; font-size: 24px; color: var(--strong); letter-spacing: .12em; white-space: pre; text-align: center; flex: 2; }
+  #clock { font-weight: 800; font-size: 20px; color: var(--glow); min-width: 3ch; text-align: right; }
+  #clock.low { color: var(--bad); }
+  #roundLabel { font-size: 13px; }
+  .side { grid-row: 2 / 4; grid-column: 2; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  #feed { flex: 1; min-height: 0; overflow-y: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 8px; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
+  #feed .right { color: var(--good); font-weight: 700; }
+  #feed .close { color: var(--glow); }
+  #feed .sys { color: var(--muted); font-style: italic; }
+  #feed b { color: var(--strong); }
+  #guessForm { display: flex; gap: 6px; }
+  #guessForm input { flex: 1; min-width: 0; }
+  .scores li.drawing b::before { content: '✏️ '; }
+  .scores li.got { background: rgba(143, 191, 122, .18); }
+  .tools { grid-column: 1; }
+  .tools.off { visibility: hidden; }
+  .choices { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+  .choices .btn { font-size: 18px; }
+  #overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(20,15,12,.55); z-index: 5; padding: 16px; }
+  #overlay .panel { text-align: center; align-items: center; }
+  #wordsBox { width: 100%; min-height: 220px; resize: vertical; }
+  .opts { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; text-align: left; width: 100%; }
+  @media (max-width: 700px) {
+    #play { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1.4fr) auto minmax(120px, 1fr); }
+    .side { grid-row: 4; grid-column: 1; }
+    .side .scores { display: none; }
+    #word { font-size: 18px; }
+  }
+</style>
+</head>
+<body>
+<div id="play">
+  <div class="top">
+    <span class="muted" id="roundLabel"></span>
+    <span id="word" aria-live="polite"></span>
+    <span id="clock" aria-label="Seconds left"></span>
+    <button class="tool" id="btnLeave" type="button">Leave</button>
+  </div>
+  <div class="board"><canvas id="page" aria-label="The drawing"></canvas></div>
+  <div class="tools off" id="tools"></div>
+  <div class="side">
+    <ul class="scores" id="scores"></ul>
+    <div id="feed" role="log" aria-label="Guesses"></div>
+    <form id="guessForm" autocomplete="off">
+      <input id="guess" maxlength="60" placeholder="Type your guess" aria-label="Your guess" enterkeyhint="send">
+      <button class="btn" type="submit">Guess</button>
+    </form>
+  </div>
+</div>
+
+<div id="overlay"><div class="panel" id="lobby">
+  <h1>Sketch &amp; Guess</h1>
+  <p class="muted" id="lobbyNote">Take turns drawing. Guess fast for more points.</p>
+  <div class="players" id="lobbyPlayers"></div>
+  <div class="opts" id="hostOpts">
+    <label for="optRounds">Rounds</label>
+    <select id="optRounds"><option>1</option><option>2</option><option selected>3</option><option>4</option><option>5</option></select>
+    <label for="optTime">Time to draw</label>
+    <select id="optTime"><option value="60">60 seconds</option><option value="80" selected>80 seconds</option><option value="120">2 minutes</option></select>
+    <label for="optWords">Words</label>
+    <select id="optWords"><option value="mix" selected>Ours and the pack</option><option value="ours">Only ours</option><option value="pack">Only the pack</option></select>
+  </div>
+  <div class="row" style="justify-content:center">
+    <button class="btn" id="btnStart" type="button">Start</button>
+    <button class="btn secondary" id="btnWords" type="button">Our words</button>
+  </div>
+</div></div>
+
+<script src="../shared/bridge.js"></script>
+<script src="../shared/canvas.js"></script>
+<script src="words.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
