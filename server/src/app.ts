@@ -748,6 +748,9 @@ export function createApp(opts: AppOptions): Server {
       )
       .run(channelId, user.id, content, now(), replyId, stickerId, extras.forwarded ? JSON.stringify(extras.forwarded) : null, extras.live ? JSON.stringify(extras.live) : null);
     const messageId = Number(r.lastInsertRowid);
+    // Sent: the draft for this room is done with, on every device.
+    if (db.prepare('DELETE FROM drafts WHERE user_id = ? AND channel_id = ?').run(user.id, channelId).changes)
+      sendTo([user.id], { type: 'draft', channelId, content: '', updatedAt: now() });
     const forWhom = recordMentions(channel, messageId, user.id, content, replyId);
     usable.forEach((id, position) =>
       db.prepare('UPDATE attachments SET message_id = ?, position = ?, spoiler = ?, alt = ? WHERE id = ?').run(messageId, position, spoilers.has(id) ? 1 : 0, altFor(id), id),
@@ -4274,6 +4277,27 @@ export function createApp(opts: AppOptions): Server {
     const html = `<!doctype html><html><head><meta charset="utf-8">${tags || '<title>Peiskos</title>'}<meta http-equiv="refresh" content="0;url=${go}"></head><body><a href="${go}">Open Peiskos</a></body></html>`;
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(html);
   };
+
+  // ---- drafts: half-written messages follow you between devices. Each save is sent to your other
+  // devices straight away; an empty draft is deleted. Only rooms you can still see are listed.
+  route('GET', '/api/drafts', ({ user }) => {
+    const rows = db.prepare('SELECT channel_id AS channelId, content, updated_at AS updatedAt FROM drafts WHERE user_id = ?').all(user.id) as { channelId: number; content: string; updatedAt: number }[];
+    return rows.filter((r) => { try { textRoom(r.channelId, user.id); return true; } catch { return false; } });
+  });
+  route('POST', '/api/channels/:id/draft', ({ user, params, body }) => {
+    const channelId = Number(params[0]);
+    textRoom(channelId, user.id);
+    const content = typeof body.content === 'string' ? body.content.slice(0, MAX_MESSAGE_LENGTH) : '';
+    const updatedAt = now();
+    if (content.trim()) {
+      db.prepare(
+        `INSERT INTO drafts (user_id, channel_id, content, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT (user_id, channel_id) DO UPDATE SET content = excluded.content, updated_at = excluded.updated_at`,
+      ).run(user.id, channelId, content, updatedAt);
+    } else db.prepare('DELETE FROM drafts WHERE user_id = ? AND channel_id = ?').run(user.id, channelId);
+    sendTo([user.id], { type: 'draft', channelId, content: content.trim() ? content : '', updatedAt });
+    return { ok: true, updatedAt };
+  });
 
   // ---- events: game nights and the like, with RSVPs and a reminder ----
 

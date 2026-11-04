@@ -264,7 +264,36 @@ const draftKey = (id) => `draft:${id}`;
 let draftTimer = 0;
 function saveDraft() {
   clearTimeout(draftTimer);
-  if (state.channelId) store.set(draftKey(state.channelId), input.value.trim() ? input.value : null);
+  if (!state.channelId) return;
+  const id = state.channelId;
+  const text = input.value.trim() ? input.value : null;
+  if ((store.get(draftKey(id)) ?? null) === text) return;
+  store.set(draftKey(id), text);
+  syncDraftSoon(id);
+}
+// Drafts also go to the server, a moment after typing stops, so they follow you to your other
+// devices. The newest one wins, by the server's clock: draftAt is when the server last had it.
+const draftSync = new Map(); // room -> timer, while a change here hasn't reached the server
+function syncDraftSoon(id) {
+  clearTimeout(draftSync.get(id));
+  draftSync.set(id, setTimeout(() => {
+    api(`/api/channels/${id}/draft`, { method: 'POST', body: { content: store.get(draftKey(id)) ?? '' } })
+      .then((r) => store.set(`draftAt:${id}`, String(r.updatedAt)))
+      .catch(() => {})
+      .finally(() => draftSync.delete(id));
+  }, 1200));
+}
+async function loadDrafts() {
+  const list = await api('/api/drafts').catch(() => []);
+  for (const d of list) takeDraft(d.channelId, d.content, d.updatedAt);
+}
+/** A draft from another device (or the server): kept if it's newer, and shown if it's for this room and you aren't typing. */
+function takeDraft(id, content, at) {
+  if (draftSync.has(id) || Number(store.get(`draftAt:${id}`) ?? 0) >= at) return; // this device's is newer
+  if (id === state.channelId && document.activeElement === input && input.value.trim()) return; // you're typing here
+  store.set(draftKey(id), content || null);
+  store.set(`draftAt:${id}`, String(at));
+  if (id === state.channelId) loadDraft();
 }
 function saveDraftSoon() {
   clearTimeout(draftTimer);
@@ -276,6 +305,8 @@ function loadDraft() {
 }
 function clearDraft(id) {
   clearTimeout(draftTimer);
+  clearTimeout(draftSync.get(id));
+  draftSync.delete(id);
   store.set(draftKey(id), null);
 }
 window.addEventListener('beforeunload', saveDraft);

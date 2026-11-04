@@ -533,6 +533,7 @@ async function enterApp() {
   syncAdminButton();
   await loadServers();
   connect();
+  loadDrafts();
   loadSavedAndScheduled();
   loadFriends();
   openPendingInvite();
@@ -730,6 +731,9 @@ function handleEvent(ev) {
       }
       break;
     }
+    case 'draft':
+      takeDraft(ev.channelId, ev.content, ev.updatedAt);
+      break;
     case 'message_updated': {
       const i = state.messages.findIndex((x) => x.id === ev.message.id);
       if (i >= 0) state.messages[i] = ev.message;

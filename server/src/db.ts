@@ -247,6 +247,14 @@ function addChatExtras(db: Db) {
       edited_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS message_edits_by_message ON message_edits(message_id);
+    -- What someone has typed in a room and not sent yet, so it follows them to their other devices.
+    CREATE TABLE IF NOT EXISTS drafts (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      content    TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, channel_id)
+    );
     CREATE TABLE IF NOT EXISTS saved_messages (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
