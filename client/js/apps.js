@@ -688,23 +688,54 @@ document.addEventListener('touchmove', (e) => {
   if (Math.abs(dx) < 12) return;
   swipe.moved = true;
   swipe.dx = dx;
-  if (swipe.line && !swipe.edge && dx > 0) swipe.line.style.transform = `translateX(${Math.min(dx, 80) * 0.8}px)`;
+  // The message follows the finger, with a reply arrow coming in behind it and a tap once it's far
+  // enough to count.
+  if (swipe.line && !swipe.edge && dx > 0) {
+    swipe.line.classList.add('dragging');
+    swipe.line.style.transform = `translateX(${Math.min(dx, 80) * 0.8}px)`;
+    swipe.line.style.setProperty('--swipe', Math.min(dx / 70, 1).toFixed(2));
+  }
+  // Going back: the room slides away under the finger, like a page turning.
+  if (swipe.edge) {
+    const chat = $('.chat');
+    chat.classList.add('dragging');
+    chat.style.transform = `translateX(${Math.max(dx, 0)}px)`;
+  }
+  const far = Math.abs(dx) > 70;
+  if ((swipe.line || swipe.edge) && far !== !!swipe.far) {
+    swipe.far = far;
+    if (far) haptic();
+  }
 }, { passive: true });
 document.addEventListener('touchend', () => {
   const s = swipe;
   swipe = null;
   if (!s?.moved) return;
-  if (s.line) s.line.style.transform = '';
-  if (s.edge && s.dx > 70) return showView('rooms');
+  if (s.line) {
+    s.line.classList.remove('dragging');
+    s.line.style.transform = '';
+  }
+  if (s.edge) {
+    const chat = $('.chat');
+    chat.classList.remove('dragging');
+    if (s.dx > 70) {
+      // Finish the slide, then show the rooms.
+      chat.style.transform = 'translateX(100%)';
+      return setTimeout(() => { showView('rooms'); chat.style.transform = ''; }, 160);
+    }
+    chat.style.transform = '';
+    return;
+  }
   if (s.line && s.dx > 70) {
     const m = state.messages.find((x) => x.id === Number(s.line.dataset.id));
-    if (m) { haptic(); setReply(m); }
+    if (m) setReply(m);
     return;
   }
   if (s.header && Math.abs(s.dx) > 70) stepRoom(s.dx < 0 ? 1 : -1, false);
 });
 document.addEventListener('touchcancel', () => {
-  if (swipe?.line) swipe.line.style.transform = '';
+  if (swipe?.line) { swipe.line.classList.remove('dragging'); swipe.line.style.transform = ''; }
+  if (swipe?.edge) { $('.chat').classList.remove('dragging'); $('.chat').style.transform = ''; }
   swipe = null;
 });
 

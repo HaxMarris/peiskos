@@ -1654,6 +1654,10 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .account-text { flex: 1; min-width: 0; display: grid; }
 .auth-accounts { display: grid; gap: 6px; margin-top: 12px; }
 #messages .line { transition: transform 0.15s ease; }
+/* Swipes on phones follow the finger, then ease back. */
+#messages .line.dragging, .chat.dragging { transition: none; }
+@media (max-width: 760px) { .chat { transition: transform .16s ease-out; } }
+#messages .line.dragging::after { content: ''; position: absolute; left: -34px; top: 50%; width: 22px; height: 22px; margin-top: -11px; border-radius: 50%; opacity: var(--swipe, 0); transform: scale(calc(.6 + var(--swipe, 0) * .4)); background: var(--accent-soft) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath fill='%23b9501a' d='M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11Z'/%3E%3C/svg%3E") center / 14px no-repeat; }
 @media (hover: none) { #shortcuts-btn { display: none; } }
 /* ---- Server admin, bots and webhooks, slash commands */
 .modal-card.admin-modal { max-width: 640px; }
