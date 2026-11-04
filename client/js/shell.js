@@ -7,6 +7,16 @@
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
+/** Grey shapes where something is loading: 'cards' (message-like rows), 'lines' (text) or 'grid' (tiles). */
+function placeholder(kind = 'lines', n = 3) {
+  const widths = [[22, 64], [18, 42], [26, 80, 36], [20, 55], [24, 70]];
+  const body = kind === 'grid'
+    ? `<div class="ph-grid">${'<span></span>'.repeat(n)}</div>`
+    : Array.from({ length: n }, (_, i) => kind === 'cards'
+      ? `<div class="skeleton-row"><span class="skeleton-avatar"></span><span class="skeleton-lines">${widths[i % 5].map((w) => `<span style="width:${w}%"></span>`).join('')}</span></div>`
+      : `<span class="ph-line" style="width:${[78, 52, 66, 40, 70][i % 5]}%"></span>`).join('');
+  return `<div class="placeholder ph-${kind}" role="status" aria-label="Loading">${body}</div>`;
+}
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 /** "Today at 9:41 PM", or just "9:41 PM" with `short`, under a date line that already says the day. */

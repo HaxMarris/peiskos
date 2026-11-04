@@ -114,12 +114,12 @@ export function casino(ctx: CasinoContext) {
   };
   const plays = allowance(30, 10);
   const play = (user: User) => {
-    if (!plays.take(user.id)) throw fail(429, 'Slow down a little');
+    if (!plays.take(user.id)) throw fail(429, 'Slow down a little, then try again');
   };
   /** The hearth whose casino this is: you have to be in it. */
   const hearth = (id: string, userId: number) => {
     const h = Number(id);
-    if (!ctx.isMember(h, userId)) throw fail(404, 'Hearth not found');
+    if (!ctx.isMember(h, userId)) throw fail(404, "That hearth is gone, or you're not in it.");
     return h;
   };
   const wholeChips = (value: unknown, what: string) => {

@@ -181,8 +181,9 @@ test('forwarding copies the message and its files', async () => {
     headers: { authorization: `Bearer ${sam.token}`, 'content-type': 'image/png', 'x-filename': 'moose.png' },
     body: PNG,
   }).then((r) => r.json() as any);
-  const original = await say(room, sam, 'look', { attachmentIds: [up.id], spoilerIds: [up.id] });
+  const original = await say(room, sam, 'look', { attachmentIds: [up.id], spoilerIds: [up.id], descriptions: { [up.id]: '  A moose in the snow ' } });
   assert.equal(original.attachments[0].spoiler, true);
+  assert.equal(original.attachments[0].alt, 'A moose in the snow', 'a picture keeps its description, trimmed');
   const fwd = (await call(`/api/messages/${original.id}/forward`, { body: { channelId: other }, token: max.token })).data;
   assert.equal(fwd.content, 'look');
   assert.equal(fwd.authorId, max.user.id);
@@ -190,6 +191,7 @@ test('forwarding copies the message and its files', async () => {
   assert.match(fwd.forwarded.from, /general/);
   assert.notEqual(fwd.attachments[0].id, up.id);
   assert.equal(fwd.attachments[0].spoiler, true);
+  assert.equal(fwd.attachments[0].alt, 'A moose in the snow');
   // The copy keeps working after the original goes.
   await call(`/api/messages/${original.id}`, { method: 'DELETE', token: sam.token });
   await new Promise((r) => setTimeout(r, 50));
@@ -407,4 +409,27 @@ test('link previews never reach private addresses', async () => {
   await assert.rejects(fetchEmbed('http://127.0.0.1:1/'), /private/);
   assert.deepEqual(linksIn('see https://a.com/x, `https://code.com` and <https://quiet.com> https://a.com/x'), ['https://a.com/x']);
   assert.equal(parsePage('<title>Just a title</title>', 'https://x.com').title, 'Just a title');
+});
+
+test('drafts follow you to your other devices, and go when sent', async () => {
+  const [max, eve] = await people('max', 'eve');
+  const { room } = await burrow(max);
+  const other = openSocket(max.token);
+  await other.opened;
+  const saved = await call(`/api/channels/${room}/draft`, { body: { content: 'half a thou' }, token: max.token });
+  assert.equal(saved.status, 200);
+  const ev = await other.next((e) => e.type === 'draft' && e.content === 'half a thou');
+  assert.equal(ev.channelId, room);
+  assert.deepEqual((await call('/api/drafts', { token: max.token })).data.map((d: any) => [d.channelId, d.content]), [[room, 'half a thou']]);
+  // Someone who can't see the room can't leave a draft there.
+  assert.equal((await call(`/api/channels/${room}/draft`, { body: { content: 'hi' }, token: eve.token })).status, 404); // a room they can't see
+  // Sending clears it everywhere.
+  await say(room, max, 'half a thought, finished');
+  await other.next((e) => e.type === 'draft' && e.content === '');
+  assert.deepEqual((await call('/api/drafts', { token: max.token })).data, []);
+  // An empty draft is a deleted one.
+  await call(`/api/channels/${room}/draft`, { body: { content: 'again' }, token: max.token });
+  await call(`/api/channels/${room}/draft`, { body: { content: '   ' }, token: max.token });
+  assert.deepEqual((await call('/api/drafts', { token: max.token })).data, []);
+  other.ws.close();
 });

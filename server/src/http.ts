@@ -77,7 +77,7 @@ export const readBody = (req: IncomingMessage) =>
     const chunks: Buffer[] = [];
     req.on('data', (c: Buffer) => {
       size += c.length;
-      if (size > 1_000_000) reject(new HttpError(413, 'Body too large'));
+      if (size > 1_000_000) reject(new HttpError(413, "That's too much to send at once"));
       else chunks.push(c);
     });
     req.on('end', () => {

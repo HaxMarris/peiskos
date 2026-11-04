@@ -533,6 +533,7 @@ async function enterApp() {
   syncAdminButton();
   await loadServers();
   connect();
+  loadDrafts();
   loadSavedAndScheduled();
   loadFriends();
   openPendingInvite();
@@ -710,6 +711,9 @@ function handleEvent(ev) {
         if (state.reachedEnd) {
           state.messages.push(m);
           appendMessage(m, { stick: mine });
+          // Screen readers hear new messages from others in the room you're in (and nothing when
+          // the whole room redraws, which a live message list would read out in full).
+          if (!mine && !isBlocked(m.authorId)) $('#sr-announce').textContent = `${nameOf(m.authorId)}: ${plainText(m.content ?? '').slice(0, 300) || 'sent an attachment'}`;
           renderSeen();
           renderOutbox(); // anything still sending or waiting stays at the end
         } else if (mine) loadPresent();
@@ -727,6 +731,9 @@ function handleEvent(ev) {
       }
       break;
     }
+    case 'draft':
+      takeDraft(ev.channelId, ev.content, ev.updatedAt);
+      break;
     case 'message_updated': {
       const i = state.messages.findIndex((x) => x.id === ev.message.id);
       if (i >= 0) state.messages[i] = ev.message;

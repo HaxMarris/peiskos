@@ -1,5 +1,5 @@
 # Runs on every pull request (and on main): the server's type check and tests, a check of the
-# web client's scripts, the desktop app's scripts, and a test build of the Docker image.
+# web client's scripts, the desktop app's scripts, the screens and speed check, and a test build of the Docker image.
 name: Checks
 
 on:
@@ -49,6 +49,42 @@ jobs:
           TOOLS_DIR: ${{ runner.temp }}/tools/node_modules
       - name: Desktop app scripts parse
         run: for f in desktop/*.js desktop/scripts/*.js; do node --check "$f" || exit 1; done
+
+  # Opens the app in Chromium at computer and phone size, light and dark, and fails on page errors,
+  # sideways scrolling on phones, serious accessibility problems, or a slower or heavier first open
+  # than the budgets in the script. The screens are saved in the "screens" artifact.
+  screens:
+    name: Screens and speed
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Start a demo server
+        run: |
+          cd server && npm ci
+          PORT=3000 DB_FILE=$RUNNER_TEMP/demo.db nohup node --no-warnings src/index.ts > $RUNNER_TEMP/server.log 2>&1 &
+          for i in $(seq 30); do curl -sf localhost:3000/api/config > /dev/null && break; sleep 1; done
+          curl -sf localhost:3000/api/config > /dev/null
+      - name: Playwright and axe-core
+        run: |
+          npm install --no-save --no-package-lock playwright@1.56.1 axe-core@4.10.2
+          npx playwright install --with-deps chromium
+      - run: node .github/scripts/ui-check.mjs
+        env:
+          OUT_DIR: screens
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: screens
+          path: screens
+          retention-days: 14
+      - if: failure()
+        run: tail -50 $RUNNER_TEMP/server.log
 
   docker:
     name: Docker image builds

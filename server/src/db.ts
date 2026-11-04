@@ -227,6 +227,8 @@ function addChatExtras(db: Db) {
   addColumn(db, 'messages', 'embeds_off', 'INTEGER NOT NULL DEFAULT 0');
   // Pictures hidden until tapped, and recorded voice messages (their length).
   addColumn(db, 'attachments', 'spoiler', 'INTEGER NOT NULL DEFAULT 0');
+  // What a picture shows, in words, for screen readers and when it can't load.
+  addColumn(db, 'attachments', 'alt', 'TEXT');
   addColumn(db, 'attachments', 'voice_seconds', 'REAL');
   // A thread is a room of kind 'thread' that hangs off one message in another room.
   addColumn(db, 'channels', 'parent_id', 'INTEGER REFERENCES channels(id) ON DELETE CASCADE');
@@ -245,6 +247,14 @@ function addChatExtras(db: Db) {
       edited_at  INTEGER NOT NULL
     );
     CREATE INDEX IF NOT EXISTS message_edits_by_message ON message_edits(message_id);
+    -- What someone has typed in a room and not sent yet, so it follows them to their other devices.
+    CREATE TABLE IF NOT EXISTS drafts (
+      user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+      content    TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, channel_id)
+    );
     CREATE TABLE IF NOT EXISTS saved_messages (
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       message_id INTEGER NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
@@ -659,6 +669,16 @@ function addHosting(db: Db) {
     );
     CREATE INDEX IF NOT EXISTS webhooks_by_server ON webhooks(server_id);
     -- Crashes in people's apps, the same one counted once.
+    -- What people sent with Send feedback, for whoever runs the server. The screenshot is a small JPEG or PNG.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id         INTEGER PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      text       TEXT NOT NULL,
+      app        TEXT NOT NULL DEFAULT '',
+      picture    BLOB,
+      created_at INTEGER NOT NULL,
+      done_at    INTEGER
+    );
     CREATE TABLE IF NOT EXISTS client_errors (
       id       INTEGER PRIMARY KEY,
       hash     TEXT NOT NULL UNIQUE,

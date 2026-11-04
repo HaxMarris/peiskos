@@ -377,8 +377,9 @@ async function sendComposer() {
     const uploaded = await Promise.all(files.map((p) => p.done));
     const attachmentIds = uploaded.map((a) => a.id);
     const spoilerIds = uploaded.filter((a, i) => files[i].spoiler).map((a) => a.id);
+    const descriptions = Object.fromEntries(uploaded.map((a, i) => [a.id, files[i].alt?.trim()]).filter(([, d]) => d));
     // Turned down by the server after it went out: the files are already uploaded, so they come back as they are.
-    await sendMessage(channelId, { content, attachmentIds, spoilerIds, replyTo: replyTo?.id }, (err) => putBack(err));
+    await sendMessage(channelId, { content, attachmentIds, spoilerIds, descriptions, replyTo: replyTo?.id }, (err) => putBack(err));
     // Their previews are let go once the message is surely sent (or was put back and is still in use).
     setTimeout(() => files.forEach((p) => p.previewUrl && !state.pending.includes(p) && URL.revokeObjectURL(p.previewUrl)), 30000);
   } catch (err) {
@@ -570,6 +571,8 @@ function modal(html, kind = '') {
   $('#modal').classList.remove('hidden');
   $('#modal-card').querySelectorAll('[data-close]').forEach((b) => (b.onclick = closeModal));
   if (settingsFrame) { wireSettingsFrame(); addSettingsSearch(); }
+  // Screen readers name the dialog by its heading.
+  $('#modal').setAttribute('aria-label', $('#modal-card').querySelector('h2')?.textContent.trim() || 'Dialog');
   $('#modal-card').querySelector(settingsFrame ? '.settings-pane input' : 'input')?.focus();
 }
 
@@ -895,7 +898,7 @@ function openHearthSettings(serverId, first) {
     can(s, 'messages') && { id: 'reports', group: 'People', label: 'Reports', keywords: 'moderation flagged', count: s.openReports, run: () => openReports(s.id) },
     can(s, 'audit') && { id: 'audit', group: 'People', label: 'Audit log', keywords: 'history changes who did', run: () => openAudit(s.id) },
     can(s, 'ban') && { id: 'bans', group: 'People', label: 'Bans', keywords: 'ban kick block unban', run: () => {
-      modal('<h2>Bans</h2><div id="ban-list"><p class="muted">Loading…</p></div>');
+      modal('<h2>Bans</h2><div id="ban-list">' + placeholder('cards', 2) + '</div>');
       renderBans(s, true);
     } },
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },

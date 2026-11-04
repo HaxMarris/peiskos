@@ -13,7 +13,8 @@ function renderServers() {
   const dmUnread = state.dmOrder.some((id) => hasUnread(state.servers.get(id)));
 
   const homePill = document.createElement('button');
-  homePill.className = 'pill home-pill' + (state.atHome ? ' on' : '');
+  // A new friend's getting-started steps wait on Home, so it shows a dot until they're done.
+  homePill.className = 'pill home-pill' + (state.atHome ? ' on' : '') + (!state.atHome && state.me && firstWeekHtml() ? ' unread' : '');
   homePill.innerHTML = `<span class="tile home-tile">${HOME_ICON}</span><span class="pill-name">Home</span>`;
   homePill.title = 'Home: what\'s happening everywhere';
   homePill.onclick = openHome;

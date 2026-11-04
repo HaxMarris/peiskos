@@ -662,6 +662,37 @@ function closeHome() {
   $('#home-view').classList.add('hidden');
 }
 
+// ---- a new friend's first week: a few steps on Home that make Peiskos feel like theirs. Each ticks
+// itself off when done, and the list goes once they're all done, after a week, or when hidden.
+const FIRST_WEEK_MS = 7 * 864e5;
+function firstWeekSteps() {
+  const hearth = state.serverOrder.map((id) => state.servers.get(id)).find(Boolean);
+  return [
+    { id: 'picture', label: 'Add a profile picture', done: !!state.me.avatar, run: () => openAccount('profile') },
+    { id: 'say', label: 'Say hi in a room', done: store.get('firstWeekSaid') === '1', run: () => hearth && selectServer(hearth.id).then(() => showView('chat')) },
+    state.voiceEnabled && { id: 'fire', label: 'Sit down at a fire', done: store.get('firstWeekFire') === '1', run: () => hearth && selectServer(hearth.id) },
+    { id: 'friend', label: 'Add a friend', done: (state.friends?.friends?.length ?? 0) > 0, run: () => openFriends() },
+    'Notification' in window && { id: 'alerts', label: 'Turn on alerts', done: Notification.permission !== 'default', run: () => Notification.requestPermission().then(renderHome) },
+  ].filter(Boolean);
+}
+function firstWeekHtml() {
+  const joined = state.me?.joinedAt;
+  if (!joined || Date.now() - joined > FIRST_WEEK_MS || store.get('firstWeekHidden') === '1') return '';
+  const steps = firstWeekSteps();
+  const left = steps.filter((x) => !x.done).length;
+  if (!left) return '';
+  const rows = steps.map((x) => `<li><button type="button" class="home-row first-week-step${x.done ? ' done' : ''}" data-first-week="${x.id}" ${x.done ? 'disabled' : ''}>
+    <span class="home-main"><span class="first-week-tick" aria-hidden="true"></span>${escapeHtml(x.label)}</span>${x.done ? '<span class="small muted">Done</span>' : ''}</button></li>`);
+  return `<section class="home-section first-week"><h3>Getting started · ${steps.length - left} of ${steps.length}</h3><ul>${rows.join('')}</ul>
+    <button type="button" class="link-btn small" id="first-week-hide">Hide this</button></section>`;
+}
+function wireFirstWeek(view) {
+  const steps = firstWeekSteps();
+  view.querySelectorAll('[data-first-week]').forEach((b) => (b.onclick = () => steps.find((x) => x.id === b.dataset.firstWeek)?.run()));
+  const hide = view.querySelector('#first-week-hide');
+  if (hide) hide.onclick = () => { store.set('firstWeekHidden', '1'); renderHome(); };
+}
+
 function renderHome() {
   const hearths = state.serverOrder.map((id) => state.servers.get(id)).filter(Boolean);
   const section = (title, items) => (items.length ? `<section class="home-section"><h3>${escapeHtml(title)}</h3><ul>${items.join('')}</ul></section>` : '');
@@ -700,6 +731,7 @@ function renderHome() {
     .map((f) => row(`data-dm="${f.id}"`, escapeHtml(nameOfPerson(f)), presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
 
   const parts = [
+    firstWeekHtml(),
     section('At a fire now', fires),
     section('For you', forYou),
     section('New messages', unread.slice(0, 12)),
@@ -715,6 +747,7 @@ function renderHome() {
   view.querySelectorAll('[data-event]').forEach((b) => (b.onclick = () => { const [s, e] = b.dataset.event.split(':').map(Number); openEvent(s, e); }));
   view.querySelectorAll('[data-person]').forEach((b) => (b.onclick = () => openPersonById(Number(b.dataset.person))));
   view.querySelectorAll('[data-dm]').forEach((b) => (b.onclick = () => openDm(Number(b.dataset.dm))));
+  wireFirstWeek(view);
   const all = $('#home-read-all');
   if (all) all.onclick = () => { for (const s of state.servers.values()) if (serverUnread(s) || [...s.channels, ...(s.threads ?? [])].some((c) => c.mentions)) markServerRead(s); };
 }

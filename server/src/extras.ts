@@ -136,7 +136,7 @@ export function extras(ctx: ExtrasContext) {
   };
   const hearth = (serverId: number, userId: number) => {
     const s = db.prepare("SELECT kind FROM servers WHERE id = ?").get(serverId) as { kind: string } | undefined;
-    if (!s || s.kind !== 'burrow' || !ctx.isMember(serverId, userId)) throw fail(404, 'Hearth not found');
+    if (!s || s.kind !== 'burrow' || !ctx.isMember(serverId, userId)) throw fail(404, "That hearth is gone, or you're not in it.");
   };
   route('GET', '/api/servers/:id/fire', ({ user, params }) => {
     const serverId = Number(params[0]);

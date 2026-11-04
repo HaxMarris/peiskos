@@ -73,7 +73,7 @@ test('invisible messages are empty, and direction overrides are taken out', asyn
   for (const content of ['​', ' ​⁠ ', '﻿\nㅤ', '‮']) {
     const r = await post(content);
     assert.equal(r.status, 400, JSON.stringify(content));
-    assert.equal(r.data.error, 'Message is empty');
+    assert.equal(r.data.error, 'Write something first');
   }
   const flipped = await post('see ‮gnp.exe');
   assert.equal(flipped.data.content, 'see gnp.exe');

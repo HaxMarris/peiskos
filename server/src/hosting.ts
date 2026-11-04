@@ -298,6 +298,54 @@ export function hosting(ctx: HostingContext) {
     db.prepare(`DELETE FROM client_errors WHERE id NOT IN (SELECT id FROM client_errors ORDER BY last_at DESC LIMIT ${MAX_ERRORS})`).run();
     return { ok: true };
   }, false);
+  // ---- feedback: what people send from the app, with an optional screenshot
+
+  const MAX_FEEDBACK = 300;
+  const MAX_FEEDBACK_PICTURE = 700 * 1024;
+  const sentFeedback = new Map<number, number[]>();
+  route('POST', '/api/feedback', ({ body, user }) => {
+    const text = typeof body.text === 'string' ? body.text.trim() : '';
+    if (!text) throw fail(400, 'Write what you want to say first');
+    if (text.length > 4000) throw fail(400, 'Feedback can be at most 4000 characters. Shorten it, or send it in two parts.');
+    const t = now();
+    const recent = (sentFeedback.get(user.id) ?? []).filter((at) => at > t - 3600_000);
+    if (recent.length >= 10) throw fail(429, "You've sent 10 in the last hour. Try again later.");
+    let picture: Buffer | null = null;
+    if (typeof body.picture === 'string' && body.picture) {
+      const m = /^data:image\/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)$/.exec(body.picture);
+      if (!m) throw fail(400, 'The screenshot has to be a JPEG, PNG or WebP picture');
+      picture = Buffer.from(m[2], 'base64');
+      if (picture.length > MAX_FEEDBACK_PICTURE) throw fail(413, 'That screenshot is too big. Try a smaller one.');
+    }
+    recent.push(t);
+    sentFeedback.set(user.id, recent);
+    db.prepare('INSERT INTO feedback (user_id, text, app, picture, created_at) VALUES (?, ?, ?, ?, ?)')
+      .run(user.id, text, String(body.app ?? '').slice(0, 400), picture, t);
+    db.prepare(`DELETE FROM feedback WHERE id NOT IN (SELECT id FROM feedback ORDER BY id DESC LIMIT ${MAX_FEEDBACK})`).run();
+    return { ok: true };
+  });
+  const feedbackList = () =>
+    db.prepare(`SELECT f.id, f.text, f.app, f.created_at AS createdAt, f.done_at AS doneAt, picture IS NOT NULL AS hasPicture,
+                  u.username, COALESCE(u.display_name, u.username) AS name
+                FROM feedback f LEFT JOIN users u ON u.id = f.user_id ORDER BY f.done_at IS NOT NULL, f.id DESC LIMIT 100`).all()
+      .map((r) => ({ ...(r as object), hasPicture: !!(r as { hasPicture: number }).hasPicture }));
+  route('GET', '/api/admin/feedback', admin(() => ({ feedback: feedbackList() })));
+  route('GET', '/api/admin/feedback/:id/picture', admin(({ params }) => {
+    const r = db.prepare('SELECT picture FROM feedback WHERE id = ?').get(Number(params[0])) as { picture: Uint8Array | null } | undefined;
+    if (!r?.picture) throw fail(404, "That screenshot isn't there any more");
+    const b = Buffer.from(r.picture);
+    const type = b[0] === 0x89 ? 'png' : b[0] === 0xff ? 'jpeg' : 'webp';
+    return { picture: `data:image/${type};base64,${b.toString('base64')}` };
+  }));
+  route('POST', '/api/admin/feedback/:id/done', admin(({ params, body }) => {
+    db.prepare('UPDATE feedback SET done_at = ? WHERE id = ?').run(body.done === false ? null : now(), Number(params[0]));
+    return { feedback: feedbackList() };
+  }));
+  route('DELETE', '/api/admin/feedback/:id', admin(({ params }) => {
+    db.prepare('DELETE FROM feedback WHERE id = ?').run(Number(params[0]));
+    return { feedback: feedbackList() };
+  }));
+
   const errorList = () =>
     db.prepare(`SELECT id, message, stack, where_at AS "where", app, first_at AS firstAt, last_at AS lastAt, count,
                   (SELECT username FROM users WHERE id = user_id) AS username
@@ -393,6 +441,7 @@ export function hosting(ctx: HostingContext) {
       signup: { mode: signupMode(), codeSet: !!ctx.registrationCode, links: signupLinks() },
       updater: updaterStatus(),
       errors: (db.prepare('SELECT COUNT(*) AS n FROM client_errors').get() as { n: number }).n,
+      feedback: (db.prepare('SELECT COUNT(*) AS n FROM feedback WHERE done_at IS NULL').get() as { n: number }).n,
       checks: checks(secure),
     };
   }));

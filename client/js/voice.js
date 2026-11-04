@@ -26,11 +26,12 @@ function loadLivekit() {
 // muted: start with your mic off (moved to the AFK fire). deafened: keep it on when moved.
 async function joinVoice(channelId, { muted = false, deafened = false, rejoin = false } = {}) {
   if (state.voice?.channelId === channelId) return;
-  if (!state.voiceEnabled) return notice('Voice is not set up on this server yet.');
+  if (!state.voiceEnabled) return notice("Fires aren't set up on this server yet. Tell whoever runs it.");
   if (!rejoin) cancelRejoin();
   leaveVoice(true);
   const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted };
   state.voice = voice;
+  store.set('firstWeekFire', '1');
   state.fireside = { channelId, messages: [], unread: 0 };
   // Made now, while the click still counts, or some browsers start it paused.
   if (wantsMicProcessor()) voice.micCtx = newMicContext();

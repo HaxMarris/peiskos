@@ -138,6 +138,16 @@ test('invite links that run out, the invite page and a new code', async () => {
   assert.equal(page.data.name, 'Den');
   assert.equal(page.data.members, 2);
   assert.equal(page.data.inviteCode, undefined);
+  assert.match(page.data.invitedBy, /^sam/, 'a personal invite says who sent it');
+  assert.equal((await call(`/api/invites/${server.inviteCode}`)).data.invitedBy, null, 'the hearth-wide code names nobody');
+
+  // The link itself names the hearth for chat apps' link previews, then opens the app.
+  const preview = await fetch(`${base}/invite/${made.code}`);
+  assert.equal(preview.status, 200);
+  const html = await preview.text();
+  assert.match(html, /<meta property="og:title" content="sam\w* invited you to Den">/);
+  assert.match(html, /og:image" content="http:\/\/[^"]+\/icon-512\.png"/);
+  assert.match(html, new RegExp(`http-equiv="refresh" content="0;url=/\\?invite=${made.code}"`));
 
   assert.equal((await call('/api/join', { body: { inviteCode: `https://burrow.example/invite/${made.code}` }, token: mia.token })).status, 200);
   const usedUp = await call('/api/join', { body: { inviteCode: made.code }, token: ola.token });
@@ -155,10 +165,10 @@ test('invite links that run out, the invite page and a new code', async () => {
   assert.equal((await call('/api/join', { body: { inviteCode: server.inviteCode }, token: eve.token })).status, 404);
   assert.equal((await call('/api/join', { body: { inviteCode: fresh.inviteCode }, token: eve.token })).status, 200);
 
-  // Invite links open the app with the code, which shows the burrow before joining.
-  const link = await fetch(`${base}/invite/${made.code}`, { redirect: 'manual' });
-  assert.equal(link.status, 302);
-  assert.equal(link.headers.get('location'), `/?invite=${made.code}`);
+  // A link that no longer works still opens the app (which says so), and gives away nothing.
+  const gone = await (await fetch(`${base}/invite/${made.code}`)).text();
+  assert.doesNotMatch(gone, /og:title/);
+  assert.match(gone, new RegExp(`url=/\\?invite=${made.code}`));
 });
 
 test('burrow details, rules, welcome room and handing it over', async () => {

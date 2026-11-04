@@ -179,7 +179,7 @@ function badgeImage(count) {
 async function openInbox() {
   modal(`<h2>Mentions and replies</h2>
     <p class="muted small">Everything that @mentioned you, replied to you, or pinged @everyone or one of your roles.</p>
-    <div id="inbox-list" class="card-list"><p class="muted">Loading…</p></div>
+    <div id="inbox-list" class="card-list">${placeholder('cards', 3)}</div>
     <div class="modal-row"><button class="btn secondary" id="inbox-more" hidden>Show older</button><span class="spacer"></span></div>`);
   let before = 0;
   const load = async () => {
