@@ -789,9 +789,12 @@ export function createApp(opts: AppOptions): Server {
   // A name someone gave up (by deleting the account or renaming) waits this long before anyone else can take it.
   const NAME_HOLD_MS = 30 * 24 * 60 * 60 * 1000;
   const heldNameKey = (name: string) => `held_name:${name.toLowerCase()}`;
-  const holdName = (name: string, userId: number) =>
+  /** Holds someone's old name for them. Only the latest one: renaming again lets the one before go, so nobody can collect names. */
+  const holdName = (name: string, userId: number) => {
+    db.prepare("DELETE FROM app_settings WHERE key LIKE 'held_name:%' AND json_extract(value, '$.userId') = ?").run(userId);
     db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
       .run(heldNameKey(name), JSON.stringify({ until: now() + NAME_HOLD_MS, userId }));
+  };
   /** Throws unless `username` is free for this person (or a new one) to take. */
   const checkNameFree = (username: string, userId?: number) => {
     const lower = username.toLowerCase();
@@ -2136,6 +2139,7 @@ export function createApp(opts: AppOptions): Server {
     const disk = await statfs(opts.uploadDir!).catch(() => null);
     if (disk && disk.bavail * disk.bsize - bytes < MIN_FREE_DISK) throw new HttpError(507, 'This server is nearly out of space, so it can\'t take files right now. Tell whoever runs it.');
   };
+  const overDay = () => new HttpError(429, `You've shared ${Math.round(DAILY_UPLOAD / 1048576)} MB of files today, the most for a day. Try again tomorrow.`);
   const filePath = (id: string) => join(opts.uploadDir!, id);
   const removeFiles = (rows: Json[]) => {
     if (!opts.uploadDir) return;
@@ -2166,7 +2170,6 @@ export function createApp(opts: AppOptions): Server {
     const declared = Number(req.headers['content-length']);
     if (declared > limit) throw tooBig();
     const today = uploadedToday(user.id);
-    const overDay = () => new HttpError(429, `You've shared ${Math.round(DAILY_UPLOAD / 1048576)} MB of files today, the most for a day. Try again tomorrow.`);
     if (today + (declared > 0 ? declared : 1) > DAILY_UPLOAD) throw overDay();
     uploading.set(user.id, (uploading.get(user.id) ?? 0) + 1);
     try {
@@ -2186,7 +2189,8 @@ export function createApp(opts: AppOptions): Server {
     try {
       name = decodeURIComponent(String(req.headers['x-filename'] ?? 'file'));
     } catch {}
-    name = name.replace(/[\\/\x00-\x1f]/g, '_').trim().slice(-200) || 'file';
+    // Without right-to-left marks too, which can make "invoice‮fdp.exe" look like "invoiceexe.pdf".
+    name = withoutBidi(name).replace(/[\\/\x00-\x1f]/g, '_').trim().slice(-200) || 'file';
     const type = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase() || 'application/octet-stream';
 
     const id = randomBytes(16).toString('base64url');
@@ -2470,6 +2474,9 @@ export function createApp(opts: AppOptions): Server {
     }
     const kind = GIF_TYPES.find((t) => t.magic(data));
     if (!kind) throw new HttpError(502, "Couldn't fetch that GIF");
+    // Saved GIFs are files like any other: they count toward the day's uploads and need room on disk.
+    if (uploadedToday(user.id) + data.length > DAILY_UPLOAD) throw overDay();
+    await roomOnDisk(data.length);
     const id = randomBytes(16).toString('base64url');
     const name = `${gif.title.replace(/[^\p{L}\p{N} _-]/gu, '').trim().slice(0, 60) || 'gif'}.${kind.ext}`;
     await mkdir(opts.uploadDir!, { recursive: true });
@@ -3045,8 +3052,14 @@ export function createApp(opts: AppOptions): Server {
         | (User & { reset_code: string | null; reset_expires: number | null; reset_tries: number })
         | undefined;
       if (!u?.reset_code || !u.reset_expires || u.reset_expires < now()) throw new HttpError(400, 'That code has run out. Ask for a new one.');
+      // Wrong guesses from addresses they've never logged in from count up for the account across
+      // every code, so asking for new codes from many addresses doesn't buy more guesses. Where they
+      // have logged in before it doesn't apply, so strangers can't use it to stop their reset.
+      const guesses = knownAddress(u.id, ip) ? null : `reset-guess:${u.id}`;
+      if (guesses) checkTries([guesses], 15);
       if (!sameText(hashCode(String(body.code ?? '').trim()), u.reset_code)) {
         failedTry([`reset-ip:${ip}`]);
+        if (guesses) failedTry([guesses], 24 * 60 * 60 * 1000);
         // Five wrong guesses and the code is gone, so it can't be guessed.
         if (u.reset_tries + 1 >= 5) db.prepare('UPDATE users SET reset_code = NULL WHERE id = ?').run(u.id);
         else db.prepare('UPDATE users SET reset_tries = reset_tries + 1 WHERE id = ?').run(u.id);

@@ -117,3 +117,13 @@ test('being removed or banned, or the hearth being deleted, says why', async () 
   assert.equal((await b.gone()).reason, 'deleted');
   b.ws.close();
 });
+
+test("renaming over and over doesn't hold on to every name passed through", async () => {
+  const ivy = await reg('ivy');
+  for (const name of ['ivy-one', 'ivy-two', 'ivy-three']) {
+    assert.equal((await call('/api/me/username', { body: { username: name, password: 'password1' }, token: ivy.token })).status, 200);
+  }
+  // Only the name just given up is held; the ones before it are free again.
+  assert.equal((await register('ivy-one')).status, 200);
+  assert.equal((await register('ivy-two')).status, 409);
+});
