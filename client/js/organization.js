@@ -592,7 +592,7 @@ function inviteCardHtml(p) {
   return `${p.banner ? `<div class="invite-banner"><img src="${escapeHtml(state.serverUrl + p.banner)}" alt="" /></div>` : ''}
     <div class="invite-body">
       <span class="invite-tile"></span>
-      <div><div class="muted small">You're invited to</div><b>${escapeHtml(p.name)}</b>
+      <div><div class="muted small">${p.invitedBy ? `${escapeHtml(p.invitedBy)} invited you to` : "You're invited to"}</div><b>${escapeHtml(p.name)}</b>
       <div class="muted small">${p.members} member${p.members === 1 ? '' : 's'} · ${p.online} online</div></div>
     </div>
     ${p.description ? `<p class="small">${escapeHtml(p.description)}</p>` : ''}`;

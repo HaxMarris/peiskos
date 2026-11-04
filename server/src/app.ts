@@ -137,6 +137,8 @@ export function createApp(opts: AppOptions): Server {
     return user;
   };
 
+  const escHtml = (t: string) => t.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
   // ---- guessing limits ----------------------------------------------------
   // Wrong passwords and registration codes are counted per person and per address;
   // too many in a row and that door closes for a while.
@@ -4140,13 +4142,13 @@ export function createApp(opts: AppOptions): Server {
     const code = String(raw ?? '').trim().split('/').pop() ?? '';
     const permanent = db.prepare("SELECT id FROM servers WHERE invite_code = ? AND kind = 'burrow'").get(code) as { id: number } | undefined;
     if (permanent) return { serverId: permanent.id, invite: null };
-    const inv = db.prepare('SELECT code, server_id, expires_at, max_uses, uses FROM invites WHERE code = ?').get(code) as
-      | { code: string; server_id: number; expires_at: number | null; max_uses: number | null; uses: number }
+    const inv = db.prepare('SELECT code, server_id, expires_at, max_uses, uses, created_by FROM invites WHERE code = ?').get(code) as
+      | { code: string; server_id: number; expires_at: number | null; max_uses: number | null; uses: number; created_by: number | null }
       | undefined;
     if (!inv) throw new HttpError(404, 'Invite code not found');
     if (inv.expires_at !== null && inv.expires_at <= now()) throw new HttpError(410, 'This invite has expired');
     if (inv.max_uses !== null && inv.uses >= inv.max_uses) throw new HttpError(410, 'This invite has been used up');
-    return { serverId: inv.server_id, invite: inv.code };
+    return { serverId: inv.server_id, invite: inv.code, createdBy: inv.created_by };
   };
 
   const invitesOf = (serverId: number, user: User) => {
@@ -4205,6 +4207,24 @@ export function createApp(opts: AppOptions): Server {
     return serverSummary(serverId, user.id);
   });
 
+  // What an invite shows before joining: the hearth, how many are in it, and who sent a personal
+  // invite (still a member), so a friend knows it's from someone they know.
+  const invitePreview = (target: { serverId: number; createdBy?: number | null }) => {
+    const s = db
+      .prepare(
+        `SELECT name, description,
+                CASE WHEN icon IS NULL THEN NULL ELSE '/api/burrow-pictures/' || icon END AS icon,
+                CASE WHEN banner IS NULL THEN NULL ELSE '/api/burrow-pictures/' || banner END AS banner
+         FROM servers WHERE id = ?`,
+      )
+      .get(target.serverId) as { name: string; description: string | null; icon: string | null; banner: string | null };
+    const ids = serverMemberIds(target.serverId);
+    const by = target.createdBy && ids.includes(target.createdBy)
+      ? (db.prepare('SELECT COALESCE(display_name, username) AS name FROM users WHERE id = ? AND deleted_at IS NULL').get(target.createdBy) as { name: string } | undefined)
+      : undefined;
+    return { ...s, members: ids.length, online: ids.filter((id) => online.has(id)).length, invitedBy: by?.name ?? null };
+  };
+
   // What an invite link opens, shown before joining. Anyone with the link can see this much.
   route(
     'GET',
@@ -4218,19 +4238,35 @@ export function createApp(opts: AppOptions): Server {
         failedTry([`invite:${ip}`]);
         throw err;
       }
-      const s = db
-        .prepare(
-          `SELECT name, description,
-                  CASE WHEN icon IS NULL THEN NULL ELSE '/api/burrow-pictures/' || icon END AS icon,
-                  CASE WHEN banner IS NULL THEN NULL ELSE '/api/burrow-pictures/' || banner END AS banner
-           FROM servers WHERE id = ?`,
-        )
-        .get(target.serverId) as Json;
-      const ids = serverMemberIds(target.serverId);
-      return { ...s, members: ids.length, online: ids.filter((id) => online.has(id)).length };
+      return invitePreview(target);
     },
     false,
   );
+
+  // An invite link is a small page that names the hearth for link previews (chat apps read these
+  // tags), then sends the browser on to the app, which shows the invite. A bad code just goes on.
+  const sendInvitePage = (req: IncomingMessage, res: ServerResponse, code: string) => {
+    const go = `/?invite=${code}`;
+    const ip = clientIp(req);
+    let tags = '';
+    try {
+      checkTries([`invite:${ip}`], 60);
+      const p = invitePreview(inviteTarget(code));
+      const secure = req.headers['x-forwarded-proto'] === 'https' || !!(req.socket as { encrypted?: boolean }).encrypted;
+      const base = (opts.publicUrl || `${secure ? 'https' : 'http'}://${String(req.headers.host ?? 'localhost')}`).replace(/\/$/, '');
+      const title = p.invitedBy ? `${p.invitedBy} invited you to ${p.name}` : `Join ${p.name} on Peiskos`;
+      const about = p.description?.trim() || `${p.members} member${p.members === 1 ? '' : 's'} on Peiskos.`;
+      tags = [
+        ['og:title', title], ['og:description', about], ['og:site_name', 'Peiskos'], ['og:type', 'website'],
+        ['og:url', `${base}/invite/${code}`], ['og:image', `${base}${p.icon ?? '/icon-512.png'}`],
+      ].map(([k, v]) => `<meta property="${k}" content="${escHtml(v)}">`).join('')
+        + `<meta name="twitter:card" content="summary"><title>${escHtml(title)}</title>`;
+    } catch (err) {
+      if (err instanceof HttpError && err.status !== 429) failedTry([`invite:${ip}`]);
+    }
+    const html = `<!doctype html><html><head><meta charset="utf-8">${tags || '<title>Peiskos</title>'}<meta http-equiv="refresh" content="0;url=${go}"></head><body><a href="${go}">Open Peiskos</a></body></html>`;
+    res.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' }).end(html);
+  };
 
   // ---- events: game nights and the like, with RSVPs and a reminder ----
 
@@ -5143,7 +5179,7 @@ export function createApp(opts: AppOptions): Server {
       res.setHeader('permissions-policy', 'camera=(self), display-capture=(self), geolocation=(), microphone=(self)');
       // Invite links open the app, which shows the burrow before joining.
       const invite = url.pathname.match(/^\/invite\/([\w-]{1,32})\/?$/);
-      if (invite) return res.writeHead(302, { location: `/?invite=${invite[1]}` }).end();
+      if (invite) return sendInvitePage(req, res, invite[1]);
       // Something shared from another app on a phone, before Burrow's service worker was there to
       // catch it: open the app (the shared things are lost, but it doesn't error).
       if (req.method === 'POST' && url.pathname === '/share') return res.writeHead(303, { location: '/' }).end();
