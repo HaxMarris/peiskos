@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import type { Json } from './http.ts';
 
 /** The games, and how many can play each. */
-export const GAMES = { melonbomber: 4, stockpile: 8 } as const;
+export const GAMES = { melonbomber: 4, stockpile: 8, sketchguess: 12, trivia: 12, sketchpad: 16 } as const;
 type GameName = keyof typeof GAMES;
 type Game = { name: GameName; hostId: number; players: Map<number, WebSocket>; since: number };
 

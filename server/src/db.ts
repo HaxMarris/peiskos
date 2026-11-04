@@ -1004,6 +1004,28 @@ function addPlanning(db: Db) {
       done_at    INTEGER
     );
     CREATE INDEX IF NOT EXISTS list_items_by_list ON list_items(message_id);
+    -- Fireside Trivia: which questions each hearth has had (so rounds bring new ones), and its own questions.
+    CREATE TABLE IF NOT EXISTS trivia_seen (
+      server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      question_id TEXT NOT NULL,
+      seen_at     INTEGER NOT NULL,
+      PRIMARY KEY (server_id, question_id)
+    );
+    CREATE TABLE IF NOT EXISTS trivia_own (
+      id         INTEGER PRIMARY KEY,
+      server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      author_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      question   TEXT NOT NULL,
+      answer     TEXT NOT NULL,
+      wrong      TEXT NOT NULL, -- JSON list
+      created_at INTEGER NOT NULL
+    );
+    -- Sketch & Guess: a hearth's own words to draw.
+    CREATE TABLE IF NOT EXISTS game_words (
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      word      TEXT NOT NULL,
+      PRIMARY KEY (server_id, word)
+    );
     -- A private web address per person that calendar apps read their hearths' events from.
     CREATE TABLE IF NOT EXISTS calendar_feeds (
       user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

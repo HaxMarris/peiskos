@@ -1,0 +1,11 @@
+.board { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
+.board canvas { display: block; border-radius: 14px; box-shadow: 0 6px 30px rgba(0,0,0,.45); cursor: crosshair; background: #fffdf7; }
+.tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; padding: 8px; }
+.swatches, .sizes { display: flex; flex-wrap: wrap; gap: 4px; }
+.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); padding: 0; }
+.swatch.on { outline: 3px solid var(--ember); outline-offset: 1px; }
+.size { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; padding: 0; }
+.size span { display: block; border-radius: 50%; background: var(--text); }
+.size.on { outline: 3px solid var(--ember); }
+.tool { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
+.tool.on { background: var(--ember); color: var(--ember-ink); }

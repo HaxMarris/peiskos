@@ -18,8 +18,28 @@ const FIRE_GAMES = {
     maxPlayers: 8,
     blurb: 'Build the piles from 1 to 12 and be the first to empty your stockpile. Wilds are anything. Two to eight players.',
   },
+  sketchguess: {
+    title: 'Sketch & Guess',
+    icon: '✏️',
+    maxPlayers: 12,
+    blurb: 'Take turns drawing a word while everyone else races to guess it. Two to twelve players.',
+  },
+  trivia: {
+    title: 'Fireside Trivia',
+    icon: '❓',
+    maxPlayers: 12,
+    blurb: 'Thousands of questions in two dozen categories, plus your hearth\'s own. Faster right answers score more.',
+  },
+  sketchpad: {
+    title: 'Sketchpad',
+    icon: '🎨',
+    maxPlayers: 16,
+    blurb: 'One big page everyone at the fire draws on together. Save it as a picture when you\'re done.',
+  },
 };
 const gameMax = (name) => FIRE_GAMES[name]?.maxPlayers ?? 4;
+// What a game's page may ask Peiskos's server for, on its player's behalf (games can't reach the network themselves).
+const GAME_API = [/^\/api\/trivia\/(categories\?serverId=\d+|round)$/, /^\/api\/servers\/\d+\/(trivia(\/\d+)?|game-words)$/];
 
 let fireGame = null; // { channelId, game: { name, hostId, players, since } } at your fire
 let gamePlay = null; // { name, frame, ready, queue, snapshot, busy } while you're playing, on this device
@@ -189,7 +209,8 @@ window.addEventListener('message', (e) => {
     gamePlay.ready = true;
     // The page loads again when it moves between windows (popping out); the host's game picks up
     // where it left off from the last snapshot it gave.
-    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g), resume: gamePlay.snapshot }, '*');
+    const hearthId = roomById(fireGame.channelId)?.s.id ?? null;
+    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g), resume: gamePlay.snapshot, serverId: hearthId }, '*');
     for (const q of gamePlay.queue.splice(0)) postToGame(q);
   } else if (m.kind === 'send') {
     if (m.to === 'all' || Number.isInteger(m.to)) sendGame({ action: 'send', to: m.to, data: m.data });
@@ -197,6 +218,15 @@ window.addEventListener('message', (e) => {
     leaveFireGame();
   } else if (m.kind === 'snapshot') {
     gamePlay.snapshot = m.data && typeof m.data === 'object' ? m.data : null;
+  } else if (m.kind === 'api') {
+    // A question for the server (Fireside Trivia's questions, a hearth's own words): the answer goes back to the page.
+    const frame = gamePlay.frame;
+    const reply = (out) => frame.contentWindow?.postMessage({ kind: 'api-result', id: m.id, ...out }, '*');
+    const path = String(m.path ?? '');
+    const method = ['GET', 'POST', 'PUT', 'DELETE'].includes(m.method) ? m.method : 'GET';
+    if (!GAME_API.some((re) => re.test(path))) return reply({ error: "Games can't ask for that" });
+    api(path, { method, body: m.body && typeof m.body === 'object' ? m.body : undefined })
+      .then((data) => reply({ data }), (err) => reply({ error: err.message }));
   } else if (m.kind === 'busy') {
     // A round that can't move between windows is going.
     gamePlay.busy = !!m.on;
