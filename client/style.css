@@ -432,7 +432,8 @@ label.check input { width: auto; }
 .modal-card form { display: flex; flex-direction: column; gap: 10px; }
 .modal-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 .invite-box { display: flex; gap: 8px; }
-.invite-box input { flex: 1; font-family: ui-monospace, monospace; }
+.invite-box input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
+@media (max-width: 760px) { .invite-box { flex-wrap: wrap; } .invite-box input { flex-basis: 100%; } .invite-box .btn { flex: 1; } }
 .or { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 13px; }
 .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 

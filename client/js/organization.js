@@ -532,6 +532,14 @@ const inviteLink = (code) => `${state.serverUrl}/invite/${code}`;
 const EXPIRES = [[1800, '30 minutes'], [3600, '1 hour'], [6 * 3600, '6 hours'], [86400, '1 day'], [7 * 86400, '7 days'], [30 * 86400, '30 days'], [0, 'Never']];
 const USES = [[0, 'No limit'], [1, '1 use'], [5, '5 uses'], [10, '10 uses'], [25, '25 uses'], [100, '100 uses']];
 
+// Phones (and some browsers) can hand a link straight to Messages, WhatsApp and the rest.
+const canShareLinks = typeof navigator.share === 'function';
+const shareButtonHtml = (id) => (canShareLinks ? `<button type="button" class="btn secondary" id="${id}">Share</button>` : '');
+function shareButton(btn, s, link) {
+  if (!btn) return;
+  btn.onclick = () => navigator.share({ title: `Join ${s.name} on Peiskos`, text: `Join ${s.name} on Peiskos`, url: link })
+    .catch((err) => { if (err?.name !== 'AbortError') navigator.clipboard?.writeText(link).then(() => toast('Link copied')); });
+}
 function copyButton(btn, text) {
   btn.onclick = () => { navigator.clipboard?.writeText(text).catch(() => {}); btn.textContent = 'Copied!'; setTimeout(() => (btn.textContent = 'Copy'), 1500); };
 }
@@ -541,7 +549,7 @@ function openInvites(serverId) {
   if (!s) return closeModal();
   modal(`<h2>Invite people to ${escapeHtml(s.name)}</h2>
     <label>Invite link
-      <div class="invite-box"><input id="invite" readonly value="${escapeHtml(inviteLink(s.inviteCode))}" /><button class="btn" id="copy-invite">Copy</button></div>
+      <div class="invite-box"><input id="invite" readonly value="${escapeHtml(inviteLink(s.inviteCode))}" /><button class="btn" id="copy-invite">Copy</button>${shareButtonHtml('share-invite')}</div>
     </label>
     <p class="small muted">It never runs out. In the desktop app, people can paste the link or just the code <b>${escapeHtml(s.inviteCode)}</b>.
       ${can(s, 'burrow') ? '<button type="button" class="link-btn" id="new-code">Make a new one</button> if it got out.' : ''}</p>
@@ -555,6 +563,7 @@ function openInvites(serverId) {
     <div id="inv-list"></div>
     <div class="error" id="modal-error"></div>`);
   copyButton($('#copy-invite'), inviteLink(s.inviteCode));
+  shareButton($('#share-invite'), s, inviteLink(s.inviteCode));
   $('#new-code')?.addEventListener('click', async () => {
     if (!(await askConfirm('Make a new permanent link? The old link and code stop working.', { ok: 'New link' }))) return;
     try { handleEvent({ type: 'server_updated', server: await api(`/api/servers/${s.id}/invite-code`, { method: 'POST' }) }); openInvites(s.id); }
@@ -579,8 +588,9 @@ function openInvites(serverId) {
     const maxUses = Number($('#inv-uses').value) || null;
     try {
       const { code, invites } = await api(`/api/servers/${s.id}/invites`, { method: 'POST', body: { expiresIn, maxUses } });
-      $('#inv-new').innerHTML = `<div class="invite-box"><input readonly value="${escapeHtml(inviteLink(code))}" /><button class="btn" id="inv-copy">Copy</button></div>`;
+      $('#inv-new').innerHTML = `<div class="invite-box"><input readonly value="${escapeHtml(inviteLink(code))}" /><button class="btn" id="inv-copy">Copy</button>${shareButtonHtml('inv-share')}</div>`;
       copyButton($('#inv-copy'), inviteLink(code));
+      shareButton($('#inv-share'), s, inviteLink(code));
       $('#inv-copy').click();
       showList(invites);
     } catch (err) { $('#modal-error').textContent = err.message; }
