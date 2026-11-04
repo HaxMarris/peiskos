@@ -1696,6 +1696,12 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .error-list details { padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-2); }
 .error-list summary { cursor: pointer; overflow-wrap: anywhere; }
 .error-list pre { margin: 8px 0 0; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 200px; overflow-y: auto; }
+.feedback-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.feedback-list li { padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.feedback-list li.done { opacity: .72; }
+.feedback-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.feedback-shot { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.feedback-picture { max-width: 100%; max-height: 320px; border-radius: var(--radius-md); border: 1px solid var(--line); object-fit: contain; }
 #command-box .mention-option { justify-content: space-between; }
 .command-name { font-weight: 700; }
 @media (max-width: 600px) {

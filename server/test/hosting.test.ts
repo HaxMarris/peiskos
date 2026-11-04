@@ -140,6 +140,26 @@ test('crash reports', async () => {
   assert.deepEqual((await call('/api/admin/errors', { method: 'DELETE', token: max.token })).data.errors, []);
 });
 
+test('feedback from the app reaches whoever runs the server', async () => {
+  const png = 'data:image/png;base64,' + Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]).toString('base64');
+  assert.equal((await call('/api/feedback', { body: { text: '  ' }, token: sam.token })).status, 400);
+  assert.equal((await call('/api/feedback', { body: { text: 'hi' } })).status, 401);
+  assert.equal((await call('/api/feedback', { body: { text: 'hi', picture: 'data:text/html;base64,PGI+' }, token: sam.token })).status, 400);
+  assert.equal((await call('/api/feedback', { body: { text: ' The voice button is hard to find ', picture: png, app: 'Web · test' }, token: sam.token })).status, 200);
+  assert.equal((await call('/api/admin/feedback', { token: sam.token })).status, 403);
+  const [f] = (await call('/api/admin/feedback', { token: max.token })).data.feedback;
+  assert.equal(f.text, 'The voice button is hard to find');
+  assert.equal(f.username, 'sam');
+  assert.equal(f.app, 'Web · test');
+  assert.equal(f.hasPicture, true);
+  assert.equal((await call(`/api/admin/feedback/${f.id}/picture`, { token: max.token })).data.picture, png);
+  assert.equal((await call('/api/admin', { token: max.token })).data.feedback, 1);
+  const done = (await call(`/api/admin/feedback/${f.id}/done`, { body: { done: true }, token: max.token })).data.feedback;
+  assert.ok(done[0].doneAt);
+  assert.equal((await call('/api/admin', { token: max.token })).data.feedback, 0);
+  assert.deepEqual((await call(`/api/admin/feedback/${f.id}`, { method: 'DELETE', token: max.token })).data.feedback, []);
+});
+
 test('crash reports from people not logged in get a smaller allowance', async () => {
   // The earlier test already used 4 of this address's 5 logged-out reports for the hour.
   for (let i = 0; i < 5; i++) await call('/api/errors', { body: { message: `made up ${i}` } });

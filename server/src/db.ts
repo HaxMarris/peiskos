@@ -669,6 +669,16 @@ function addHosting(db: Db) {
     );
     CREATE INDEX IF NOT EXISTS webhooks_by_server ON webhooks(server_id);
     -- Crashes in people's apps, the same one counted once.
+    -- What people sent with Send feedback, for whoever runs the server. The screenshot is a small JPEG or PNG.
+    CREATE TABLE IF NOT EXISTS feedback (
+      id         INTEGER PRIMARY KEY,
+      user_id    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      text       TEXT NOT NULL,
+      app        TEXT NOT NULL DEFAULT '',
+      picture    BLOB,
+      created_at INTEGER NOT NULL,
+      done_at    INTEGER
+    );
     CREATE TABLE IF NOT EXISTS client_errors (
       id       INTEGER PRIMARY KEY,
       hash     TEXT NOT NULL UNIQUE,

@@ -25,7 +25,7 @@ async function copyText(text, button) {
 
 // ---------------------------------------------------------------- the admin page
 
-const ADMIN_TABS = [['overview', 'Overview'], ['reports', 'Reports'], ['people', 'People'], ['signups', 'Signing up'], ['backups', 'Backups'], ['errors', 'Crashes']];
+const ADMIN_TABS = [['overview', 'Overview'], ['reports', 'Reports'], ['people', 'People'], ['signups', 'Signing up'], ['backups', 'Backups'], ['feedback', 'Feedback'], ['errors', 'Crashes']];
 let adminData = null;
 let adminTab = 'overview';
 let updatePoll = null;
@@ -58,7 +58,7 @@ function showAdminTab(tab) {
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
   const pane = $('#admin-pane');
   if (!pane || !adminData) return;
-  ({ overview: adminOverview, reports: adminReports, people: adminPeople, signups: adminSignups, backups: adminBackups, errors: adminErrors })[tab](pane);
+  ({ overview: adminOverview, reports: adminReports, people: adminPeople, signups: adminSignups, backups: adminBackups, feedback: adminFeedback, errors: adminErrors })[tab](pane);
 }
 
 function adminOverview(pane) {
@@ -312,6 +312,126 @@ async function adminErrors(pane) {
     try { await api('/api/admin/errors', { method: 'DELETE' }); adminData.errors = 0; adminErrors(pane); } catch (err) { alertError(err); }
   });
 }
+
+// What people sent with Send feedback, newest first; ones marked done go to the bottom.
+async function adminFeedback(pane) {
+  pane.innerHTML = '<p class="muted">Loading…</p>';
+  let list = [];
+  try { list = (await api('/api/admin/feedback')).feedback; } catch (err) { pane.textContent = err.message; return; }
+  const draw = () => {
+    adminData.feedback = list.filter((f) => !f.doneAt).length;
+    pane.innerHTML = `<p class="small muted">What people sent with Send feedback in their menu. The newest 300 are kept.</p>
+      ${list.length ? `<ul class="feedback-list">${list.map((f) => `<li data-id="${f.id}" class="${f.doneAt ? 'done' : ''}">
+        <div class="small muted">${escapeHtml(f.name ?? 'A deleted account')}${f.username && f.username !== f.name ? ` (@${escapeHtml(f.username)})` : ''} · ${ago(f.createdAt)}${f.doneAt ? ' · done' : ''}</div>
+        <p class="feedback-text">${escapeHtml(f.text)}</p>
+        ${f.hasPicture ? '<button type="button" class="link-btn" data-act="picture">Show screenshot</button>' : ''}
+        <details class="small muted"><summary>App</summary>${escapeHtml(f.app || 'Not given')}</details>
+        <div class="admin-row"><button type="button" class="btn secondary" data-act="done">${f.doneAt ? 'Not done' : 'Mark done'}</button>
+          <button type="button" class="link-btn danger-link" data-act="delete">Delete</button></div>
+      </li>`).join('')}</ul>` : '<p>No feedback yet.</p>'}`;
+  };
+  draw();
+  pane.onclick = async (e) => {
+    const b = e.target.closest('[data-act]');
+    const li = b?.closest('li[data-id]');
+    if (!li) return;
+    const f = list.find((x) => x.id === Number(li.dataset.id));
+    b.disabled = true;
+    try {
+      if (b.dataset.act === 'picture') {
+        const img = document.createElement('img');
+        img.className = 'feedback-picture';
+        img.alt = 'Screenshot sent with this feedback';
+        img.src = (await api(`/api/admin/feedback/${f.id}/picture`)).picture;
+        b.replaceWith(img);
+        return;
+      }
+      if (b.dataset.act === 'delete' && !(await askConfirm('Delete this feedback?'))) return (b.disabled = false);
+      list = (b.dataset.act === 'done'
+        ? await api(`/api/admin/feedback/${f.id}/done`, { method: 'POST', body: { done: !f.doneAt } })
+        : await api(`/api/admin/feedback/${f.id}`, { method: 'DELETE' })).feedback;
+      draw();
+    } catch (err) { b.disabled = false; alertError(err); }
+  };
+}
+
+// ---------------------------------------------------------------- send feedback
+
+/** Which app this is, for feedback: the kind, how far along its What's new list is, and the browser. */
+const appDescription = () =>
+  `${isDesktop ? 'Desktop app' : isPhoneApp ? 'Phone app' : 'Web'}${newsTotal ? ` · ${newsTotal} What's new lines` : ''} · ${innerWidth}×${innerHeight} · ${navigator.userAgent}`;
+
+/** A picture made small enough to send: at most 1600px wide, as a JPEG. */
+async function feedbackPicture(file) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, 1600 / bitmap.width, 1600 / bitmap.height);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  const g = canvas.getContext('2d');
+  g.fillStyle = '#fff'; // a JPEG has no see-through parts
+  g.fillRect(0, 0, canvas.width, canvas.height);
+  g.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close?.();
+  for (const q of [0.82, 0.65, 0.45]) {
+    const url = canvas.toDataURL('image/jpeg', q);
+    if (url.length < 900_000) return url;
+  }
+  throw new Error('That picture is too big to send. Try a smaller one.');
+}
+
+function openFeedback() {
+  modal(`<h2>Send feedback</h2>
+    <p class="small muted">Goes to whoever runs this Peiskos. Something broken, confusing, or an idea.</p>
+    <form id="feedback-form">
+      <label>What's on your mind<textarea id="feedback-text" rows="5" maxlength="4000" required></textarea></label>
+      <div class="feedback-shot">
+        <button type="button" class="btn secondary" id="feedback-add">Add a screenshot</button>
+        <span class="small muted" id="feedback-shot-name">Or paste one here.</span>
+        <input type="file" id="feedback-file" accept="image/png,image/jpeg,image/webp" hidden />
+      </div>
+      <img id="feedback-preview" class="feedback-picture hidden" alt="The screenshot you're sending" />
+      <label class="check"><input type="checkbox" id="feedback-app" checked /> Include which app and device this is</label>
+      <div class="error" id="feedback-error"></div>
+      <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">Send</button></div>
+    </form>`, 'feedback-modal');
+  let picture = '';
+  const take = async (file) => {
+    if (!file?.type.startsWith('image/')) return;
+    try {
+      picture = await feedbackPicture(file);
+      $('#feedback-preview').src = picture;
+      $('#feedback-preview').classList.remove('hidden');
+      $('#feedback-add').textContent = 'Change screenshot';
+      $('#feedback-shot-name').innerHTML = '<button type="button" class="link-btn" id="feedback-remove">Remove it</button>';
+      $('#feedback-remove').onclick = () => {
+        picture = '';
+        $('#feedback-preview').classList.add('hidden');
+        $('#feedback-add').textContent = 'Add a screenshot';
+        $('#feedback-shot-name').textContent = 'Or paste one here.';
+      };
+    } catch (err) { $('#feedback-error').textContent = /too big/.test(err.message) ? err.message : "That picture couldn't be opened. Try a PNG or JPEG."; }
+  };
+  $('#feedback-add').onclick = () => $('#feedback-file').click();
+  $('#feedback-file').onchange = (e) => take(e.target.files[0]);
+  $('#feedback-form').onpaste = (e) => {
+    const file = [...(e.clipboardData?.files ?? [])].find((f) => f.type.startsWith('image/'));
+    if (file) { e.preventDefault(); take(file); }
+  };
+  $('#feedback-text').focus();
+  $('#feedback-form').onsubmit = async (e) => {
+    e.preventDefault();
+    const btn = e.submitter ?? $('#feedback-form [type=submit]');
+    btn.disabled = true;
+    $('#feedback-error').textContent = '';
+    try {
+      await api('/api/feedback', { method: 'POST', body: { text: $('#feedback-text').value, picture: picture || undefined, app: $('#feedback-app').checked ? appDescription() : '' } });
+      closeModal();
+      toast('Feedback sent.');
+    } catch (err) { btn.disabled = false; $('#feedback-error').textContent = err.message; }
+  };
+}
+$('#feedback-btn').onclick = () => openFeedback();
 
 $('#admin-btn').onclick = () => openAdmin();
 
