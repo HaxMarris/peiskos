@@ -865,6 +865,9 @@ function addFishing(db: Db) {
       PRIMARY KEY (server_id, week, user_id)
     );
   `);
+  // The derby is won by the most perfect (5-star) catches of the week's fish; the longest one breaks ties.
+  addColumn(db, 'fishing_derby_entries', 'perfect', 'INTEGER NOT NULL DEFAULT 0');
+  addColumn(db, 'fishing_derby_entries', 'perfect_at', 'INTEGER NOT NULL DEFAULT 0');
 }
 
 /**
