@@ -535,6 +535,8 @@ function setPhoneBadge(count) {
 if (phonePlatform === 'android') {
   window.Capacitor.addListener('App', 'backButton', () => {
     if (!$('#modal').classList.contains('hidden')) return closeModal();
+    const full = [...tiles.values()].find((t) => t.el.classList.contains('app-full'));
+    if (full) return toggleFullscreen(full);
     if (!$('#me-menu').classList.contains('hidden')) return closeMeMenu();
     if (!$('#stage').classList.contains('hidden')) return closeStage();
     if (memberPane.classList.contains('open')) return memberPane.classList.remove('open');
@@ -676,7 +678,7 @@ document.addEventListener('touchstart', (e) => {
   const t = e.touches[0];
   const line = e.target.closest?.('#messages .line');
   const header = e.target.closest?.('.chat-header');
-  const edge = t.clientX < 24 && $('#app').dataset.view === 'chat';
+  const edge = t.clientX < 24 && $('#app').dataset.view === 'chat' && !document.documentElement.classList.contains('tile-full');
   swipe = { x: t.clientX, y: t.clientY, line, header, edge, moved: false };
 }, { passive: true });
 document.addEventListener('touchmove', (e) => {
