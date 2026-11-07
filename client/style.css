@@ -688,6 +688,8 @@ label.check input { width: auto; }
 .chat.dropping::after { content: "Drop to attach"; position: absolute; inset: 12px; display: grid; place-items: center; border: 2.5px dashed var(--moss); border-radius: var(--radius); background: color-mix(in srgb, var(--bg) 85%, transparent); font-family: var(--font-head); font-size: 22px; color: var(--accent-text); pointer-events: none; z-index: 5; }
 .modal-card.wide { width: min(92vw, 1100px); max-width: none; }
 .lightbox img { display: block; max-width: 100%; max-height: 75vh; margin: 0 auto 14px; border-radius: var(--radius-md); }
+.lightbox .modal-row { flex-wrap: wrap; }
+.lightbox .modal-row .btn { white-space: nowrap; }
 
 a.btn { text-decoration: none; display: inline-block; }
 
@@ -1543,6 +1545,8 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .banner-row, .accent-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
 .accent-pick { flex-direction: row; align-items: center; gap: 10px; display: flex; }
 .accent-pick input[type="color"] { width: 44px; height: 32px; padding: 2px; border-radius: var(--radius-sm); cursor: pointer; }
+/* With "No colour" ticked the picker's colour isn't used, so it shouldn't look chosen. */
+.accent-row:has(#profile-accent-off:checked) .accent-pick input { opacity: .3; filter: grayscale(1); }
 .recovery-codes { margin: 0; padding: 12px 16px; border-radius: var(--radius-md); background: var(--surface-2); font-size: 15px; line-height: 1.7; columns: 2; user-select: all; }
 .qr-box { align-self: center; width: 200px; height: 200px; padding: 8px; border-radius: var(--radius-md); background: #fff; display: grid; place-items: center; color: #333; font-size: 13px; text-align: center; }
 .qr-box svg { width: 100%; height: 100%; }
@@ -2082,6 +2086,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .app.at-home .sidebar, .app.at-home .member-pane, .app.at-home .chat-header, .app.at-home .composer-wrap, .app.at-home #dm-empty { display: none !important; }
 .app.at-home .chat { display: flex !important; grid-column: 1 / -1; }
 .app.at-home .messages { visibility: hidden; }
+/* What belongs to the room left open behind Home (its new-messages bar, its countdown) stays with it. */
+.app.at-home .unread-bar, .app.at-home .present-bar, .app.at-home .event-pill { display: none !important; }
 .home-view { position: absolute; inset: 0; z-index: 2; overflow-y: auto; background: var(--bg); padding: 32px max(24px, calc((100% - 720px) / 2)) 48px; display: flex; flex-direction: column; gap: 24px; }
 .home-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home-head h2 { margin: 0; font-size: 28px; }

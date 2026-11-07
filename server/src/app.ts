@@ -3673,7 +3673,8 @@ export function createApp(opts: AppOptions): Server {
     if (times.length < 2) throw new HttpError(400, 'Pick at least two times people can choose from');
     if (times.length > MAX_PLAN_TIMES) throw new HttpError(400, `Pick at most ${MAX_PLAN_TIMES} times`);
     if (times.some((t) => !(t > now() && t < now() + 366 * 86400_000))) throw new HttpError(400, 'Pick times in the next year, not ones that have passed');
-    const hours = Number(body.hours ?? 72) || 0;
+    // Open until the first of the times, unless it says to close sooner.
+    const hours = Number(body.hours ?? 0) || 0;
     if (hours < 0 || hours > 24 * 30) throw new HttpError(400, 'A plan can stay open for up to 30 days');
     const closesAt = hours ? Math.min(now() + hours * 3600_000, times[0]) : times[0];
     return postMessage(user, channel.id, { content: '', replyTo: body.replyTo }, {
@@ -4804,8 +4805,11 @@ export function createApp(opts: AppOptions): Server {
     { id: 'keeper', icon: '🪵', title: 'Fire keeper', how: 'Spend 100 hours at fires',
       earned: (id) => (db.prepare('SELECT COALESCE(SUM(ended_at - started_at), 0) AS ms FROM voice_time WHERE user_id = ?').get(id) as { ms: number }).ms >= 100 * 3600_000 },
     { id: 'favourite', icon: '⭐', title: 'Crowd favourite', how: 'Have a message make Best of',
-      earned: (id) => !!db.prepare(`SELECT 1 FROM messages m JOIN reactions r ON r.message_id = m.id AND r.emoji = '🔥' AND r.user_id != m.author_id
-                                    WHERE m.author_id = ? GROUP BY m.id HAVING COUNT(*) >= 2 LIMIT 1`).get(id) },
+      // As many 🔥 as that hearth's Best of asks for (more in bigger hearths).
+      earned: (id) => (db.prepare(`SELECT c.server_id AS serverId, COUNT(*) AS n FROM messages m JOIN channels c ON c.id = m.channel_id
+                                    JOIN reactions r ON r.message_id = m.id AND r.emoji = '🔥' AND r.user_id != m.author_id
+                                    WHERE m.author_id = ? GROUP BY m.id HAVING COUNT(*) >= 2`).all(id) as { serverId: number; n: number }[])
+        .some((r) => isBurrow(r.serverId) && r.n >= bestOfNeeds(r.serverId)) },
     { id: 'planner', icon: '📅', title: 'Party planner', how: 'Plan 5 events',
       earned: (id) => (db.prepare('SELECT COUNT(*) AS n FROM events WHERE created_by = ?').get(id) as { n: number }).n >= 5 },
     { id: 'host', icon: '🏕️', title: 'Host', how: 'Host a hearth with 5 or more people in it',
