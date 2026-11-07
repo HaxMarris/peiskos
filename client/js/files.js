@@ -138,7 +138,9 @@ function addFiles(fileList) {
         renderPending();
         throw new Error(`"${f.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
       }
-      return uploadFile(channelId, p);
+      const att = await uploadFile(channelId, p);
+      if (SHRINKABLE_TYPES.test(f.type)) await addPreview(att, f);
+      return att;
     });
     p.done.catch(() => {}); // failures show on the chip
     state.pending.push(p);
@@ -175,6 +177,33 @@ async function shrinkPhoto(file) {
   const out = new File([blob], name, { type: blob.type });
   out.dims = { width: canvas.width, height: canvas.height };
   return out;
+}
+
+// Chat shows pictures at up to 400 × 300 and the album smaller, so a copy this big looks sharp on any
+// screen, and a full photo downloads only when someone opens it.
+const PREVIEW_SIDE = 960;
+
+/** Sends a small copy of a big photo with it. Without one (old browsers, small photos) the photo itself shows. */
+async function addPreview(att, file) {
+  try {
+    const img = await createImageBitmap(file);
+    const scale = PREVIEW_SIDE / Math.max(img.width, img.height);
+    if (scale >= 1 && file.size < 250 * 1024) return img.close();
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.max(1, Math.round(img.width * Math.min(1, scale)));
+    canvas.height = Math.max(1, Math.round(img.height * Math.min(1, scale)));
+    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+    img.close();
+    const encode = (type, quality) => new Promise((resolve) => canvas.toBlob(resolve, type, quality));
+    let blob = await encode('image/webp', 0.8);
+    // JPEG has no see-through parts, so a PNG with them keeps showing itself.
+    if (blob?.type !== 'image/webp') blob = file.type === 'image/png' ? null : await encode('image/jpeg', 0.82);
+    if (!blob || blob.size > 300 * 1024 || blob.size >= file.size * 0.8) return;
+    const res = await fetch(`${state.serverUrl}/api/attachments/${att.id}/thumb`, {
+      method: 'POST', headers: { authorization: 'Bearer ' + state.token, 'content-type': blob.type }, body: blob,
+    });
+    if (res.ok) att.thumb = (await res.json()).thumb;
+  } catch { /* the photo itself shows instead */ }
 }
 
 /** A picture's size in pixels, or null if it can't be read. */
@@ -456,7 +485,8 @@ function renderAttachments(list) {
     if (IMAGE_TYPES.test(a.type)) {
       el = document.createElement('img');
       el.className = 'att-image';
-      el.src = url;
+      // The small copy when there is one; opening it shows the whole photo.
+      el.src = a.thumb ? state.serverUrl + a.thumb : url;
       el.alt = a.alt || a.name;
       if (a.alt) el.title = a.alt;
       // Pictures load as they scroll into view, with their space kept so the chat doesn't jump when they arrive.
@@ -503,12 +533,19 @@ function renderAttachments(list) {
 }
 
 function openImage(a, url) {
-  modal(`<div class="lightbox"><img src="${escapeHtml(url)}" alt="${escapeHtml(a.alt || a.name)}" />${a.alt ? `<p class="small muted lightbox-alt">${escapeHtml(a.alt)}</p>` : ''}
+  modal(`<div class="lightbox"><img src="${escapeHtml(a.thumb ? state.serverUrl + a.thumb : url)}" alt="${escapeHtml(a.alt || a.name)}" />${a.alt ? `<p class="small muted lightbox-alt">${escapeHtml(a.alt)}</p>` : ''}
     <div class="modal-row"><button type="button" class="btn secondary" id="lightbox-copy">Copy</button><button type="button" class="btn secondary" id="lightbox-save">${isPhone() ? 'Save or share' : 'Save'}</button><a class="btn secondary" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open original</a></div></div>`);
   $('#modal-card').classList.add('wide');
   $('#lightbox-copy').onclick = () => copyPicture(url);
   $('#lightbox-save').onclick = () => savePicture(a, url);
   pictureMenuOn($('#modal-card .lightbox img'), a, url);
+  // The small copy (already loaded in the chat) shows straight away, the whole photo once it arrives.
+  if (a.thumb) {
+    const shown = $('#modal-card .lightbox img');
+    const full = new Image();
+    full.onload = () => { if (shown.isConnected) shown.src = url; };
+    full.src = url;
+  }
 }
 
 // ---- copying and saving pictures. Right-click one (or hold it on a phone) for Copy, Save and Open

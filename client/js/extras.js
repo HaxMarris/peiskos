@@ -686,7 +686,7 @@ async function openAlbum(serverId) {
       b.setAttribute('aria-label', a.alt || a.name);
       b.innerHTML = a.type.startsWith('video/')
         ? (a.thumb ? `<img loading="lazy" alt="" src="${escapeHtml(state.serverUrl + a.thumb)}" />` : '') + '<span class="album-play" aria-hidden="true">▶</span>'
-        : `<img loading="lazy" alt="" src="${escapeHtml(url)}" />`;
+        : `<img loading="lazy" alt="" src="${escapeHtml(a.thumb ? state.serverUrl + a.thumb : url)}" />`;
       grid.append(b);
     }
     before = r.items.at(-1)?.messageId ?? before;

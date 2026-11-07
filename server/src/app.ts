@@ -2285,7 +2285,8 @@ export function createApp(opts: AppOptions): Server {
     const user = uploader(req);
     const a = db.prepare('SELECT type FROM attachments WHERE id = ? AND uploader_id = ? AND message_id IS NULL').get(id, user.id) as { type: string } | undefined;
     if (!a) throw new HttpError(404, 'That file is gone. It may have been deleted.');
-    if (!a.type.startsWith('video/')) throw new HttpError(400, 'Only videos have thumbnails');
+    // Videos get a still to show before they play; photos a small copy for the chat and the album (the full one opens when tapped).
+    if (!a.type.startsWith('video/') && !/^image\/(png|jpeg|webp)$/.test(a.type)) throw new HttpError(400, 'Only videos and photos have previews');
     const data = await readLimited(req, MAX_THUMB_BYTES, new HttpError(413, 'That thumbnail is too big'));
     const kind = String(req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
     if (!THUMB_TYPES[kind]?.(data)) throw new HttpError(400, 'Send the thumbnail as a WebP or JPEG picture');

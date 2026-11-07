@@ -57,10 +57,11 @@ test('picture and video sizes, video thumbnails, and fetching part of a file', a
   const bytes = new Uint8Array(1000).map((_, i) => i % 256);
   const video = (await (await raw(`/api/channels/${room}/attachments`, max.token, bytes, 'video/mp4', { 'x-width': '1280', 'x-height': '720' })).json()) as any;
 
-  // Only the uploader can add a thumbnail, only to a video, and only as a real picture.
+  // Only the uploader can add a thumbnail, only to a video or photo, and only as a real picture.
   const thumbAt = `/api/attachments/${video.id}/thumb`;
   assert.equal((await raw(thumbAt, sam.token, webp(), 'image/webp')).status, 404);
-  assert.equal((await raw(`/api/attachments/${pic.id}/thumb`, max.token, webp(), 'image/webp')).status, 400);
+  assert.equal((await raw(`/api/attachments/${doc.id}/thumb`, max.token, webp(), 'image/webp')).status, 400);
+  assert.equal((await raw(`/api/attachments/${pic.id}/thumb`, max.token, webp(), 'image/webp')).status, 200);
   assert.equal((await raw(thumbAt, max.token, new TextEncoder().encode('<svg/>'), 'image/webp')).status, 400);
   assert.equal((await raw(thumbAt, max.token, new Uint8Array(400 * 1024), 'image/webp')).status, 413);
   const added = await raw(thumbAt, max.token, webp(), 'image/webp');
@@ -73,7 +74,7 @@ test('picture and video sizes, video thumbnails, and fetching part of a file', a
   const [v, p] = sent.attachments;
   assert.equal(v.thumb, thumbAt);
   assert.equal(v.width, 1280);
-  assert.equal(p.thumb, undefined);
+  assert.equal(p.thumb, `/api/attachments/${pic.id}/thumb`, 'photos get a preview too');
   const t = await fetch(base + thumbAt);
   assert.equal(t.status, 200);
   assert.equal(t.headers.get('content-type'), 'image/webp');

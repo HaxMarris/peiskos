@@ -348,7 +348,7 @@ const SHORTCUTS = [
   ['Alt+Shift+↑ / ↓', 'Previous or next unread room, in any hearth'],
   ['Shift+Esc', 'Mark this hearth or conversation as read'],
   ['Esc', 'Close a window or menu, or stop replying'],
-  ['↑ in an empty message box', 'Edit your last message'],
+  ['↑', 'Edit your last message (when the message box is empty)'],
   ['Shift+Enter', 'New line in a message'],
   ['Tab', 'Fill in an @mention'],
   ['Ctrl+Shift+M', 'Mute or unmute in voice'],

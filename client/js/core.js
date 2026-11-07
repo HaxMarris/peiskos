@@ -116,8 +116,19 @@ const state = {
 
 // ---------------------------------------------------------------- API
 
+// Opening Peiskos asks for everything it will need at once, instead of one answer after another.
+// api() takes an answer from here the first time it asks for that address.
+const prefetched = new Map();
+function prefetch(paths) {
+  for (const path of paths) {
+    const res = fetch(state.serverUrl + path, { headers: { authorization: 'Bearer ' + state.token } });
+    res.catch(() => {});
+    prefetched.set(path, res);
+  }
+}
+
 async function api(path, { method = 'GET', body } = {}, retried = false) {
-  const res = await fetch(state.serverUrl + path, {
+  const ask = () => fetch(state.serverUrl + path, {
     method,
     headers: {
       ...(body ? { 'content-type': 'application/json' } : {}),
@@ -125,6 +136,9 @@ async function api(path, { method = 'GET', body } = {}, retried = false) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  const early = method === 'GET' && !retried ? prefetched.get(path) : null;
+  if (early) prefetched.delete(path);
+  const res = await (early ? early.catch(ask) : ask());
   if (res.redirected) adoptOrigin(res.url);
   if (res.redirected && res.status === 401 && !retried) return api(path, { method, body }, true);
   const data = await res.json().catch(() => ({}));
@@ -510,6 +524,12 @@ $('#logout').addEventListener('click', () => logout());
 // ---------------------------------------------------------------- app bootstrap
 
 async function enterApp() {
+  const room = state.lastChannel[state.serverId];
+  prefetch(['/api/me', '/api/config', '/api/servers', '/api/dms', '/api/me/favorites', '/api/drafts', '/api/me/saved', '/api/me/scheduled', '/api/friends',
+    ...(room ? [`/api/channels/${room}/messages?limit=50`] : [])]);
+  try { await enterAppNow(); } finally { prefetched.clear(); }
+}
+async function enterAppNow() {
   state.me = await api('/api/me');
   state.folders = state.me.folders ?? [];
   $('#auth').classList.add('hidden');
