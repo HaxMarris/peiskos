@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Sketch &amp; Guess</title>
 <link rel="stylesheet" href="../shared/game.css">
 <link rel="stylesheet" href="../shared/canvas.css">
 <style>
-  #play { position: absolute; inset: 0; display: grid; grid-template-columns: 1fr 260px; grid-template-rows: auto 1fr auto; gap: 6px 10px; padding: 8px 10px 10px; }
+  #play { position: absolute; inset: 0; display: grid; grid-template-columns: minmax(0, 1fr) 260px; grid-template-rows: auto minmax(0, 1fr) auto; gap: 6px 10px; padding: 8px 10px 10px; }
   .top { grid-column: 1 / -1; display: flex; align-items: center; gap: 12px; }
   .top .spacer { flex: 1; }
   #word { font-family: 'Fraunces', Georgia, serif; font-size: 24px; color: var(--strong); letter-spacing: .12em; white-space: pre; text-align: center; flex: 2; }
@@ -34,11 +34,28 @@
   #overlay .panel { text-align: center; align-items: center; }
   #wordsBox { width: 100%; min-height: 220px; resize: vertical; }
   .opts { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; text-align: left; width: 100%; }
+  /* Phones: the word gets its own line, the scores are one row you can swipe, and the guesses keep a
+     fixed share of the height so the page still fits with the keyboard up. */
   @media (max-width: 700px) {
-    #play { grid-template-columns: 1fr; grid-template-rows: auto minmax(0, 1.4fr) auto minmax(120px, 1fr); }
-    .side { grid-row: 4; grid-column: 1; }
-    .side .scores { display: none; }
+    #play { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto; gap: 6px; padding: 6px 8px 8px; }
+    .top { flex-wrap: wrap; gap: 2px 10px; }
+    #roundLabel { flex: 1; }
+    #word { order: 9; flex: 1 0 100%; font-size: 20px; white-space: pre-wrap; }
+    .tools.off { display: none; }
+    .side { grid-row: 4; grid-column: 1; gap: 6px; }
+    .side .scores { flex-direction: row; overflow-x: auto; gap: 6px; flex: none; scrollbar-width: none; }
+    .side .scores::-webkit-scrollbar { display: none; }
+    .side .scores li { flex: none; padding: 4px 10px; font-size: 13px; }
+    #feed { flex: none; height: clamp(56px, 24vh, 190px); }
+    body.drawing #guessForm { display: none; }
+    .board canvas { top: 0; transform: translateX(-50%); }
+  }
+  /* A phone on its side: a narrower side column, and no empty row where a guesser's tools would be. */
+  @media (max-height: 500px) and (min-width: 701px) {
+    #play { grid-template-columns: minmax(0, 1fr) 210px; gap: 4px 8px; padding: 4px 8px 6px; }
+    .tools.off { display: none; }
     #word { font-size: 18px; }
+    .side .scores li { padding: 3px 10px; font-size: 13px; }
   }
 </style>
 </head>

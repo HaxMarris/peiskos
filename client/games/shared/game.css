@@ -36,3 +36,5 @@ input:focus, select:focus, textarea:focus, button:focus-visible { outline: 2px s
 .scores li { display: flex; justify-content: space-between; gap: 12px; padding: 7px 12px; border-radius: 10px; background: var(--surface-2); }
 .scores li.me { outline: 1.5px solid var(--ember); }
 .scores li b { color: var(--glow); }
+/* Phones zoom the whole page into a text box set smaller than 16px, and don't zoom back out. */
+@media (pointer: coarse) { input, select, textarea { font-size: 16px; } }

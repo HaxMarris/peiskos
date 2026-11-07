@@ -54,7 +54,8 @@ function render() {
   $('tools').classList.toggle('off', !drawing);
   const got = v.guessed.includes(Peiskos.me.id);
   $('guess').disabled = drawing || v.phase === 'lobby' || v.phase === 'over';
-  $('guess').placeholder = drawing ? 'You\'re drawing' : got ? 'Only guessers see this' : 'Type your guess';
+  $('guess').placeholder = drawing ? 'You\'re drawing' : got && v.phase === 'draw' ? 'Chat with those who got it' : 'Type your guess';
+  document.body.classList.toggle('drawing', drawing);
   renderScores();
   renderOverlay();
 }
@@ -159,7 +160,8 @@ function onView(d) {
     endsAt = Date.now() + (view.left ?? 0);
     if (before.phase === 'draw' && view.phase === 'reveal') feed(`The word was "${view.word}".`, 'sys');
     if (before.turn !== view.turn && view.phase === 'choose') feed(`${nameOf(view.drawer)} is drawing.`, 'sys');
-    if (isDrawer() && view.phase === 'draw' && before.phase !== 'draw') Peiskos.busy(true);
+    // Mid-drawing, this page can't move to its own window (the host's copy says so for itself).
+    if (!Peiskos.isHost) Peiskos.busy(isDrawer() && view.phase === 'draw');
     render();
   } else if (d.type === 'feed') feed(String(d.text).slice(0, 200), d.cls || '', d.by ?? null);
   else if (d.type === 'stroke' && d.by !== Peiskos.me.id) sc.add(d.part, d.by);
@@ -250,8 +252,10 @@ function broadcast() {
 function toAll(d) { onView(d); Peiskos.send('all', d); }
 function toSome(ids, d) { for (const id of ids) id === Peiskos.me.id ? onView(d) : Peiskos.send(id, d); }
 
-const maskOf = (word, hints) => [...word].map((ch, i) => (/[a-z0-9]/i.test(ch) && !hints.has(i) ? '_' : ch)).join('');
-const norm = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+// Letters in any language count (a hearth's own words can be blåbær or jalapeño), so none show through the blanks.
+const LETTER = /[\p{L}\p{N}]/u;
+const maskOf = (word, hints) => [...word].map((ch, i) => (LETTER.test(ch) && !hints.has(i) ? '_' : ch)).join('');
+const norm = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]/gu, '');
 function near(a, b) {
   if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
   const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -263,11 +267,16 @@ function near(a, b) {
 }
 
 async function hostStart() {
+  if (G.phase !== 'lobby' || G.starting) return; // a second tap on Start
   if (Peiskos.players.length < 2) return showToast('Two or more can play.');
+  G.starting = true;
+  $('btnStart').disabled = true;
   G.rounds = Number($('optRounds').value) || 3;
   G.drawTime = (Number($('optTime').value) || 80) * 1000;
   G.wordsFrom = $('optWords').value;
   try { ourWords = (await Peiskos.api(`/api/servers/${Peiskos.serverId}/game-words`)).words; } catch { /* the pack still works */ }
+  G.starting = false;
+  if (G.phase !== 'lobby') return;
   if (G.wordsFrom === 'ours' && ourWords.length < 3) { G.wordsFrom = 'mix'; showToast('Your hearth has fewer than three words, so the pack is in too.'); }
   G.scores = new Map(Peiskos.players.map((p) => [p.id, 0]));
   G.used = new Set();
@@ -302,7 +311,7 @@ function nextTurn() {
 }
 
 function pickWords(n) {
-  const pool = G.wordsFrom === 'ours' ? ourWords : G.wordsFrom === 'pack' ? WORDS : [...WORDS, ...ourWords, ...ourWords];
+  const pool = (G.wordsFrom === 'ours' ? ourWords : G.wordsFrom === 'pack' ? WORDS : [...WORDS, ...ourWords, ...ourWords]).filter((w) => norm(w));
   let fresh = pool.filter((w) => !G.used.has(w));
   if (fresh.length < n) { G.used.clear(); fresh = [...pool]; }
   const out = [];
@@ -330,9 +339,9 @@ function hostTick() {
     if (now >= G.endsAt) return endTurn();
     // Hints: a letter at half time and another at three quarters (never more than a third of the word).
     const spent = (now - G.started) / G.drawTime;
-    const letters = [...G.word].map((ch, i) => (/[a-z0-9]/i.test(ch) ? i : -1)).filter((i) => i >= 0 && !G.hints.has(i));
+    const letters = [...G.word].map((ch, i) => (LETTER.test(ch) ? i : -1)).filter((i) => i >= 0 && !G.hints.has(i));
     const want = (spent >= 0.5 ? 1 : 0) + (spent >= 0.75 ? 1 : 0);
-    if (G.hints.size < want && letters.length > 1 && G.hints.size < Math.floor(G.word.replace(/[^a-z0-9]/gi, '').length / 3)) {
+    if (G.hints.size < want && letters.length > 1 && G.hints.size < Math.floor([...G.word].filter((ch) => LETTER.test(ch)).length / 3)) {
       G.hints.add(letters[Math.floor(Math.random() * letters.length)]);
       broadcast();
     }
@@ -376,7 +385,11 @@ function hostGuess(from, text) {
     if (guessers.every((p) => G.guessed.has(p.id))) return endTurn();
     return broadcast();
   }
-  if (near(norm(text), norm(G.word))) toSome([from], { type: 'feed', text: `"${text}" is close!`, cls: 'close' });
+  // A close guess is all but the word, so only the guesser and whoever knows the word see it.
+  if (near(norm(text), norm(G.word))) {
+    toSome([from], { type: 'feed', text: `"${text}" is close!`, cls: 'close' });
+    return toSome([G.drawer, ...G.guessed], { type: 'feed', by: from, text });
+  }
   toAll({ type: 'feed', by: from, text });
 }
 
