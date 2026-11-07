@@ -18,6 +18,8 @@ const Peiskos = (() => {
     /** What the host's game needs to carry on if the page reloads (moving to its own window). */
     snapshot(data) { post({ kind: 'snapshot', data }); },
     busy(on) { post({ kind: 'busy', on }); },
+    /** Saves a file through Peiskos (a game's frame can't download or share on every phone). */
+    save(blob, name) { post({ kind: 'save', blob, name }); },
     /** Asks Peiskos's server (only the few things games may ask for). */
     api(path, method = 'GET', body) {
       const id = nextId++;
