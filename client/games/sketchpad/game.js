@@ -7,6 +7,7 @@
 const MAX_STROKES = 4000;
 const BATCH = 12000; // characters of strokes per message (Peiskos takes up to 16 KB)
 const mine = []; // ids of your strokes, newest last, for undo
+let fullWarned = false;
 
 const sc = new SharedCanvas($('page'), {
   onStroke(part) {
@@ -39,10 +40,19 @@ toolbar($('tools'), sc, [undo, clearBtn]);
 
 function relay(by, part) {
   if (!part || typeof part.id !== 'string' || !Array.isArray(part.points)) return;
-  if (!sc.strokes.has(part.id) && sc.strokes.size >= MAX_STROKES) return showToast('The page is full. Clear it to keep drawing.');
+  // A full page takes no new strokes. The host's own stroke comes off its page (everyone else's
+  // never reached the others), and the host hears about it once a stroke, not with every piece.
+  const own = by === Peiskos.me.id;
+  const had = sc.strokes.get(part.id);
+  const isNew = own ? had?.by == null : !had; // the host's own is on its page from the first touch, not yet passed on
+  if (isNew && sc.strokes.size - (own && had ? 1 : 0) >= MAX_STROKES) {
+    if (own) { sc.remove(part.id); sc.drawing = null; } else Peiskos.send(by, { type: 'full', id: part.id });
+    if (!fullWarned) { fullWarned = true; showToast('The page is full. Clear it to keep drawing.'); setTimeout(() => { fullWarned = false; }, 4000); }
+    return;
+  }
   part = { id: part.id.slice(0, 24), color: String(part.color).slice(0, 9), size: Math.min(60, Math.max(1, Number(part.size) || 10)), erase: !!part.erase, points: part.points.slice(0, 400) };
   if (by !== Peiskos.me.id) sc.add(part, by);
-  else sc.strokes.get(part.id).by = by;
+  else if (had) had.by = by;
   Peiskos.send('all', { type: 'stroke', by, part });
 }
 /** The whole page, in pieces small enough to send. */
@@ -84,6 +94,11 @@ Peiskos.on('msg', (from, d) => {
   if (from !== Peiskos.hostId) return;
   if (d.type === 'stroke' && d.by !== Peiskos.me.id) sc.add(d.part, d.by);
   else if (d.type === 'remove') sc.remove(d.id);
+  else if (d.type === 'full') {
+    if (sc.drawing?.id === d.id) sc.drawing = null;
+    sc.remove(d.id);
+    if (!fullWarned) { fullWarned = true; showToast('The page is full. Ask the host to clear it.'); setTimeout(() => { fullWarned = false; }, 4000); }
+  }
   else if (d.type === 'clear') { sc.clear(); mine.length = 0; showToast(`${nameOf(Peiskos.hostId)} cleared the page`); }
   else if (d.type === 'page') {
     if (d.first) sc.clear();
@@ -111,11 +126,4 @@ $('btnLeave').onclick = () => {
   if (Peiskos.isHost && sc.strokes.size && !confirm('End the sketchpad for everyone? The page goes with it.')) return;
   Peiskos.leave();
 };
-$('btnSave').onclick = async () => {
-  const blob = await sc.toBlob();
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `sketchpad-${new Date().toISOString().slice(0, 10)}.png`;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-};
+$('btnSave').onclick = () => Peiskos.save(sc.toBlob(), `sketchpad-${new Date().toISOString().slice(0, 10)}.png`);

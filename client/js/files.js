@@ -576,18 +576,20 @@ async function copyPicture(url) {
 }
 async function savePicture(a, url) {
   try {
-    const blob = await pictureBlob(url);
-    const file = new File([blob], a.name || 'picture', { type: blob.type });
-    // Phones save through the share sheet ("Save image", or send it straight on).
-    if (isPhone() && navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file] });
-    const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: file.name });
-    document.body.append(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 30000);
+    await saveOrShare(await pictureBlob(url), a.name || 'picture');
   } catch (err) {
     if (err?.name !== 'AbortError') toast("Couldn't save the picture.");
   }
+}
+/** Phones save through the share sheet ("Save image", or send it straight on); elsewhere it downloads. */
+async function saveOrShare(blob, name) {
+  const file = new File([blob], name, { type: blob.type });
+  if (isPhone() && navigator.canShare?.({ files: [file] })) return await navigator.share({ files: [file] });
+  const link = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: file.name });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 30000);
 }
 function openPictureMenu(x, y, a, url) {
   const at = { getBoundingClientRect: () => ({ left: x, right: x + 180, top: y, bottom: y }) };

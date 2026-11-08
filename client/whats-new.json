@@ -2,6 +2,12 @@
   "about": "What changed, in words for friends, newest first. Add a line to the top entry as things merge; start a new entry (the next id) after a release. Each release's notes start with the entries it adds, and the app shows people the ones they haven't seen.",
   "entries": [
     {
+      "id": 4,
+      "items": [
+        "Sketch & Guess, Sketchpad and Fireside Trivia work properly on phones now: more room to draw, one finger draws (a second one or your palm doesn't), the scores stay in view, and Save picture works in the phone apps."
+      ]
+    },
+    {
       "id": 3,
       "items": [
         "New at the fire: Fireside Trivia. Thousands of questions in two dozen categories, never the same one twice until you've been through them, and your hearth can add its own.",

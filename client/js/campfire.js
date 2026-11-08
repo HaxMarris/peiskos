@@ -185,7 +185,7 @@ function toggleStreamChat(t) {
   const chat = $('#fire-chat');
   if (t.el.contains(chat)) return restoreStreamChat(), renderStage();
   chatHome ??= { parent: chat.parentNode, next: chat.nextSibling };
-  if (!t.el.classList.contains('focus') && document.fullscreenElement !== t.el) { focusKey = t.key; sideBySide = false; }
+  if (!t.el.classList.contains('focus') && fullTile() !== t.el) { focusKey = t.key; sideBySide = false; }
   chat.classList.add('overlay');
   t.el.append(chat);
   renderStage();
@@ -387,7 +387,7 @@ function toggleDrawing(t) {
   if (drawingOn.has(t.key)) drawingOn.delete(t.key);
   else {
     drawingOn.add(t.key);
-    if (!t.el.classList.contains('focus') && document.fullscreenElement !== t.el) { focusKey = t.key; sideBySide = false; }
+    if (!t.el.classList.contains('focus') && fullTile() !== t.el) { focusKey = t.key; sideBySide = false; }
     if (!store.get('drewBefore')) toast('Draw with your mouse or finger. It fades after a few seconds. Press the pen again to stop.');
     store.set('drewBefore', '1');
   }

@@ -707,17 +707,45 @@ function stopAppAudio(voice) {
   a.context.close().catch(() => {});
 }
 
-/** Full screen for one tile. iPhones can only show a video itself full screen. */
+/** The tile that fills the screen, whichever way it got there. */
+function fullTile() {
+  return document.fullscreenElement || document.querySelector('.vtile.app-full');
+}
+
+/** Full screen for one tile. In the phone apps it just covers the app: the system's full screen
+   puts up a notice naming the app's address and, on iPads, leaves the page shifted when it ends.
+   iPhone browsers can only show a video itself full screen. */
 function toggleFullscreen(t) {
+  if (isPhoneApp) {
+    const on = !t.el.classList.contains('app-full');
+    for (const el of document.querySelectorAll('.vtile.app-full')) el.classList.remove('app-full');
+    t.el.classList.toggle('app-full', on);
+    syncAppFull();
+    return fullscreenChanged();
+  }
   if (document.fullscreenElement) return document.exitFullscreen().catch(() => {});
   if (t.el.requestFullscreen) return t.el.requestFullscreen().catch(() => {});
   t.media?.webkitEnterFullscreen?.();
 }
-document.addEventListener('fullscreenchange', () => {
-  const el = document.fullscreenElement;
+/** Tells the page (and the phone's status bar) whether a tile covers the app. */
+function syncAppFull() {
+  const on = !!document.querySelector('.vtile.app-full');
+  if (document.documentElement.classList.contains('tile-full') === on) return;
+  document.documentElement.classList.toggle('tile-full', on);
+  native('StatusBar', on ? 'hide' : 'show').catch(() => {});
+}
+function fullscreenChanged() {
+  const el = fullTile();
   for (const t of tiles.values()) t.el.querySelector('.vtile-full').title = t.el === el ? 'Exit full screen (Esc)' : 'Full screen';
   if (!el) renderStage(); // put the tiles back in order
-});
+}
+document.addEventListener('fullscreenchange', fullscreenChanged);
+document.addEventListener('keydown', (e) => {
+  const el = document.querySelector('.vtile.app-full');
+  if (e.key !== 'Escape' || !el) return;
+  const t = [...tiles.values()].find((x) => x.el === el);
+  if (t) e.stopPropagation(), toggleFullscreen(t);
+}, true);
 
 function openStage() {
   if (!state.voice) return;
@@ -833,7 +861,7 @@ function renderStage() {
     if (!t) {
       const el = document.createElement('div');
       el.onclick = (e) => {
-        if (document.fullscreenElement || e.target.closest('.fire-chat, .vtile-tools, .stream-audio') || el.classList.contains('drawing')) return;
+        if (fullTile() || e.target.closest('.fire-chat, .vtile-tools, .stream-audio') || el.classList.contains('drawing')) return;
         if (sideBySide) { sideBySide = false; focusKey = w.key; }
         else focusKey = focusKey === w.key ? null : w.key;
         renderStage();
@@ -904,7 +932,7 @@ function renderStage() {
   const next = [...big, ...order.filter((el) => !big.includes(el))];
   // Moving a tile that's full screen would drop it out of full screen, so while one is,
   // tiles only come and go; the order catches up afterwards.
-  if (document.fullscreenElement && grid.contains(document.fullscreenElement)) {
+  if (fullTile() && grid.contains(fullTile())) {
     for (const el of [...grid.children]) if (!next.includes(el)) el.remove();
     for (const el of next) if (el.parentNode !== grid) grid.append(el);
   } else if (next.length !== grid.children.length || next.some((el, i) => grid.children[i] !== el)) {
@@ -916,7 +944,8 @@ function renderStage() {
   $('#stage-grid').classList.toggle('solo', !!focused && order.length === 1);
   // The chat over a stream stays only while that stream is big or full screen.
   const chatTile = [...tiles.values()].find((t) => t.el.contains($('#fire-chat')));
-  if (chatTile && !chatTile.el.classList.contains('focus') && document.fullscreenElement !== chatTile.el) restoreStreamChat();
+  if (chatTile && !chatTile.el.classList.contains('focus') && fullTile() !== chatTile.el) restoreStreamChat();
+  syncAppFull();
   reportWatching();
   renderFire();
 }

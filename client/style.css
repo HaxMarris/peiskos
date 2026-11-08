@@ -771,13 +771,21 @@ a.btn { text-decoration: none; display: inline-block; }
 .vtile.speaking { box-shadow: 0 0 0 3px var(--moss), var(--shadow); }
 .vtile-name { position: absolute; left: 8px; bottom: 8px; display: flex; align-items: center; gap: 6px; max-width: calc(100% - 16px); padding: 3px 9px; border-radius: var(--radius-pill); background: rgba(20, 14, 10, .72); color: #fbf4ec; font-size: 13px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vtile-name svg { width: 14px; height: 14px; fill: currentColor; flex: none; }
-.vtile:fullscreen { border-radius: 0; background: #000; box-shadow: none; cursor: default; }
-.vtile:fullscreen video { object-fit: contain; }
+.vtile:fullscreen, .vtile.app-full { border-radius: 0; background: #000; box-shadow: none; cursor: default; }
+.vtile:fullscreen video, .vtile.app-full video { object-fit: contain; }
+/* Full screen in the phone apps: the tile covers the whole app, keeping its buttons clear of the
+   notch and home bar. */
+#stage-grid .vtile.app-full { position: fixed; inset: 0; z-index: 70; width: auto; height: auto; max-width: none; max-height: none; margin: 0; aspect-ratio: auto; justify-self: stretch; align-self: stretch; }
+html.tile-full .app .chat { transform: none !important; animation: none; }
+.vtile.app-full .vtile-tools { top: calc(8px + env(safe-area-inset-top)); right: calc(8px + env(safe-area-inset-right)); }
+.vtile.app-full .vtile-viewers { top: calc(8px + env(safe-area-inset-top)); left: calc(8px + env(safe-area-inset-left)); }
+.vtile.app-full .vtile-name { bottom: calc(8px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); }
+html.tile-full, html.tile-full body { overflow: hidden; }
 .vtile-full { position: absolute; top: 8px; right: 8px; display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: rgba(20, 14, 10, .72); color: #fbf4ec; opacity: 0; transition: opacity .15s; }
 .vtile-full:hover { background: rgba(20, 14, 10, .9); }
 .vtile-full svg { width: 18px; height: 18px; fill: currentColor; }
-.vtile-full .exit, .vtile:fullscreen .vtile-full .enter { display: none; }
-.vtile:fullscreen .vtile-full .exit { display: block; }
+.vtile-full .exit, .vtile:fullscreen .vtile-full .enter, .vtile.app-full .vtile-full .enter { display: none; }
+.vtile:fullscreen .vtile-full .exit, .vtile.app-full .vtile-full .exit { display: block; }
 .vtile:hover .vtile-full, .vtile-full:focus-visible { opacity: 1; }
 .vtile.no-video .vtile-full { display: none; }
 @media (hover: none) { .vtile-full { opacity: 1; } }
@@ -803,7 +811,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .badge { position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-sm); background: var(--berry); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
 .badge.hidden { display: none; }
 
-.fire-ring-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; container-type: size; }
+.fire-ring-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; container-type: size; overflow-x: clip; }
 /* renderFire sets --face, where the fire sits (--cy) and how big it's drawn (--fire) to fit the space. */
 .fire-ring { position: relative; width: 100%; height: 100%; --face: 84px; --fire: 640px; }
 .fire-glow, .fire-core { position: absolute; left: 50%; top: var(--cy, 50%); translate: -50% -50%; border-radius: 50%; aspect-ratio: 1; }
@@ -903,7 +911,7 @@ button.seat-face { cursor: pointer; }
   .fire-glow.inner { width: calc(var(--fire) * .34); }
   .fire-core { width: calc(var(--fire) * .36); }
   .seat { width: 120px; font-size: 14px; }
-  .fire-ring-wrap { padding: 8px; overflow-x: clip; }
+  .fire-ring-wrap { padding: 8px; }
   /* Nothing wider than the screen can make the whole page slide sideways under a finger. */
   html, body { overflow-x: clip; overscroll-behavior-x: none; }
   .fire-controls { gap: 6px; justify-content: space-around; padding: 6px 6px calc(16px + env(safe-area-inset-bottom)); }
@@ -1477,7 +1485,7 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 
 /* ---------- watching streams: tools on a tile, viewers, chat over a stream, drawing, previews, clips ---------- */
 .vtile-tools { position: absolute; top: 8px; right: 8px; z-index: 3; display: flex; gap: 6px; opacity: 0; transition: opacity .15s; }
-.vtile:hover .vtile-tools, .vtile-tools:focus-within, .vtile.drawing .vtile-tools, .vtile:fullscreen .vtile-tools { opacity: 1; }
+.vtile:hover .vtile-tools, .vtile-tools:focus-within, .vtile.drawing .vtile-tools, .vtile:fullscreen .vtile-tools, .vtile.app-full .vtile-tools { opacity: 1; }
 .vtile-tools .vtile-full { position: static; opacity: 1; }
 .vtile-tool { display: grid; place-items: center; width: 34px; height: 34px; padding: 0; border: 0; border-radius: 50%; background: rgba(20, 14, 10, .72); color: #fbf4ec; }
 .vtile-tool:hover { background: rgba(20, 14, 10, .9); }
@@ -1486,7 +1494,7 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .vtile-tool svg { width: 18px; height: 18px; fill: currentColor; }
 .vtile.no-video .vtile-tools { display: none; }
 /* The chat button only does something on a big or full screen video. */
-.vtile:not(.focus):not(:fullscreen) .tool-chat { display: none; }
+.vtile:not(.focus):not(:fullscreen):not(.app-full) .tool-chat { display: none; }
 @media (hover: none) { .vtile-tools { opacity: 1; } }
 .vtile-viewers { position: absolute; top: 8px; left: 8px; z-index: 3; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border-radius: var(--radius-pill); background: rgba(20, 14, 10, .72); color: #fbf4ec; font-size: 13px; font-weight: 800; cursor: default; }
 .vtile-viewers svg { width: 15px; height: 15px; fill: currentColor; }
@@ -1513,6 +1521,8 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .vtile .fire-chat.overlay .fire-chat-form { background: rgba(255, 255, 255, .1); border-color: rgba(255, 255, 255, .2); }
 .vtile .fire-chat.overlay .fire-chat-form input { color: #fff; }
 @media (max-width: 760px) { .vtile .fire-chat.overlay { width: auto; left: 10px; top: auto; height: 60%; } }
+.vtile.app-full .fire-chat.overlay { right: calc(10px + env(safe-area-inset-right)); bottom: calc(10px + env(safe-area-inset-bottom)); }
+@media (min-width: 761px) { .vtile.app-full .fire-chat.overlay { top: calc(52px + env(safe-area-inset-top)); } }
 /* A preview of someone's screen, over the button to watch it. */
 .stream-peek { position: fixed; z-index: 60; width: 260px; padding: 6px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow); display: flex; flex-direction: column; gap: 5px; pointer-events: none; }
 .stream-peek img { width: 100%; aspect-ratio: 16 / 9; object-fit: contain; border-radius: var(--radius-sm); display: block; background: #0d0907; }
@@ -1732,7 +1742,9 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 [data-holiday="midsummer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.8' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2845 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2890 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28135 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28180 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28225 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28270 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28315 12 12%29'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
 
 /* Whatever is falling or floating around the fire. */
-.season-layer { position: absolute; inset: -4% -2%; overflow: hidden; pointer-events: none; border-radius: 40%; }
+/* Leaves and snow may drift a little above and below the ring, but never past its sides: the ring
+   fills the scene's width, so anything wider made the whole window scroll sideways. */
+.season-layer { position: absolute; inset: -4% 0; overflow: hidden; pointer-events: none; border-radius: 40%; }
 .season-layer span { position: absolute; left: var(--x); top: -6%; width: calc(7px * var(--s)); height: calc(7px * var(--s)); animation: season-fall var(--d) linear var(--delay) infinite; }
 @keyframes season-fall { from { top: -6%; translate: 0 0; rotate: 0deg; } 50% { translate: 18px 0; } to { top: 104%; translate: -6px 0; rotate: 300deg; } }
 [data-season="winter"] .season-layer span, [data-holiday="yule"] .season-layer span { border-radius: 50%; background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .8); opacity: .85; }

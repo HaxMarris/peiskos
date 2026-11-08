@@ -1,11 +1,30 @@
-.board { position: relative; flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; }
-.board canvas { display: block; border-radius: 14px; box-shadow: 0 6px 30px rgba(0,0,0,.45); cursor: crosshair; background: #fffdf7; }
+/* The page sits in the middle of the board without giving the board its size, so the board can
+   shrink and grow with the window (and the page is redrawn to fit). */
+.board { position: relative; flex: 1; min-width: 0; min-height: 0; overflow: hidden; }
+.board canvas { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: block; border-radius: 14px;
+  box-shadow: 0 6px 30px rgba(0,0,0,.45); cursor: crosshair; background: #fffdf7; touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: center; padding: 8px; }
 .swatches, .sizes { display: flex; flex-wrap: wrap; gap: 4px; }
-.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); padding: 0; }
+.swatch { width: 26px; height: 26px; border-radius: 50%; border: 2px solid rgba(255,255,255,.25); padding: 0; flex: none; }
 .swatch.on { outline: 3px solid var(--ember); outline-offset: 1px; }
-.size { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; padding: 0; }
+.size { width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--line); background: var(--surface-2); display: grid; place-items: center; padding: 0; flex: none; }
 .size span { display: block; border-radius: 50%; background: var(--text); }
 .size.on { outline: 3px solid var(--ember); }
-.tool { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; }
+.tool { border: 1px solid var(--line); background: var(--surface-2); border-radius: 999px; padding: 6px 12px; font-size: 13px; font-weight: 700; flex: none; }
+.tool-row { display: contents; }
 .tool.on { background: var(--ember); color: var(--ember-ink); }
+/* Phones: the colours are one row you can swipe along, and the brushes and buttons another, so the page keeps the room. */
+@media (max-width: 700px) {
+  .tools { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 6px; padding: 4px 0 0; }
+  .swatches { flex-wrap: nowrap; overflow-x: auto; gap: 6px; padding: 4px 4px 6px; scrollbar-width: none; }
+  .swatches::-webkit-scrollbar { display: none; }
+  .swatch { width: 32px; height: 32px; }
+  .tools .tool-row { display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+  .tool { padding: 8px 12px; }
+}
+/* A phone on its side: the tools are one row you can swipe along. */
+@media (max-height: 500px) and (min-width: 701px) {
+  .tools { flex-wrap: nowrap; overflow-x: auto; justify-content: flex-start; padding: 4px 0 0; scrollbar-width: none; }
+  .tools::-webkit-scrollbar { display: none; }
+  .swatches, .sizes { flex-wrap: nowrap; }
+}

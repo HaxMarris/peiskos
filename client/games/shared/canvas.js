@@ -5,6 +5,8 @@
 const PAGE_W = 1600;
 const PAGE_H = 1000;
 const COLORS = ['#1b1b1f', '#ffffff', '#8a8a8a', '#e8453c', '#f08a4b', '#ffc93c', '#5cb85c', '#2e8b57', '#3b82f6', '#1e3a8a', '#9b5de5', '#f472b6', '#8b5a2b', '#f5d0a9'];
+const COLOR_NAMES = ['Black', 'White', 'Grey', 'Red', 'Orange', 'Yellow', 'Green', 'Dark green', 'Blue', 'Navy', 'Purple', 'Pink', 'Brown', 'Peach'];
+const SIZE_NAMES = ['Fine', 'Medium', 'Thick', 'Huge'];
 const SIZES = [4, 10, 22, 44];
 
 class SharedCanvas {
@@ -25,7 +27,7 @@ class SharedCanvas {
     new ResizeObserver(() => this.fit()).observe(canvas.parentElement);
     canvas.addEventListener('pointerdown', (e) => this.down(e));
     canvas.addEventListener('pointermove', (e) => this.move(e));
-    for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) canvas.addEventListener(ev, (e) => this.up(e));
+    for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture']) canvas.addEventListener(ev, (e) => this.up(e));
     canvas.style.touchAction = 'none';
     // Strokes go out in small pieces while you draw, so others see them as they happen.
     setInterval(() => this.flush(false), 60);
@@ -48,10 +50,11 @@ class SharedCanvas {
     return [Math.round(((e.clientX - r.left) / r.width) * PAGE_W), Math.round(((e.clientY - r.top) / r.height) * PAGE_H)];
   }
   down(e) {
-    // One finger draws: a second one landing doesn't take the stroke over.
+    // One finger (or pen, or mouse) draws at a time: a second finger or a palm doesn't start a stroke of its own.
     if (!this.enabled || this.drawing || (e.button !== undefined && e.button > 0)) return;
-    this.finger = e.pointerId;
-    this.canvas.setPointerCapture?.(e.pointerId);
+    e.preventDefault();
+    this.pointerId = e.pointerId;
+    try { this.canvas.setPointerCapture(e.pointerId); } catch { /* drawing still works without it */ }
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
     this.drawing = { id, by: null, color: this.color, size: this.size, erase: this.erase, points: [this.point(e)] };
     this.strokes.set(id, this.drawing);
@@ -59,16 +62,20 @@ class SharedCanvas {
     this.paint(this.drawing);
   }
   move(e) {
-    if (!this.drawing || (e.pointerId !== undefined && e.pointerId !== this.finger)) return;
-    const p = this.point(e);
-    const last = this.drawing.points[this.drawing.points.length - 1];
-    if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 3) return;
-    this.drawing.points.push(p);
-    this.pending.push(p);
-    this.paintSegment(this.drawing, last, p);
+    if (!this.drawing || e.pointerId !== this.pointerId) return;
+    // A quick finger moves further than one event a frame: the in-between points keep the line smooth.
+    const all = e.getCoalescedEvents?.();
+    for (const ev of all?.length ? all : [e]) {
+      const p = this.point(ev);
+      const last = this.drawing.points[this.drawing.points.length - 1];
+      if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 3) continue;
+      this.drawing.points.push(p);
+      this.pending.push(p);
+      this.paintSegment(this.drawing, last, p);
+    }
   }
   up(e) {
-    if (!this.drawing || (e?.pointerId !== undefined && e.pointerId !== this.finger)) return;
+    if (!this.drawing || (e && e.pointerId !== this.pointerId)) return;
     this.flush(true);
     this.drawing = null;
   }
@@ -89,7 +96,7 @@ class SharedCanvas {
     if (from) this.paintFrom(s, s.points.indexOf(from)); else this.paint(s);
   }
   remove(id) { if (this.strokes.delete(id)) this.redraw(); }
-  clear() { this.strokes.clear(); this.drawing = null; this.redraw(); }
+  clear() { this.strokes.clear(); this.drawing = null; this.pending = []; this.redraw(); }
   load(strokes) { this.strokes = new Map(strokes.map((s) => [s.id, s])); this.redraw(); }
   all() { return [...this.strokes.values()]; }
   style(s) {
@@ -128,7 +135,8 @@ class SharedCanvas {
     c.fillRect(0, 0, this.canvas.width, this.canvas.height);
     for (const s of this.strokes.values()) this.paint(s);
   }
-  /** The picture as a PNG file, at full page size. */
+  /** The picture as a PNG, at full page size. Made straight away (no waiting), so a phone's share
+      sheet still counts it as the tap that asked for it. */
   toBlob() {
     const out = document.createElement('canvas');
     out.width = PAGE_W;
@@ -137,7 +145,10 @@ class SharedCanvas {
     this.canvas = out; this.ctx = out.getContext('2d'); this.k = 1;
     this.redraw();
     Object.assign(this, keep);
-    return new Promise((resolve) => out.toBlob(resolve, 'image/png'));
+    const bytes = atob(out.toDataURL('image/png').split(',')[1]);
+    const buf = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) buf[i] = bytes.charCodeAt(i);
+    return new Blob([buf], { type: 'image/png' });
   }
 }
 
@@ -145,34 +156,42 @@ class SharedCanvas {
 function toolbar(box, sc, extra = []) {
   box.innerHTML = '';
   const swatches = el('div', 'swatches');
-  for (const color of COLORS) {
+  swatches.setAttribute('role', 'group');
+  swatches.setAttribute('aria-label', 'Colours');
+  COLORS.forEach((color, i) => {
     const b = el('button', 'swatch');
     b.type = 'button';
     b.style.background = color;
-    b.title = color;
-    b.setAttribute('aria-label', `Colour ${color}`);
+    b.title = COLOR_NAMES[i];
+    b.setAttribute('aria-label', COLOR_NAMES[i]);
     b.onclick = () => { sc.color = color; sc.erase = false; mark(); };
     b.dataset.color = color;
     swatches.append(b);
-  }
+  });
   const sizes = el('div', 'sizes');
-  for (const size of SIZES) {
+  sizes.setAttribute('role', 'group');
+  sizes.setAttribute('aria-label', 'Brush sizes');
+  SIZES.forEach((size, i) => {
     const b = el('button', 'size');
     b.type = 'button';
     b.dataset.size = size;
-    b.setAttribute('aria-label', `Brush size ${size}`);
+    b.title = SIZE_NAMES[i];
+    b.setAttribute('aria-label', `${SIZE_NAMES[i]} brush`);
     b.innerHTML = `<span style="width:${Math.min(26, 4 + size / 2)}px;height:${Math.min(26, 4 + size / 2)}px"></span>`;
     b.onclick = () => { sc.size = size; mark(); };
     sizes.append(b);
-  }
+  });
   const eraser = el('button', 'tool', 'Eraser');
   eraser.type = 'button';
   eraser.onclick = () => { sc.erase = !sc.erase; mark(); };
-  box.append(swatches, sizes, eraser, ...extra);
+  const row = el('div', 'tool-row');
+  row.append(sizes, eraser, ...extra);
+  box.append(swatches, row);
   function mark() {
-    swatches.querySelectorAll('.swatch').forEach((b) => b.classList.toggle('on', !sc.erase && b.dataset.color === sc.color));
-    sizes.querySelectorAll('.size').forEach((b) => b.classList.toggle('on', Number(b.dataset.size) === sc.size));
-    eraser.classList.toggle('on', sc.erase);
+    const on = (b, yes) => { b.classList.toggle('on', yes); b.setAttribute('aria-pressed', String(yes)); };
+    swatches.querySelectorAll('.swatch').forEach((b) => on(b, !sc.erase && b.dataset.color === sc.color));
+    sizes.querySelectorAll('.size').forEach((b) => on(b, Number(b.dataset.size) === sc.size));
+    on(eraser, sc.erase);
   }
   mark();
 }
