@@ -362,6 +362,7 @@ function micProcessor(voice) {
     name: 'burrow-mic',
     processedTrack: undefined,
     async init({ track }) {
+      voice.micInput = track;
       chain?.destroy();
       chain = null;
       // A phone on Bluetooth: the chain runs at the mic's own rate, so nothing is converted.
@@ -381,6 +382,7 @@ function micProcessor(voice) {
     // A new microphone: same filter, new input, so nothing needs re-sending. One at another rate
     // (Bluetooth headphones on a phone) gets a chain at its own rate.
     async restart({ track }) {
+      voice.micInput = track;
       if (chain && (await phoneMicRate(track)) === voice.micCtx?.sampleRate) chain.setInput(track);
       else await proc.init({ track });
     },
@@ -392,6 +394,25 @@ function micProcessor(voice) {
   };
   return proc;
 }
+
+/**
+ * Bluetooth headphones connected or gone mid-call: on a phone the mic's rate changes under the
+ * same microphone, so the chain is rebuilt at the new rate, without leaving the fire.
+ */
+let micRateCheck = null;
+function followMicRate() {
+  if (!phonePlatform || micRateCheck) return;
+  micRateCheck = (async () => {
+    // Give the phone a moment to finish moving the sound to the headphones.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const voice = state.voice, track = micTrack();
+    if (!voice?.micCtx || !voice.micInput || !track?.getProcessor()) return;
+    const rate = await phoneMicRate(voice.micInput);
+    if (state.voice !== voice || rate === voice.micCtx.sampleRate) return;
+    await track.setProcessor(micProcessor(voice));
+  })().catch((err) => console.warn("Couldn't follow the new microphone:", err)).finally(() => { micRateCheck = null; });
+}
+if (isPhoneApp) navigator.mediaDevices?.addEventListener?.('devicechange', followMicRate);
 
 const micTrack = () => state.voice?.room?.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Microphone)?.audioTrack;
 

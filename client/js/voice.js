@@ -219,6 +219,7 @@ function wakeVoiceAudio() {
   const wanted = [voice.micCtx, voice.mixCtx, document.hidden && ownTalkCtx ? null : voice.talkCtx];
   for (const ctx of wanted) if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   voice.room.startAudio().catch(() => {});
+  followMicRate(); // an iPhone pauses the sound while it moves it to headphones
   if (!document.hidden && micTrack()?.mediaStreamTrack?.readyState === 'ended' && !voice.serverMuted) republishMic();
 }
 document.addEventListener('visibilitychange', wakeVoiceAudio);
