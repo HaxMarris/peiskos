@@ -192,9 +192,10 @@ async function setChimeOutput() {
 
 // ---- your microphone, through the noise filter
 
-// Both filters want 48 kHz. On an iPhone a slightly bigger buffer keeps the filter from running
-// dry with the screen off, which others hear as crackles.
-const newMicContext = () => keepAwake(new AudioContext({ sampleRate: 48000, latencyHint: phonePlatform === 'ios' ? 'balanced' : 'interactive' }));
+// Both filters want 48 kHz. On a phone a slightly bigger buffer keeps the filter from running
+// dry: it works in bursts, and a phone's processor can miss the smallest buffer's deadline,
+// which others hear as crackles.
+const newMicContext = () => keepAwake(new AudioContext({ sampleRate: 48000, latencyHint: phonePlatform ? 'balanced' : 'interactive' }));
 
 /** Browsers start audio paused until you've clicked; if that happened, the next click starts it. */
 function keepRunning(ctx) {
