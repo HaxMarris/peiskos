@@ -47,11 +47,23 @@ struct CallActivityWidget: Widget {
             } compactLeading: {
                 HearthIcon(attributes: context.attributes, size: 24)
             } compactTrailing: {
-                Image(systemName: context.state.muted ? "mic.slash.fill" : "mic.fill")
-                    .foregroundColor(context.state.muted ? ember : .white)
+                // iOS already shows its own mic while Peiskos is listening, so a second one only
+                // appears when you're muted. Otherwise: how many people are at the fire.
+                if context.state.muted {
+                    Image(systemName: "mic.slash.fill").foregroundColor(ember)
+                } else {
+                    HStack(spacing: 3) {
+                        Image(systemName: "person.2.fill").font(.system(size: 11))
+                        Text("\(context.state.people ?? 1)").font(.system(size: 14, weight: .semibold, design: .rounded))
+                    }
+                    .foregroundColor(.white)
+                }
             } minimal: {
-                Image(systemName: context.state.muted ? "mic.slash.fill" : "mic.fill")
-                    .foregroundColor(context.state.muted ? ember : .white)
+                if context.state.muted {
+                    Image(systemName: "mic.slash.fill").foregroundColor(ember)
+                } else {
+                    HearthIcon(attributes: context.attributes, size: 22)
+                }
             }
             .widgetURL(URL(string: "peiskos://call"))
         }
