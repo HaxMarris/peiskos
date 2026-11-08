@@ -169,11 +169,21 @@ async function resolveServerUrl() {
 
 // A signup link from whoever runs the server: /?signup=… opens the register form, no code needed.
 let signupLink = isApp ? null : new URLSearchParams(location.search).get('signup');
-let registering = !!signupLink;
+// Which card the login screen shows: see PHASES.auth in phases.js. #auth carries it as data-phase.
+const AUTH_CARDS = { login: 'auth-form', register: 'auth-form', reset: 'reset-form', resetCode: 'reset-form', twoStep: 'two-step-form', resetLink: 'link-form', in: 'auth-form' };
+let authForm = signupLink ? 'register' : 'login'; // whichever of the two forms was showing last, to come back to
+const authPhase = phaseMachine('auth', authForm, {
+  el: () => $('#auth'),
+  onChange: (phase) => {
+    if (phase === 'login' || phase === 'register') authForm = phase;
+    showAuthCard(AUTH_CARDS[phase]);
+  },
+});
 
 async function showAuth() {
   $('#app').classList.add('hidden');
   $('#auth').classList.remove('hidden');
+  if (authPhase.is('in')) authPhase.to(authForm);
   const otherServer = isApp && state.serverUrl !== DEFAULT_SERVER;
   $('#server-url-row').classList.toggle('hidden', !otherServer);
   $('#other-server-row').classList.toggle('hidden', !isApp || otherServer);
@@ -249,6 +259,7 @@ function showAndroidDownload() {
 }
 
 async function renderAuthMode() {
+  const registering = authPhase.is('register');
   $('#auth-title').textContent = registering ? 'Create your account' : 'Welcome back';
   $('#auth-subtitle').textContent = registering ? 'Pick a username your friends will see.' : '';
   $('#auth-submit').textContent = registering ? 'Create account' : 'Log in';
@@ -282,6 +293,7 @@ async function renderAuthMode() {
 // people signing up can read them.
 const legalUrl = (page) => `${state.serverUrl.replace(/\/$/, '')}/${page}`;
 function renderLegalRow() {
+  const registering = authPhase.is('register');
   const row = $('#legal-row');
   const foot = $('#legal-foot');
   // Signing up is agreeing, so it's said above the button; logging in only links them, at the bottom.
@@ -296,10 +308,8 @@ function renderLegalRow() {
 
 // ---- forgot your password: a code to your confirmed email, then a new password
 
-let resetSent = false;
 function showReset(on) {
-  showAuthCard(on ? 'reset-form' : 'auth-form');
-  resetSent = false;
+  authPhase.to(on ? 'reset' : authForm);
   $('#reset-step2').classList.add('hidden');
   $('#reset-resend').classList.add('hidden');
   $('#reset-submit').textContent = 'Email me a code';
@@ -314,7 +324,7 @@ $('#forgot-link').addEventListener('click', (e) => { e.preventDefault(); showRes
 $('#reset-back').addEventListener('click', (e) => { e.preventDefault(); showReset(false); });
 async function sendResetCode() {
   const { minutes } = await api('/api/password/forgot', { method: 'POST', body: { username: $('#reset-username').value.trim() } });
-  resetSent = true;
+  authPhase.to('resetCode');
   $('#reset-step2').classList.remove('hidden');
   $('#reset-resend').classList.remove('hidden');
   $('#reset-submit').textContent = 'Set new password';
@@ -330,7 +340,7 @@ $('#reset-form').addEventListener('submit', async (e) => {
   $('#reset-error').textContent = '';
   $('#reset-submit').disabled = true;
   try {
-    if (!resetSent) return await sendResetCode();
+    if (authPhase.is('reset')) return await sendResetCode();
     const result = await api('/api/password/reset', {
       method: 'POST',
       body: { username: $('#reset-username').value.trim(), code: $('#reset-code').value.trim(), newPassword: $('#reset-password').value },
@@ -347,7 +357,7 @@ $('#reset-form').addEventListener('submit', async (e) => {
 
 $('#auth-toggle').addEventListener('click', (e) => {
   e.preventDefault();
-  registering = !registering;
+  authPhase.to(authPhase.is('register') ? 'login' : 'register');
   renderAuthMode();
 });
 
@@ -378,6 +388,7 @@ $('#auth-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (isApp) state.serverUrl = normalizeServerUrl($('#server-url').value) || DEFAULT_SERVER;
   $('#auth-submit').disabled = true;
+  const registering = authPhase.is('register');
   try {
     await resolveServerUrl();
     const body = { username: $('#username').value.trim(), password: $('#password').value };
@@ -403,7 +414,7 @@ let twoStepTicket = null;
 async function finishLogin(result) {
   if (result.twoStep) {
     twoStepTicket = result.ticket;
-    showAuthCard('two-step-form');
+    authPhase.to('twoStep');
     $('#two-step-code').value = '';
     $('#two-step-error').textContent = '';
     $('#two-step-code').focus();
@@ -413,7 +424,7 @@ async function finishLogin(result) {
   state.me = result.user;
   store.set('token', result.token);
   store.set('serverUrl', state.serverUrl);
-  showAuthCard('auth-form');
+  authPhase.to(authForm);
   await enterApp();
   return true;
 }
@@ -421,7 +432,7 @@ async function finishLogin(result) {
 function showAuthCard(id) {
   for (const f of ['auth-form', 'reset-form', 'two-step-form', 'link-form']) $('#' + f).classList.toggle('hidden', f !== id);
 }
-$('#two-step-back').addEventListener('click', (e) => { e.preventDefault(); twoStepTicket = null; showAuthCard('auth-form'); });
+$('#two-step-back').addEventListener('click', (e) => { e.preventDefault(); twoStepTicket = null; authPhase.to(authForm); });
 $('#two-step-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#two-step-error').textContent = '';
@@ -432,7 +443,7 @@ $('#two-step-form').addEventListener('submit', async (e) => {
     await finishLogin(result);
   } catch (err) {
     $('#two-step-error').textContent = err.message;
-    if (/Log in again/.test(err.message)) setTimeout(() => showAuthCard('auth-form'), 1500);
+    if (/Log in again/.test(err.message)) setTimeout(() => { if (authPhase.is('twoStep')) authPhase.to(authForm); }, 1500);
   } finally {
     $('#two-step-submit').disabled = false;
   }
@@ -468,7 +479,7 @@ $('#passkey-login').addEventListener('click', async () => {
 // A reset link from whoever runs the server: /?reset=…
 let resetLinkToken = new URLSearchParams(location.search).get('reset');
 async function showResetLink() {
-  showAuthCard('link-form');
+  authPhase.to('resetLink');
   $('#link-error').textContent = '';
   try {
     const { username } = await api(`/api/password/link?token=${encodeURIComponent(resetLinkToken)}`);
@@ -481,7 +492,7 @@ async function showResetLink() {
   }
 }
 const forgetResetLink = () => { resetLinkToken = null; history.replaceState(null, '', location.pathname); };
-$('#link-back').addEventListener('click', (e) => { e.preventDefault(); forgetResetLink(); showAuthCard('auth-form'); });
+$('#link-back').addEventListener('click', (e) => { e.preventDefault(); forgetResetLink(); authPhase.to(authForm); });
 $('#link-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   $('#link-error').textContent = '';
@@ -534,6 +545,7 @@ async function enterAppNow() {
   state.me = await api('/api/me');
   state.folders = state.me.folders ?? [];
   $('#auth').classList.add('hidden');
+  authPhase.to('in');
   $('#app').classList.remove('hidden');
   $('#me-name').textContent = state.me.displayName || state.me.username;
   state.avatars.set(state.me.id, state.me.avatar ?? null);
