@@ -19,7 +19,7 @@
     "electron-updater": "^6.6.0"
   },
   "optionalDependencies": {
-    "loopback-capture": "3.0.2",
+    "loopback-capture": "4.0.0",
     "uiohook-napi": "1.5.5"
   },
   "devDependencies": {
