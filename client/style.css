@@ -801,7 +801,7 @@ a.btn { text-decoration: none; display: inline-block; }
 .badge { position: absolute; top: -2px; right: -4px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: var(--radius-sm); background: var(--berry); color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; text-align: center; }
 .badge.hidden { display: none; }
 
-.fire-ring-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; container-type: size; }
+.fire-ring-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; container-type: size; overflow-x: clip; }
 /* renderFire sets --face, where the fire sits (--cy) and how big it's drawn (--fire) to fit the space. */
 .fire-ring { position: relative; width: 100%; height: 100%; --face: 84px; --fire: 640px; }
 .fire-glow, .fire-core { position: absolute; left: 50%; top: var(--cy, 50%); translate: -50% -50%; border-radius: 50%; aspect-ratio: 1; }
@@ -901,7 +901,7 @@ button.seat-face { cursor: pointer; }
   .fire-glow.inner { width: calc(var(--fire) * .34); }
   .fire-core { width: calc(var(--fire) * .36); }
   .seat { width: 120px; font-size: 14px; }
-  .fire-ring-wrap { padding: 8px; overflow-x: clip; }
+  .fire-ring-wrap { padding: 8px; }
   /* Nothing wider than the screen can make the whole page slide sideways under a finger. */
   html, body { overflow-x: clip; overscroll-behavior-x: none; }
   .fire-controls { gap: 6px; justify-content: space-around; padding: 6px 6px calc(16px + env(safe-area-inset-bottom)); }
@@ -1730,7 +1730,9 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 [data-holiday="midsummer"] .season-mark { display: inline-block; --mark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cmask id='m'%3E%3Crect width='24' height='24' fill='%23fff'/%3E%3Ccircle cx='12' cy='12' r='2.8' fill='%23000'/%3E%3C/mask%3E%3Cg mask='url%28%23m%29'%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%280 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2845 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%2890 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28135 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28180 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28225 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28270 12 12%29'/%3E%3Cellipse cx='12' cy='5.5' rx='2.3' ry='5' transform='rotate%28315 12 12%29'/%3E%3C/g%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E"); }
 
 /* Whatever is falling or floating around the fire. */
-.season-layer { position: absolute; inset: -4% -2%; overflow: hidden; pointer-events: none; border-radius: 40%; }
+/* Leaves and snow may drift a little above and below the ring, but never past its sides: the ring
+   fills the scene's width, so anything wider made the whole window scroll sideways. */
+.season-layer { position: absolute; inset: -4% 0; overflow: hidden; pointer-events: none; border-radius: 40%; }
 .season-layer span { position: absolute; left: var(--x); top: -6%; width: calc(7px * var(--s)); height: calc(7px * var(--s)); animation: season-fall var(--d) linear var(--delay) infinite; }
 @keyframes season-fall { from { top: -6%; translate: 0 0; rotate: 0deg; } 50% { translate: 18px 0; } to { top: 104%; translate: -6px 0; rotate: 300deg; } }
 [data-season="winter"] .season-layer span, [data-holiday="yule"] .season-layer span { border-radius: 50%; background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .8); opacity: .85; }
