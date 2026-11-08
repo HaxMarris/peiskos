@@ -512,6 +512,7 @@ async function logout(callServer = true) {
   clearTimeout(wsTimer);
   wsTimer = null;
   if (state.ws) { state.ws.onclose = null; state.ws.close(); state.ws = null; }
+  connPhase.to('offline');
   // Whoever logs in next starts fresh, not in this account's room.
   state.channelId = null;
   state.messages = [];
@@ -625,9 +626,13 @@ async function catchUpRoom() {
 
 // ---------------------------------------------------------------- websocket
 
+// Where the live connection is: see PHASES.connection in phases.js. #conn-status carries it as data-phase.
+const connPhase = phaseMachine('connection', 'offline', { el: () => $('#conn-status') });
+
 function connect() {
   wsTimer = null;
-  if (!state.token) return;
+  if (!state.token) return connPhase.to('offline');
+  connPhase.to('connecting');
   const url = state.serverUrl.replace(/^http/, 'ws') + '/ws?token=' + encodeURIComponent(state.token);
   // Never two at once: an older one still open would deliver every event twice.
   if (state.ws) { state.ws.onclose = null; state.ws.onmessage = null; state.ws.close(); }
@@ -636,6 +641,7 @@ function connect() {
   ws.onopen = () => {
     const wasRetry = state.wsRetry > 0;
     state.wsRetry = 0;
+    connPhase.to('open');
     setConnected(true, 'Connected');
     // Dropping off took you out of any game at the fire (and ended it, if it was yours).
     gameConnectionLost();
@@ -655,6 +661,7 @@ function connect() {
     ws.heard = Date.now();
     const ev = JSON.parse(e.data);
     if (ev.type !== 'pong') handleEvent(ev);
+    else if (state.ws === ws && connPhase.is('checking')) connPhase.to('open');
   };
   ws.onclose = (e) => {
     // The password was changed on another device, which signs this one out.
@@ -665,7 +672,9 @@ function connect() {
       return;
     }
     setConnected(false, 'Reconnecting…');
-    if (state.ws !== ws || !state.token) return;
+    if (state.ws !== ws) return;
+    if (!state.token) return connPhase.to('offline');
+    connPhase.to('waiting');
     const delay = Math.min(30000, 1000 * 2 ** state.wsRetry++);
     clearTimeout(wsTimer);
     wsTimer = setTimeout(connect, delay);
@@ -677,13 +686,16 @@ let wsTimer = null;
 // there now and then, and as soon as you come back to it. No answer in time and it reconnects.
 function checkConnection() {
   const ws = state.ws;
-  if (!ws || ws.readyState !== WebSocket.OPEN || ws.checking) return;
+  if (!ws || ws.readyState !== WebSocket.OPEN || connPhase.is('checking')) return;
   const asked = Date.now();
-  ws.checking = true;
+  connPhase.to('checking');
   ws.send(JSON.stringify({ type: 'ping' }));
   setTimeout(() => {
-    ws.checking = false;
-    if (state.ws !== ws || ws.readyState !== WebSocket.OPEN || ws.heard >= asked) return;
+    if (state.ws !== ws) return;
+    if (ws.readyState !== WebSocket.OPEN || ws.heard >= asked) {
+      if (connPhase.is('checking')) connPhase.to('open'); // heard from it, just not a pong
+      return;
+    }
     // Closing a dead connection can hang, so don't wait for it to say it's closed.
     const closed = ws.onclose;
     ws.onclose = null;
@@ -696,7 +708,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 // The network's back (Wi-Fi rejoined, laptop woke up): reconnect now rather than waiting out the backoff.
 window.addEventListener('online', () => {
   if (state.ws?.readyState === WebSocket.OPEN) return checkConnection();
-  if (!wsTimer || !state.token) return;
+  if (!connPhase.is('waiting') || !state.token) return;
   clearTimeout(wsTimer);
   wsTimer = null;
   connect();
