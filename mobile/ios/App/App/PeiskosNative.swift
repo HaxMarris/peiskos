@@ -42,7 +42,7 @@ public class VoiceCallPlugin: CAPPlugin, CAPBridgedPlugin, NotificationHandlerPr
     ]
 
     private struct Call {
-        var title: String, text: String, room: String, muted: Bool
+        var title: String, text: String, room: String, muted: Bool, people: Int
         var key: String, icon: Data?, initial: String
     }
 
@@ -81,7 +81,7 @@ public class VoiceCallPlugin: CAPPlugin, CAPBridgedPlugin, NotificationHandlerPr
         let text = call.getString("text") ?? "Peiskos"
         let next = Call(
             title: call.getString("title") ?? "In a voice room", text: text, room: call.getString("room") ?? "",
-            muted: call.getBool("muted") ?? false, key: call.getString("key") ?? text,
+            muted: call.getBool("muted") ?? false, people: call.getInt("people") ?? 1, key: call.getString("key") ?? text,
             icon: icon, initial: call.getString("initial") ?? String(text.prefix(1)).uppercased()
         )
         DispatchQueue.main.async {
@@ -156,7 +156,7 @@ public class VoiceCallPlugin: CAPPlugin, CAPBridgedPlugin, NotificationHandlerPr
     @available(iOS 16.2, *)
     private func showLiveActivity() -> Bool {
         guard let call = current, ActivityAuthorizationInfo().areActivitiesEnabled else { return false }
-        let state = CallAttributes.ContentState(title: call.text, room: call.room, muted: call.muted, output: Self.outputKind())
+        let state = CallAttributes.ContentState(title: call.text, room: call.room, muted: call.muted, output: Self.outputKind(), people: call.people)
         let content = ActivityContent(state: state, staleDate: nil)
         if let running = activity as? Activity<CallAttributes>, activityKey == call.key {
             Task { await running.update(content) }

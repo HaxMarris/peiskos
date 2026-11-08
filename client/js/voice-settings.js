@@ -192,9 +192,28 @@ async function setChimeOutput() {
 
 // ---- your microphone, through the noise filter
 
-// Both filters want 48 kHz. On an iPhone a slightly bigger buffer keeps the filter from running
-// dry with the screen off, which others hear as crackles.
-const newMicContext = () => keepAwake(new AudioContext({ sampleRate: 48000, latencyHint: phonePlatform === 'ios' ? 'balanced' : 'interactive' }));
+// Both filters want 48 kHz. On a phone a slightly bigger buffer keeps the filter from running
+// dry: it works in bursts, and a phone's processor can miss the smallest buffer's deadline,
+// which others hear as crackles.
+const newMicContext = (sampleRate = 48000) => keepAwake(new AudioContext({ sampleRate, latencyHint: phonePlatform ? 'balanced' : 'interactive' }));
+
+/**
+ * The rate a phone's microphone runs at. Bluetooth headphones drop to 16 or 8 kHz while their mic
+ * is in use, and turning that into the filters' 48 kHz and back, all through the call, crackles.
+ * Computers keep 48 kHz: their browsers convert cleanly.
+ */
+async function phoneMicRate(track) {
+  if (!phonePlatform) return 48000;
+  const reported = track?.getSettings?.().sampleRate;
+  if (reported) return reported;
+  // Not reported: a new audio engine starts at the rate the phone is using now.
+  try {
+    const probe = new AudioContext();
+    const rate = probe.sampleRate;
+    probe.close().catch(() => {});
+    return rate;
+  } catch { return 48000; }
+}
 
 /** Browsers start audio paused until you've clicked; if that happened, the next click starts it. */
 function keepRunning(ctx) {
@@ -232,8 +251,10 @@ async function noiseFilter(ctx, model, withSpeech = false) {
  * Strongest.
  */
 async function micChain(ctx, track) {
-  const model = noiseModel();
-  const auto = autoGate();
+  // The noise filters only work at 48 kHz. Below that the phone's own filter stands in (see micProcessor).
+  const fullRate = ctx.sampleRate === 48000;
+  const model = fullRate ? noiseModel() : null;
+  const auto = fullRate && autoGate();
   let filter = null, speech = null;
   if (model) {
     try { filter = await noiseFilter(ctx, model, auto && model === 'rnnoise'); } catch (err) { console.warn(`Couldn't load the ${model} noise filter:`, err); }
@@ -341,15 +362,30 @@ function micProcessor(voice) {
     name: 'burrow-mic',
     processedTrack: undefined,
     async init({ track }) {
-      voice.micCtx ??= newMicContext();
-      keepRunning(voice.micCtx);
+      voice.micInput = track;
       chain?.destroy();
+      chain = null;
+      // A phone on Bluetooth: the chain runs at the mic's own rate, so nothing is converted.
+      const rate = await phoneMicRate(track);
+      if (voice.micCtx && voice.micCtx.sampleRate !== rate) {
+        voice.micCtx.close().catch(() => {});
+        voice.micCtx = null;
+      }
+      voice.micCtx ??= newMicContext(rate);
+      keepRunning(voice.micCtx);
+      // Without our noise filter, the phone's own one takes over.
+      if (rate !== 48000 && noiseModel()) await track.applyConstraints?.({ noiseSuppression: true }).catch(() => {});
       chain = await micChain(voice.micCtx, track);
       proc.processedTrack = chain.track;
       voice.micChain = chain;
     },
-    // A new microphone: same filter, new input, so nothing needs re-sending.
-    async restart({ track }) { if (chain) chain.setInput(track); else await proc.init({ track }); },
+    // A new microphone: same filter, new input, so nothing needs re-sending. One at another rate
+    // (Bluetooth headphones on a phone) gets a chain at its own rate.
+    async restart({ track }) {
+      voice.micInput = track;
+      if (chain && (await phoneMicRate(track)) === voice.micCtx?.sampleRate) chain.setInput(track);
+      else await proc.init({ track });
+    },
     async destroy() {
       chain?.destroy();
       if (voice.micChain === chain) voice.micChain = null;
@@ -358,6 +394,25 @@ function micProcessor(voice) {
   };
   return proc;
 }
+
+/**
+ * Bluetooth headphones connected or gone mid-call: on a phone the mic's rate changes under the
+ * same microphone, so the chain is rebuilt at the new rate, without leaving the fire.
+ */
+let micRateCheck = null;
+function followMicRate() {
+  if (!phonePlatform || micRateCheck) return;
+  micRateCheck = (async () => {
+    // Give the phone a moment to finish moving the sound to the headphones.
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+    const voice = state.voice, track = micTrack();
+    if (!voice?.micCtx || !voice.micInput || !track?.getProcessor()) return;
+    const rate = await phoneMicRate(voice.micInput);
+    if (state.voice !== voice || rate === voice.micCtx.sampleRate) return;
+    await track.setProcessor(micProcessor(voice));
+  })().catch((err) => console.warn("Couldn't follow the new microphone:", err)).finally(() => { micRateCheck = null; });
+}
+if (isPhoneApp) navigator.mediaDevices?.addEventListener?.('devicechange', followMicRate);
 
 const micTrack = () => state.voice?.room?.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Microphone)?.audioTrack;
 

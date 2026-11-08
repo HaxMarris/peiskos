@@ -35,11 +35,14 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   state.fireside = { channelId, messages: [], unread: 0 };
   // Made now, while the click still counts, or some browsers start it paused.
   if (wantsMicProcessor()) voice.micCtx = newMicContext();
-  voice.talkCtx = new AudioContext({ latencyHint: 'interactive' });
-  keepAwake(voice.talkCtx);
-  // On an iPhone the call's sound is mixed with a bigger buffer: with the screen off the phone
-  // gives the app less time, and the smallest buffer runs dry, which crackles.
-  if (phonePlatform === 'ios') voice.mixCtx = keepAwake(new AudioContext({ latencyHint: 'playback' }));
+  if (phonePlatform) {
+    // On a phone the call's sound is mixed with a bigger buffer. A phone's processor can't always
+    // fill the smallest buffer in time, and every gap is a crackle. The talking rings measure on
+    // the same audio engine: a second one doubles the work, and on an iPhone its request for the
+    // smallest buffer would shrink the buffer for all of Peiskos's sound.
+    voice.mixCtx = keepAwake(new AudioContext({ latencyHint: 'playback' }));
+    voice.talkCtx = voice.mixCtx;
+  } else voice.talkCtx = keepAwake(new AudioContext({ latencyHint: 'interactive' }));
   renderVoiceBar(rejoin ? 'Reconnecting…' : 'Connecting…');
   if (!rejoin) goToVoice(); // sit down at the fire
   try {
@@ -210,10 +213,13 @@ function wakeVoiceAudio() {
   const voice = state.voice;
   if (!voice?.room) return;
   // The talking rings only matter on screen, so their meters rest while Peiskos is hidden.
-  if (document.hidden && voice.talkCtx?.state === 'running') voice.talkCtx.suspend().catch(() => {});
-  const wanted = [voice.micCtx, voice.mixCtx, document.hidden ? null : voice.talkCtx];
+  // On a phone they share the call's audio engine, which has to keep running.
+  const ownTalkCtx = voice.talkCtx !== voice.mixCtx;
+  if (document.hidden && ownTalkCtx && voice.talkCtx?.state === 'running') voice.talkCtx.suspend().catch(() => {});
+  const wanted = [voice.micCtx, voice.mixCtx, document.hidden && ownTalkCtx ? null : voice.talkCtx];
   for (const ctx of wanted) if (ctx && ctx.state !== 'running' && ctx.state !== 'closed') ctx.resume().catch(() => {});
   voice.room.startAudio().catch(() => {});
+  followMicRate(); // an iPhone pauses the sound while it moves it to headphones
   if (!document.hidden && micTrack()?.mediaStreamTrack?.readyState === 'ended' && !voice.serverMuted) republishMic();
 }
 document.addEventListener('visibilitychange', wakeVoiceAudio);
@@ -258,6 +264,7 @@ function watchTalking(voice) {
   voice.talkTimer = setInterval(() => {
     const room = voice.room;
     if (state.voice !== voice || !room || ctx.state === 'closed') return clearInterval(voice.talkTimer);
+    if (document.hidden) return; // nobody sees the rings
     const now = performance.now();
     const present = new Set();
     for (const p of [room.localParticipant, ...room.remoteParticipants.values()]) {
@@ -344,7 +351,7 @@ function leaveVoice(quiet) {
   voice.crypto?.worker.terminate();
   voice.micCtx?.close().catch(() => {});
   clearInterval(voice.talkTimer);
-  voice.talkCtx?.close().catch(() => {});
+  if (voice.talkCtx !== voice.mixCtx) voice.talkCtx?.close().catch(() => {});
   voice.mixCtx?.close().catch(() => {});
   closeVolume();
   closeStage();
