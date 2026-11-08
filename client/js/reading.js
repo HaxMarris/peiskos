@@ -339,7 +339,7 @@ function confirmSending(m) {
   sending = sending.filter((x) => x !== hit);
   // Only for what you sent from here, once the server has it.
   playSound('sent');
-  store.set('firstWeekSaid', '1');
+  store.set(saidKey(), '1');
 }
 
 async function sendMessage(channelId, body, onFail) {

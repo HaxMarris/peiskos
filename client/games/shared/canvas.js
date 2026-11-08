@@ -48,7 +48,9 @@ class SharedCanvas {
     return [Math.round(((e.clientX - r.left) / r.width) * PAGE_W), Math.round(((e.clientY - r.top) / r.height) * PAGE_H)];
   }
   down(e) {
-    if (!this.enabled || (e.button !== undefined && e.button > 0)) return;
+    // One finger draws: a second one landing doesn't take the stroke over.
+    if (!this.enabled || this.drawing || (e.button !== undefined && e.button > 0)) return;
+    this.finger = e.pointerId;
     this.canvas.setPointerCapture?.(e.pointerId);
     const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
     this.drawing = { id, by: null, color: this.color, size: this.size, erase: this.erase, points: [this.point(e)] };
@@ -57,7 +59,7 @@ class SharedCanvas {
     this.paint(this.drawing);
   }
   move(e) {
-    if (!this.drawing) return;
+    if (!this.drawing || (e.pointerId !== undefined && e.pointerId !== this.finger)) return;
     const p = this.point(e);
     const last = this.drawing.points[this.drawing.points.length - 1];
     if (Math.abs(p[0] - last[0]) + Math.abs(p[1] - last[1]) < 3) return;
@@ -65,8 +67,8 @@ class SharedCanvas {
     this.pending.push(p);
     this.paintSegment(this.drawing, last, p);
   }
-  up() {
-    if (!this.drawing) return;
+  up(e) {
+    if (!this.drawing || (e?.pointerId !== undefined && e.pointerId !== this.finger)) return;
     this.flush(true);
     this.drawing = null;
   }

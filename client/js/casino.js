@@ -1005,9 +1005,12 @@ async function openTheCase(c) {
     strip.style.transform = `translateX(${-land}px)`;
   });
   reels.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const hearth = casino.hearthId;
   await new Promise((done) => setTimeout(done, ms + (got.length - 1) * 60 + 150));
-  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   opening = false;
+  // Moved to another hearth's casino while it spun: those skins stay with the hearth they came from.
+  if (casino.hearthId !== hearth) return;
+  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   topPulls = null; // so the day's top pulls are fresh next time
   casino.inventory.unshift(...[...got].reverse());
   $('#inv-count').textContent = `(${casino.inventory.length})`;

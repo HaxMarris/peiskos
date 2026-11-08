@@ -61,8 +61,15 @@ function sendPage(to) {
 let saveTimer = 0;
 function saveSoon() {
   clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => Peiskos.snapshot({ strokes: sc.all() }), 1500);
+  saveTimer = setTimeout(saveNow, 1500);
 }
+function saveNow() {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+  Peiskos.snapshot({ strokes: sc.all() });
+}
+// Popping out (or closing) reloads this page: the last strokes are saved first, not lost.
+addEventListener('pagehide', () => { if (Peiskos.isHost && saveTimer) saveNow(); });
 
 Peiskos.on('msg', (from, d) => {
   if (Peiskos.isHost) {
