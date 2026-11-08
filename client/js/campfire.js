@@ -263,6 +263,8 @@ async function onRoomData(voice, payload, participant) {
 }
 /** A new room key: tell everyone (newcomers too) what we're watching and showing. */
 function roomKeyReady(voice) {
+  // The first key: talking can start, so the bar says you're in.
+  if (state.voice === voice && voicePhase.is('securing') && voicePhase.to('connected')) renderVoiceBar();
   voice.watchSent = null;
   reportWatching();
   if (voice.thumbTimer) sendThumb(voice);
@@ -747,8 +749,9 @@ new ResizeObserver(() => {
   all.forEach((el) => place(el, Number(el.dataset.i)));
 }).observe($('.fire-ring-wrap'));
 
-function renderFire(status) {
+function renderFire() {
   const voice = state.voice;
+  const status = voiceWaitText();
   if (!voice || !state.stageOpen || state.stageShow !== 'fire') return clearSeats();
   const LK = window.LivekitClient;
   const room = voice.room;

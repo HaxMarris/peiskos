@@ -61,6 +61,7 @@ function scheduleRejoin(again) {
   if (tries > 14) { cancelRejoin(); return renderVoiceBar(); }
   const delay = Math.min(60000, 1000 * 2 ** Math.min(tries - 1, 6));
   state.rejoin = { ...again, tries, timer: setTimeout(rejoinNow, navigator.onLine === false ? 60000 : delay) };
+  if (!state.voice) voicePhase.to('rejoining');
   renderVoiceBar();
 }
 function rejoinNow() {
@@ -75,6 +76,8 @@ function cancelRejoin() {
   if (!state.rejoin) return;
   clearTimeout(state.rejoin.timer);
   state.rejoin = null;
+  // Back in (voice is set), or given up on getting back.
+  if (!state.voice) voicePhase.to('idle');
   renderVoiceBar();
 }
 // The network's back: don't wait out the backoff.
