@@ -426,11 +426,13 @@ label.check input { width: auto; }
 
 /* ---------- modal ---------- */
 .modal { position: fixed; inset: 0; background: rgba(20, 14, 10, .55); backdrop-filter: blur(3px); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); z-index: 10; }
-.modal-card { background: var(--surface); border-radius: var(--radius-xl); padding: 26px; width: 100%; max-width: 440px; max-height: calc(100vh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
+.modal-card { background: var(--surface); border-radius: var(--radius-xl); padding: 26px; width: 100%; max-width: 480px; max-height: calc(100vh - 32px); overflow-y: auto; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 20px 60px rgba(0, 0, 0, .3); }
 .modal-card h2 { margin: 0; font-size: 24px; }
 .modal-card p { margin: 0; }
 .modal-card form { display: flex; flex-direction: column; gap: 10px; }
-.modal-row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+/* Buttons keep their words on one line; when they don't fit side by side, they go onto another row. */
+.modal-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+.modal-row .btn { white-space: nowrap; }
 .invite-box { display: flex; gap: 8px; }
 .invite-box input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; }
 @media (max-width: 760px) { .invite-box { flex-wrap: wrap; } .invite-box input { flex-basis: 100%; } .invite-box .btn { flex: 1; } }
@@ -2094,6 +2096,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .app.at-home .sidebar, .app.at-home .member-pane, .app.at-home .chat-header, .app.at-home .composer-wrap, .app.at-home #dm-empty { display: none !important; }
 .app.at-home .chat { display: flex !important; grid-column: 1 / -1; }
 .app.at-home .messages { visibility: hidden; }
+/* What belongs to the room left open behind Home (its new-messages bar, its countdown) stays with it. */
+.app.at-home .unread-bar, .app.at-home .present-bar, .app.at-home .event-pill { display: none !important; }
 .home-view { position: absolute; inset: 0; z-index: 2; overflow-y: auto; background: var(--bg); padding: 32px max(24px, calc((100% - 720px) / 2)) 48px; display: flex; flex-direction: column; gap: 24px; }
 .home-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .home-head h2 { margin: 0; font-size: 28px; }

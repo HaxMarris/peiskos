@@ -686,7 +686,7 @@ async function openAlbum(serverId) {
       b.setAttribute('aria-label', a.alt || a.name);
       b.innerHTML = a.type.startsWith('video/')
         ? (a.thumb ? `<img loading="lazy" alt="" src="${escapeHtml(state.serverUrl + a.thumb)}" />` : '') + '<span class="album-play" aria-hidden="true">▶</span>'
-        : `<img loading="lazy" alt="" src="${escapeHtml(url)}" />`;
+        : `<img loading="lazy" alt="" src="${escapeHtml(a.thumb ? state.serverUrl + a.thumb : url)}" />`;
       grid.append(b);
     }
     before = r.items.at(-1)?.messageId ?? before;
@@ -697,13 +697,27 @@ async function openAlbum(serverId) {
     if (!b) return;
     const a = items[Number(b.dataset.i)];
     if (a.type.startsWith('video/')) { closeModal(); jumpTo(a.channelId, a.messageId); return; }
+    // Closing the picture goes back to the album, where you were in it.
+    const card = $('#modal-card');
+    const album = { kind: card.className, nodes: [...card.childNodes], scroll: card.scrollTop };
+    let leaving = false;
     openImage(a, state.serverUrl + a.url);
     const go = document.createElement('button');
     go.type = 'button';
     go.className = 'btn secondary';
     go.textContent = 'Go to message';
-    go.onclick = () => { closeModal(); jumpTo(a.channelId, a.messageId); };
+    go.onclick = () => { leaving = true; closeModal(); jumpTo(a.channelId, a.messageId); };
     $('#modal-card .lightbox .modal-row')?.prepend(go);
+    onModalClose = () => setTimeout(() => {
+      // Not if you left for the message, or something else opened in its place.
+      if (leaving || !$('#modal').classList.contains('hidden')) return;
+      placeLayer('#modal');
+      card.className = album.kind;
+      card.replaceChildren(...album.nodes);
+      $('#modal').classList.remove('hidden');
+      $('#modal').setAttribute('aria-label', card.querySelector('h2')?.textContent.trim() || 'Dialog');
+      card.scrollTop = album.scroll;
+    });
   };
   $('#album-more').onclick = (e) => { e.target.disabled = true; more(false).finally(() => (e.target.disabled = false)); };
   more(true);
@@ -747,6 +761,7 @@ function closeHome() {
 // ---- a new friend's first week: a few steps on Home that make Peiskos feel like theirs. Each ticks
 // itself off when done, and the list goes once they're all done, after a week, or when hidden.
 const FIRST_WEEK_MS = 7 * 864e5;
+let firstWeekAsked = false;
 function firstWeekSteps() {
   const hearth = state.serverOrder.map((id) => state.servers.get(id)).find(Boolean);
   return [
@@ -763,6 +778,11 @@ function firstWeekHtml() {
   const steps = firstWeekSteps();
   const left = steps.filter((x) => !x.done).length;
   if (!left) return '';
+  // You may have said hi from another device: ask once whether there's anything of yours.
+  if (store.get('firstWeekSaid') !== '1' && !firstWeekAsked) {
+    firstWeekAsked = true;
+    api(`/api/search?from=${state.me.id}`).then((r) => { if (r.results?.length) { store.set('firstWeekSaid', '1'); if (state.atHome) renderHome(); } }).catch(() => {});
+  }
   const rows = steps.map((x) => `<li><button type="button" class="home-row first-week-step${x.done ? ' done' : ''}" data-first-week="${x.id}" ${x.done ? 'disabled' : ''}>
     <span class="home-main"><span class="first-week-tick" aria-hidden="true"></span>${escapeHtml(x.label)}</span>${x.done ? '<span class="small muted">Done</span>' : ''}</button></li>`);
   return `<section class="home-section first-week"><h3>Getting started · ${steps.length - left} of ${steps.length}</h3><ul>${rows.join('')}</ul>

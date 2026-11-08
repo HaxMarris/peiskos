@@ -348,4 +348,11 @@ test('achievements show on profiles: earned ones to others, every one to yoursel
   const mine = (await call(`/api/users/${host.user.id}`, { token: host.token })).data.achievements;
   assert.ok(mine.length > seen.length);
   assert.equal(mine.find((a: any) => a.id === 'keeper').earned, false);
+  // With a sixth person, Best of (and so the badge) needs a third 🔥.
+  const sixth = await register('ach_pal4');
+  await call('/api/join', { body: { inviteCode: s.inviteCode }, token: sixth.token });
+  const badge = async () => (await call(`/api/users/${host.user.id}`, { token: host.token })).data.achievements.find((a: any) => a.id === 'favourite').earned;
+  assert.equal(await badge(), false);
+  await call(`/api/messages/${m.id}/reactions`, { body: { emoji: '🔥' }, token: sixth.token });
+  assert.equal(await badge(), true);
 });

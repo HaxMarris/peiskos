@@ -15,6 +15,8 @@ writeFileSync(join(dir, 'index.html'), '<!doctype html><meta http-equiv="Content
 writeFileSync(join(dir, 'app.js'), script);
 mkdirSync(join(dir, 'vendor', 'noto-emoji'), { recursive: true });
 writeFileSync(join(dir, 'vendor', 'noto-emoji', '1f525.webp'), Buffer.from('RIFF\0\0\0\0WEBP'));
+mkdirSync(join(dir, 'fonts'), { recursive: true });
+writeFileSync(join(dir, 'fonts', 'nunito-sans.woff2'), Buffer.from('wOF2font'));
 const app = createApp({ db: openDb(':memory:'), publicDir: dir });
 let port = 0;
 
@@ -146,6 +148,13 @@ test('emoji pictures are sent as WebP and kept by the browser for a week', async
   assert.equal(res.status, 200);
   assert.equal(res.headers['content-type'], 'image/webp');
   assert.equal(res.headers['cache-control'], 'public, max-age=604800');
+});
+
+test('fonts are kept for a week too, so opening Peiskos does not check them every time', async () => {
+  const res = await get('/fonts/nunito-sans.woff2');
+  assert.equal(res.status, 200);
+  assert.equal(res.headers['cache-control'], 'public, max-age=604800');
+  assert.equal((await get('/app.js')).headers['cache-control'], 'no-cache');
 });
 
 test("the page's own <meta> security policy is left out when served (the header carries it)", async () => {
