@@ -168,3 +168,13 @@ test('a backup cut off halfway is made again, not kept as that day\'s', async ()
   copy.close();
   rmSync(dir, { recursive: true, force: true });
 });
+
+test('a negative message limit is not read as "every message"', async () => {
+  const [max] = [await reg('max')];
+  const server = await burrowWith(max);
+  const room = server.channels[0].id;
+  for (const content of ['one', 'two', 'three']) await call(`/api/channels/${room}/messages`, { body: { content }, token: max.token });
+  assert.equal((await call(`/api/channels/${room}/messages?limit=-1`, { token: max.token })).data.length, 1);
+  assert.equal((await call(`/api/channels/${room}/messages?limit=-1&around=1`, { token: max.token })).status, 200);
+  assert.equal((await call(`/api/channels/${room}/messages?limit=2.5`, { token: max.token })).data.length, 2);
+});

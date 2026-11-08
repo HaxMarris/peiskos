@@ -1049,7 +1049,7 @@ function showDrops() {
     </div>
   </div>`;
   const { title, wear } = itemDetails(best);
-  box.dataset.brag = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
+  box.dataset.bragText = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
   if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('win');
 }
 
@@ -1082,7 +1082,7 @@ function showDrop(item, c, isNew = false) {
       <button type="button" class="btn secondary" data-sell="${item.id}">Sell for ${chipsText(item.value)}</button>
       <button type="button" class="btn secondary" data-brag="${item.id}">Show the fire</button>
     </div>`;
-  box.dataset.brag = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
+  box.dataset.bragText = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
   if (['covert', 'rare'].includes(skin.rarity)) playSound('win');
 }
 
@@ -1286,7 +1286,7 @@ async function onCasesClick(e) {
     $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
     return;
   }
-  if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.brag);
+  if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.bragText);
   if (t.closest('[data-sell-all]')) {
     const items = shownItems().filter((i) => !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);

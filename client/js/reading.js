@@ -195,7 +195,9 @@ function flashMessage(id) {
 
 // ---- jumping to a message anywhere: search results, pins, saved messages, notifications
 
+let lastJumpAt = -Infinity; // a window that would come back on closing (the album) stays shut after a jump
 async function jumpTo(channelId, messageId) {
+  lastJumpAt = performance.now();
   closeModal();
   const where = roomById(channelId);
   if (!where) return notice("That message is in a room you can't see any more.");

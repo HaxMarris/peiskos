@@ -204,14 +204,17 @@ const newMicContext = (sampleRate = 48000) => keepAwake(new AudioContext({ sampl
  */
 async function phoneMicRate(track) {
   if (!phonePlatform) return 48000;
+  // Only a Bluetooth headset's own low rate (16 or 8 kHz, sometimes 24) gets a chain of its own.
+  // A phone's built-in mic at 44.1 kHz stays on the 48 kHz chain, which keeps the noise filters.
+  const bluetooth = (rate) => (rate && rate < 32000 ? rate : 48000);
   const reported = track?.getSettings?.().sampleRate;
-  if (reported) return reported;
+  if (reported) return bluetooth(reported);
   // Not reported: a new audio engine starts at the rate the phone is using now.
   try {
-    const probe = new AudioContext();
+    const probe = new AudioContext({ latencyHint: 'playback' });
     const rate = probe.sampleRate;
     probe.close().catch(() => {});
-    return rate;
+    return bluetooth(rate);
   } catch { return 48000; }
 }
 
@@ -383,8 +386,11 @@ function micProcessor(voice) {
     // (Bluetooth headphones on a phone) gets a chain at its own rate.
     async restart({ track }) {
       voice.micInput = track;
-      if (chain && (await phoneMicRate(track)) === voice.micCtx?.sampleRate) chain.setInput(track);
-      else await proc.init({ track });
+      if (chain && (await phoneMicRate(track)) === voice.micCtx?.sampleRate) {
+        // The new mic opens without the phone's own filter, which stands in for ours below 48 kHz.
+        if (voice.micCtx.sampleRate !== 48000 && noiseModel()) await track.applyConstraints?.({ noiseSuppression: true }).catch(() => {});
+        chain.setInput(track);
+      } else await proc.init({ track });
     },
     async destroy() {
       chain?.destroy();
@@ -419,7 +425,9 @@ const micTrack = () => state.voice?.room?.localParticipant.getTrackPublication(w
 /** Push to talk or the sensitivity changed: the gate is told, or put in (or taken out) if it wasn't there. */
 function applyGateChange() {
   const chain = state.voice?.micChain;
-  if (chain && chain.gated === wantsGate() && chain.auto === autoGate()) updateGate();
+  // Below 48 kHz (Bluetooth on a phone) the chain runs without the automatic gate, whatever the setting.
+  const auto = state.voice?.micCtx?.sampleRate === 48000 ? !!autoGate() : false;
+  if (chain && chain.gated === wantsGate() && !!chain.auto === auto) updateGate();
   else applyNoiseLevel();
   if (micTest) startMicTest();
   renderVoiceBar();

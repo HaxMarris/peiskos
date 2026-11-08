@@ -1723,7 +1723,8 @@ export function createApp(opts: AppOptions): Server {
   route('GET', '/api/channels/:id/messages', ({ user, params, url }) => {
     const channel = visibleRoom(Number(params[0]), user.id);
     if (channel.kind === 'voice') return [];
-    const limit = Math.min(Number(url.searchParams.get('limit')) || 50, 100);
+    // At least 1: SQLite reads a negative LIMIT as no limit at all.
+    const limit = Math.max(1, Math.min(Math.floor(Number(url.searchParams.get('limit'))) || 50, 100));
     const older = (before: number, n: number) =>
       (db.prepare(`${MESSAGE_SELECT} WHERE m.channel_id = ? AND m.id < ? ORDER BY m.id DESC LIMIT ?`).all(channel.id, before, n) as Json[]).reverse();
     const newer = (after: number, n: number) =>

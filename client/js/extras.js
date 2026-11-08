@@ -699,7 +699,10 @@ async function openAlbum(serverId) {
     if (a.type.startsWith('video/')) { closeModal(); jumpTo(a.channelId, a.messageId); return; }
     // Closing the picture goes back to the album, where you were in it.
     const card = $('#modal-card');
-    const album = { kind: card.className, nodes: [...card.childNodes], scroll: card.scrollTop };
+    // On a computer the settings pane scrolls, on a phone the card. The album opens from Hearth
+    // settings, so its frame comes back with it, or its side menu would do nothing.
+    const pane = card.querySelector('.settings-pane');
+    const album = { kind: card.className, nodes: [...card.childNodes], scroll: card.scrollTop, paneScroll: pane?.scrollTop ?? 0, frame: settingsFrame };
     let leaving = false;
     openImage(a, state.serverUrl + a.url);
     const go = document.createElement('button');
@@ -710,13 +713,16 @@ async function openAlbum(serverId) {
     $('#modal-card .lightbox .modal-row')?.prepend(go);
     onModalClose = () => setTimeout(() => {
       // Not if you left for the message, or something else opened in its place.
-      if (leaving || !$('#modal').classList.contains('hidden')) return;
+      // Nor after jumping to a message from a notification or reminder.
+      if (leaving || performance.now() - lastJumpAt < 1000 || !$('#modal').classList.contains('hidden')) return;
+      settingsFrame = album.frame;
       placeLayer('#modal');
       card.className = album.kind;
       card.replaceChildren(...album.nodes);
       $('#modal').classList.remove('hidden');
       $('#modal').setAttribute('aria-label', card.querySelector('h2')?.textContent.trim() || 'Dialog');
       card.scrollTop = album.scroll;
+      if (pane) pane.scrollTop = album.paneScroll;
     });
   };
   $('#album-more').onclick = (e) => { e.target.disabled = true; more(false).finally(() => (e.target.disabled = false)); };
