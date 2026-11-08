@@ -63,7 +63,10 @@ export function fireGames(ctx: GamesContext) {
       if (!g) {
         games.set(channelId, { name, hostId: user.id, players: new Map([[user.id, ws]]), since: Date.now() });
       } else if (g.players.has(user.id)) {
-        g.players.set(user.id, ws); // playing from this device now
+        // Playing from this device now: the other one's copy closes instead of sitting there frozen.
+        const old = g.players.get(user.id);
+        if (old && old !== ws && old.readyState === WebSocket.OPEN) old.send(JSON.stringify({ type: 'game_moved', channelId }));
+        g.players.set(user.id, ws);
       } else {
         if (g.name !== name) throw ctx.fail(409, 'Another game is going at this fire');
         if (g.players.size >= GAMES[name]) throw ctx.fail(409, `The game is full (${GAMES[name]} players)`);

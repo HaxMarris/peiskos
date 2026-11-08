@@ -612,11 +612,7 @@ const MAX_SOUND_SECONDS = 10;
 const soundBuffers = new Map(); // url -> Promise<AudioBuffer>
 
 function audioOut() {
-  if (!soundCtx) {
-    soundCtx = new AudioContext();
-    setChimeOutput();
-  }
-  if (soundCtx.state === 'suspended') soundCtx.resume().catch(() => {});
+  chimeCtx();
   soundRest((MAX_SOUND_SECONDS + 2) * 1000);
   return soundCtx;
 }
@@ -632,6 +628,9 @@ async function playClip(url, volume) {
   }
   const source = ctx.createBufferSource();
   source.buffer = await soundBuffers.get(url);
+  // On a phone the engine rests a while after a sound starts; count from now, once it has loaded.
+  chimeCtx();
+  soundRest((Math.min(source.buffer.duration, MAX_SOUND_SECONDS) + 2) * 1000);
   const gain = ctx.createGain();
   gain.gain.value = volume;
   source.connect(gain).connect(ctx.destination);

@@ -167,7 +167,7 @@ export function casino(ctx: CasinoContext) {
         `SELECT w.user_id AS userId, w.chips + w.at_table + w.in_battle AS chips,
            COALESCE((SELECT SUM(value) FROM casino_items i WHERE i.user_id = w.user_id AND i.server_id = w.server_id), 0) AS items
          FROM casino_wallets w WHERE w.server_id = ? AND w.user_id IN (${ids.map(() => '?').join(',')})
-         ORDER BY chips + items DESC LIMIT 10`,
+         ORDER BY w.chips + w.at_table + w.in_battle + items DESC LIMIT 10`,
       )
       .all(h, ...ids);
   });

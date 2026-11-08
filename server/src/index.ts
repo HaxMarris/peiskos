@@ -1,6 +1,6 @@
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { openDb } from './db.ts';
+import { endLiveStreams, openDb } from './db.ts';
 import { createApp } from './app.ts';
 import { finishRestore, scheduleBackups } from './backup.ts';
 import { s3FromEnv } from './s3.ts';
@@ -14,6 +14,7 @@ const replaced = finishRestore(dbFile);
 if (replaced) console.log(`Restored a backup. The database it replaced is kept as ${replaced}.`);
 
 const db = openDb(dbFile);
+endLiveStreams(db);
 const backupDir = process.env.BACKUP_DIR ?? join(dirname(dbFile), 'backups');
 const backupKeep = Number(process.env.BACKUP_KEEP ?? 7);
 const uploadDir = process.env.UPLOAD_DIR ?? join(dirname(dbFile), 'uploads');

@@ -699,7 +699,10 @@ async function openAlbum(serverId) {
     if (a.type.startsWith('video/')) { closeModal(); jumpTo(a.channelId, a.messageId); return; }
     // Closing the picture goes back to the album, where you were in it.
     const card = $('#modal-card');
-    const album = { kind: card.className, nodes: [...card.childNodes], scroll: card.scrollTop };
+    // On a computer the settings pane scrolls, on a phone the card. The album opens from Hearth
+    // settings, so its frame comes back with it, or its side menu would do nothing.
+    const pane = card.querySelector('.settings-pane');
+    const album = { kind: card.className, nodes: [...card.childNodes], scroll: card.scrollTop, paneScroll: pane?.scrollTop ?? 0, frame: settingsFrame };
     let leaving = false;
     openImage(a, state.serverUrl + a.url);
     const go = document.createElement('button');
@@ -710,13 +713,16 @@ async function openAlbum(serverId) {
     $('#modal-card .lightbox .modal-row')?.prepend(go);
     onModalClose = () => setTimeout(() => {
       // Not if you left for the message, or something else opened in its place.
-      if (leaving || !$('#modal').classList.contains('hidden')) return;
+      // Nor after jumping to a message from a notification or reminder.
+      if (leaving || performance.now() - lastJumpAt < 1000 || !$('#modal').classList.contains('hidden')) return;
+      settingsFrame = album.frame;
       placeLayer('#modal');
       card.className = album.kind;
       card.replaceChildren(...album.nodes);
       $('#modal').classList.remove('hidden');
       $('#modal').setAttribute('aria-label', card.querySelector('h2')?.textContent.trim() || 'Dialog');
       card.scrollTop = album.scroll;
+      if (pane) pane.scrollTop = album.paneScroll;
     });
   };
   $('#album-more').onclick = (e) => { e.target.disabled = true; more(false).finally(() => (e.target.disabled = false)); };
@@ -761,12 +767,14 @@ function closeHome() {
 // ---- a new friend's first week: a few steps on Home that make Peiskos feel like theirs. Each ticks
 // itself off when done, and the list goes once they're all done, after a week, or when hidden.
 const FIRST_WEEK_MS = 7 * 864e5;
-let firstWeekAsked = false;
+let firstWeekAsked = null; // the account it was asked for
+// Per account: someone else logging in on this device hasn't said hi yet.
+const saidKey = () => `firstWeekSaid:${state.me?.id}`;
 function firstWeekSteps() {
   const hearth = state.serverOrder.map((id) => state.servers.get(id)).find(Boolean);
   return [
     { id: 'picture', label: 'Add a profile picture', done: !!state.me.avatar, run: () => openAccount('profile') },
-    { id: 'say', label: 'Say hi in a room', done: store.get('firstWeekSaid') === '1', run: () => hearth && selectServer(hearth.id).then(() => showView('chat')) },
+    { id: 'say', label: 'Say hi in a room', done: store.get(saidKey()) === '1', run: () => hearth && selectServer(hearth.id).then(() => showView('chat')) },
     state.voiceEnabled && { id: 'fire', label: 'Sit down at a fire', done: store.get('firstWeekFire') === '1', run: () => hearth && selectServer(hearth.id) },
     { id: 'friend', label: 'Add a friend', done: (state.friends?.friends?.length ?? 0) > 0, run: () => openFriends() },
     'Notification' in window && { id: 'alerts', label: 'Turn on alerts', done: Notification.permission !== 'default', run: () => Notification.requestPermission().then(renderHome) },
@@ -779,9 +787,13 @@ function firstWeekHtml() {
   const left = steps.filter((x) => !x.done).length;
   if (!left) return '';
   // You may have said hi from another device: ask once whether there's anything of yours.
-  if (store.get('firstWeekSaid') !== '1' && !firstWeekAsked) {
-    firstWeekAsked = true;
-    api(`/api/search?from=${state.me.id}`).then((r) => { if (r.results?.length) { store.set('firstWeekSaid', '1'); if (state.atHome) renderHome(); } }).catch(() => {});
+  if (store.get(saidKey()) !== '1' && firstWeekAsked !== state.me.id) {
+    firstWeekAsked = state.me.id;
+    api(`/api/search?from=${state.me.id}`).then((r) => {
+      if (!r.results?.length) return;
+      store.set(saidKey(), '1');
+      if (state.atHome) renderHome(); else renderServers(); // the Home dot goes too
+    }).catch(() => {});
   }
   const rows = steps.map((x) => `<li><button type="button" class="home-row first-week-step${x.done ? ' done' : ''}" data-first-week="${x.id}" ${x.done ? 'disabled' : ''}>
     <span class="home-main"><span class="first-week-tick" aria-hidden="true"></span>${escapeHtml(x.label)}</span>${x.done ? '<span class="small muted">Done</span>' : ''}</button></li>`);

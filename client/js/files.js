@@ -186,6 +186,8 @@ const PREVIEW_SIDE = 960;
 /** Sends a small copy of a big photo with it. Without one (old browsers, small photos) the photo itself shows. */
 async function addPreview(att, file) {
   try {
+    // A small copy keeps only the first frame, so moving pictures (APNG, animated WebP) show themselves.
+    if (file.type !== 'image/jpeg' && /acTL|ANIM/.test(new TextDecoder('latin1').decode(await file.slice(0, 256 * 1024).arrayBuffer()))) return;
     const img = await createImageBitmap(file);
     const scale = PREVIEW_SIDE / Math.max(img.width, img.height);
     if (scale >= 1 && file.size < 250 * 1024) return img.close();

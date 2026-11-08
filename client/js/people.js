@@ -278,7 +278,7 @@ function openRoleEditor(serverId, roleId) {
         <input type="checkbox" value="${key}" ${role.perms.includes(key) ? 'checked' : ''} ${can(s, key) ? '' : 'disabled'} />
         <span><b>${label}</b><br /><span class="small muted">${hint}</span></span></label></li>`).join('')}</ul>
       <p class="small muted">A role with nothing ticked is just a colored label, like "Friends".</p>
-      ${state.maxUploadBytes ? `<label>Largest file this role can share
+      ${state.maxUploadBytes && can(s, 'burrow') ? `<label>Largest file this role can share
         <span class="inline-form"><input type="number" id="role-upload" min="0" max="${Math.floor(state.maxUploadBytes / 1048576)}" placeholder="Same as everyone" value="${role.uploadMb ?? ''}" /><span class="muted">MB</span></span>
         <span class="small muted">Empty: the hearth's limit. 0: no files. People get the biggest limit of their roles, up to the server's ${formatSize(state.maxUploadBytes)}.</span></label>` : ''}
       <div class="error" id="modal-error"></div>

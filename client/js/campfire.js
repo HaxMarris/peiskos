@@ -1368,6 +1368,18 @@ function soundRest(ms) {
 }
 let lastMessageSound = 0;
 
+/** The chimes' (and soundboard's) audio engine, awake. */
+function chimeCtx() {
+  if (!soundCtx) {
+    // On a phone a bigger buffer: the smallest one would shrink the buffer for a call's sound too.
+    soundCtx = new AudioContext(isPhoneApp ? { latencyHint: 'playback' } : {});
+    setChimeOutput();
+  }
+  // Also while a rest is still on its way (state still says running), or this sound would be lost.
+  if (soundCtx.state !== 'closed' && (soundCtx.state === 'suspended' || isPhoneApp)) soundCtx.resume().catch(() => {});
+  return soundCtx;
+}
+
 /** One note made of partials, each [multiple, share of the loudness, share of the length]. */
 function soundTone(dest, f, at, len, peak, { type = 'sine', partials = [[1, 1, 1]], attack = 0.006, glide = 0, glideTime = 0.05, detune = 0 } = {}) {
   for (const [mult, share, dec] of partials) {
@@ -1429,12 +1441,8 @@ function playSound(name, force = false, set = soundPrefs.set) {
     lastMessageSound = Date.now();
   }
   try {
-    if (!soundCtx) {
-      soundCtx = new AudioContext();
-      setChimeOutput();
-    }
-    if (soundCtx.state === 'suspended') soundCtx.resume();
-    soundRest(3000);
+    chimeCtx();
+    soundRest(4500); // the longest bell rings for about 4 seconds
     const kit = SOUND_SETS[set] ?? SOUND_SETS.kindling;
     const t0 = soundCtx.currentTime + 0.02;
     const out = soundCtx.createGain();

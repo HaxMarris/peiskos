@@ -236,8 +236,10 @@ async function doUpgrade(btn) {
     needle.style.transition = `transform ${ms}ms cubic-bezier(.12,.7,.14,1)`;
     needle.style.transform = `rotate(${360 * 5 + r.roll * 360}deg)`;
   }
+  const hearth = casino.hearthId;
   await new Promise((done) => setTimeout(done, needle ? ms + 150 : 0));
   upSpinning = false;
+  if (casino.hearthId !== hearth) return; // moved to another hearth's casino meanwhile
   casino.inventory = casino.inventory.filter((i) => !r.gave.includes(i.id));
   if (r.item) casino.inventory.unshift(r.item);
   if (r.found) casino.found = r.found;

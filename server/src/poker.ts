@@ -214,7 +214,9 @@ export class PokerTable {
   }
 
   private settle() {
-    this.opts.settled(this.seats.flatMap((s) => (s ? [{ userId: s.userId, stack: s.stack }] : [])));
+    // Mid-hand (someone sat down or got up), the stacks as they were before this hand, as close() gives back.
+    const live = this.hand && !this.hand.done;
+    this.opts.settled(this.seats.flatMap((s) => (s ? [{ userId: s.userId, stack: s.stack + (live ? s.total : 0) }] : [])));
   }
 
   /** Stops the clock (the server is shutting down). */

@@ -195,10 +195,13 @@ function flashMessage(id) {
 
 // ---- jumping to a message anywhere: search results, pins, saved messages, notifications
 
+let lastJumpAt = -Infinity; // a window that would come back on closing (the album) stays shut after a jump
 async function jumpTo(channelId, messageId) {
+  lastJumpAt = performance.now();
   closeModal();
   const where = roomById(channelId);
   if (!where) return notice("That message is in a room you can't see any more.");
+  closeHome(); // the room is behind Home when it's in the hearth you were last in
   showView('chat');
   if (where.s.id !== state.serverId) {
     if (isDm(where.s)) store.set('lastDm', where.s.id);
@@ -336,7 +339,7 @@ function confirmSending(m) {
   sending = sending.filter((x) => x !== hit);
   // Only for what you sent from here, once the server has it.
   playSound('sent');
-  store.set('firstWeekSaid', '1');
+  store.set(saidKey(), '1');
 }
 
 async function sendMessage(channelId, body, onFail) {

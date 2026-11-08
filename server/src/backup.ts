@@ -5,8 +5,19 @@ import { putFile, listFiles, type S3Config } from './s3.ts';
 
 const NAME = /^burrow-(\d{4}-\d{2}-\d{2})\.db$/;
 
+/** One after another: "Back up now" and the hourly run would otherwise share the same .part file. */
+let backingUp: Promise<unknown> = Promise.resolve();
+function oneAtATime<T>(job: () => Promise<T>): Promise<T> {
+  const run = backingUp.then(job, job);
+  backingUp = run.catch(() => {});
+  return run;
+}
+
 /** Copies the database to `dir/burrow-YYYY-MM-DD.db` once a day and keeps the newest `keep` copies. */
-export async function backupNow(db: DatabaseSync, dir: string, keep: number, today = new Date(), force = false) {
+export function backupNow(db: DatabaseSync, dir: string, keep: number, today = new Date(), force = false) {
+  return oneAtATime(() => backupOnce(db, dir, keep, today, force));
+}
+async function backupOnce(db: DatabaseSync, dir: string, keep: number, today: Date, force: boolean) {
   mkdirSync(dir, { recursive: true });
   const file = join(dir, `burrow-${today.toISOString().slice(0, 10)}.db`);
   if (force) rmSync(file, { force: true });
@@ -45,7 +56,14 @@ export type OffsiteStatus = { lastOk: number | null; lastError: string | null; l
  * ever deleted there (set the bucket to delete old versions if you like). What has been copied is
  * remembered in `dir/offsite.json`.
  */
-export async function copyOffsite(cfg: S3Config, dir: string, uploadDir: string | undefined, latest: string) {
+let copyingOffsite: Promise<void> | null = null;
+export function copyOffsite(cfg: S3Config, dir: string, uploadDir: string | undefined, latest: string) {
+  // A big first copy can take longer than an hour: the next run waits for it instead of racing it for offsite.json.
+  if (copyingOffsite) return copyingOffsite;
+  copyingOffsite = copyOffsiteOnce(cfg, dir, uploadDir, latest).finally(() => { copyingOffsite = null; });
+  return copyingOffsite;
+}
+async function copyOffsiteOnce(cfg: S3Config, dir: string, uploadDir: string | undefined, latest: string) {
   const stateFile = join(dir, 'offsite.json');
   let state: { sent: Record<string, number>; status?: OffsiteStatus } = { sent: {} };
   try { state = JSON.parse(readFileSync(stateFile, 'utf8')); } catch {}

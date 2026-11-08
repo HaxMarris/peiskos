@@ -930,6 +930,9 @@ function handleEvent(ev) {
     case 'game_state':
       onGameState(ev);
       break;
+    case 'game_moved':
+      if (gamePlay && state.voice?.channelId === ev.channelId) { toast('Your game moved to your other device.'); closeGame(); }
+      break;
     case 'game_msg':
       onGameMessage(ev);
       break;

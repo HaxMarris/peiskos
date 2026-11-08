@@ -1005,9 +1005,12 @@ async function openTheCase(c) {
     strip.style.transform = `translateX(${-land}px)`;
   });
   reels.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  const hearth = casino.hearthId;
   await new Promise((done) => setTimeout(done, ms + (got.length - 1) * 60 + 150));
-  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   opening = false;
+  // Moved to another hearth's casino while it spun: those skins stay with the hearth they came from.
+  if (casino.hearthId !== hearth) return;
+  strips.forEach((strip) => strip.children[WIN_AT].classList.add('landed'));
   topPulls = null; // so the day's top pulls are fresh next time
   casino.inventory.unshift(...[...got].reverse());
   $('#inv-count').textContent = `(${casino.inventory.length})`;
@@ -1049,7 +1052,7 @@ function showDrops() {
     </div>
   </div>`;
   const { title, wear } = itemDetails(best);
-  box.dataset.brag = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
+  box.dataset.bragText = `🎁 Opened ${items.length} ${c.name}s. Best: ${title} (${wear.name}), worth ${chipsText(best.value)} chips`;
   if (items.some((i) => ['covert', 'rare'].includes(skinById(i.skinId).rarity))) playSound('win');
 }
 
@@ -1082,7 +1085,7 @@ function showDrop(item, c, isNew = false) {
       <button type="button" class="btn secondary" data-sell="${item.id}">Sell for ${chipsText(item.value)}</button>
       <button type="button" class="btn secondary" data-brag="${item.id}">Show the fire</button>
     </div>`;
-  box.dataset.brag = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
+  box.dataset.bragText = `🎁 Unboxed ${title} (${wear.name}) from the ${c.name}, worth ${chipsText(item.value)} chips`;
   if (['covert', 'rare'].includes(skin.rarity)) playSound('win');
 }
 
@@ -1286,7 +1289,7 @@ async function onCasesClick(e) {
     $('#inv-count').textContent = casino.inventory.length ? `(${casino.inventory.length})` : '';
     return;
   }
-  if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.brag);
+  if (t.closest('[data-brag]')) return brag($('#case-drop').dataset.bragText);
   if (t.closest('[data-sell-all]')) {
     const items = shownItems().filter((i) => !i.locked);
     const total = items.reduce((n, i) => n + i.value, 0);

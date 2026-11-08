@@ -312,8 +312,9 @@ function nextTurn() {
 
 function pickWords(n) {
   const pool = (G.wordsFrom === 'ours' ? ourWords : G.wordsFrom === 'pack' ? WORDS : [...WORDS, ...ourWords, ...ourWords]).filter((w) => norm(w));
-  let fresh = pool.filter((w) => !G.used.has(w));
-  if (fresh.length < n) { G.used.clear(); fresh = [...pool]; }
+  // A word with no letters (an emoji saved before words needed one) can't be hidden or guessed.
+  let fresh = pool.filter((w) => !G.used.has(w) && LETTER.test(w));
+  if (fresh.length < n) { G.used.clear(); fresh = pool.filter((w) => LETTER.test(w)); }
   const out = [];
   while (out.length < n && fresh.length) {
     const w = fresh.splice(Math.floor(Math.random() * fresh.length), 1)[0];
@@ -354,7 +355,7 @@ function endTurn() {
   if (G.phase === 'choose') G.word = G.choices[0];
   G.phase = 'reveal';
   G.endsAt = Date.now() + REVEAL_SECONDS * 1000;
-  Peiskos.busy(false);
+  // Still busy: popping out between turns would reload the host's copy and send everyone to the lobby.
   broadcast();
 }
 
