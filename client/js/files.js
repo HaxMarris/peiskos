@@ -122,7 +122,8 @@ function addFiles(fileList) {
       notice(`"${file.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
       continue;
     }
-    const p = { file, previewUrl: IMAGE_TYPES.test(file.type) ? URL.createObjectURL(file) : null, progress: 0, error: null };
+    // p.upload: where this file is, from PHASES.upload in phases.js. The other fields are its details.
+    const p = { file, previewUrl: IMAGE_TYPES.test(file.type) ? URL.createObjectURL(file) : null, progress: 0, error: null, upload: phaseMachine('upload', 'preparing', { track: false }) };
     if (video) {
       state.pending.push(p);
       queueVideo(p, channelId, limit);
@@ -135,6 +136,7 @@ function addFiles(fileList) {
       if (p.cancelled) throw new Error('Upload cancelled');
       if (f.size > limit) {
         p.error = `Too big (at most ${formatSize(limit)})`;
+        p.upload.to('tooBig');
         renderPending();
         throw new Error(`"${f.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
       }
@@ -142,7 +144,13 @@ function addFiles(fileList) {
       if (SHRINKABLE_TYPES.test(f.type)) await addPreview(att, f);
       return att;
     });
-    p.done.catch(() => {}); // failures show on the chip
+    // Failures show on the chip (an upload that failed already says so).
+    p.done.catch((err) => {
+      if (err?.message === 'Upload cancelled' || !p.upload.is('preparing', 'uploading')) return;
+      p.error = err?.message || 'Failed';
+      p.upload.to('failed');
+      renderPending();
+    });
     state.pending.push(p);
   }
   renderPending();
@@ -223,12 +231,15 @@ function queueVideo(p, channelId, limit, { shrink = false } = {}) {
   p.run = run;
   p.error = null;
   p.progress = 0;
+  p.upload.to('preparing');
   const current = () => p.run === run && !p.cancelled;
   p.done = (async () => {
     if (shrink) {
       p.shrinking = 0;
+      p.upload.to('shrinking');
       renderPending();
       try { p.file = await shrinkVideo(p); } finally { p.shrinking = null; }
+      if (current()) p.upload.to('preparing');
       p.shrunk = true;
       p.meta = null;
     }
@@ -239,6 +250,7 @@ function queueVideo(p, channelId, limit, { shrink = false } = {}) {
     if (!current()) throw new Error('Upload cancelled');
     if (p.file.size > limit) {
       p.error = `Too big (at most ${formatSize(limit)})`;
+      p.upload.to('tooBig');
       renderPending();
       throw new Error(`"${p.file.name}" is too big. Files can be at most ${formatSize(limit)} here.`);
     }
@@ -252,7 +264,12 @@ function queueVideo(p, channelId, limit, { shrink = false } = {}) {
     }
     return att;
   })();
-  p.done.catch((err) => { if (p.run === run && err?.message !== 'Upload cancelled' && !p.error) { p.error = err?.message || 'Failed'; renderPending(); } });
+  p.done.catch((err) => {
+    if (p.run !== run || err?.message === 'Upload cancelled' || p.error || p.upload.is('cancelled')) return;
+    p.error = err?.message || 'Failed';
+    p.upload.to('failed');
+    renderPending();
+  });
   p.limit = limit;
   p.channelId = channelId;
   renderPending();
@@ -379,6 +396,7 @@ function uploadFile(channelId, p) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     p.xhr = xhr;
+    p.upload?.to('uploading'); // voice messages and drawings come here without a chip
     xhr.open('POST', `${state.serverUrl}/api/channels/${channelId}/attachments`);
     xhr.setRequestHeader('authorization', 'Bearer ' + state.token);
     xhr.setRequestHeader('content-type', p.file.type || 'application/octet-stream');
@@ -392,30 +410,41 @@ function uploadFile(channelId, p) {
     xhr.onload = () => {
       let data = {};
       try { data = JSON.parse(xhr.responseText); } catch {}
-      if (xhr.status === 200) { p.progress = 1; p.attachment = data; renderPending(); resolve(data); }
+      if (xhr.status === 200) { p.progress = 1; p.attachment = data; p.upload?.to('uploaded'); renderPending(); resolve(data); }
       else fail(new Error(data.error || `Upload failed (${xhr.status})`));
     };
     xhr.onerror = () => fail(new Error("Couldn't upload " + p.file.name));
     xhr.onabort = () => reject(new Error('Upload cancelled'));
-    function fail(err) { p.error = err.message; renderPending(); reject(err); }
+    function fail(err) { p.error = err.message; p.upload?.to('failed'); renderPending(); reject(err); }
     xhr.send(p.file);
   });
 }
+
+// What a file's chip says, by its phase (anything not listed shows how far its upload has got).
+const UPLOAD_LABELS = {
+  shrinking: (p) => `Shrinking ${Math.round(p.shrinking * 100)}%`,
+  tooBig: () => 'Too big',
+  failed: () => 'Failed',
+  uploaded: (p) => formatSize(p.file.size),
+};
 
 function renderPending() {
   const tray = $('#pending-files');
   tray.classList.toggle('hidden', !state.pending.length);
   tray.replaceChildren(...state.pending.map((p) => {
     const chip = document.createElement('div');
-    chip.className = 'pending' + (p.error ? ' failed' : '');
+    const failed = p.upload.is('failed', 'tooBig');
+    const shrinking = p.upload.is('shrinking');
+    chip.className = 'pending' + (failed ? ' failed' : '');
+    chip.dataset.phase = p.upload.phase;
     chip.title = p.error || p.file.name;
     chip.innerHTML = (p.previewUrl ? `<img src="${p.previewUrl}" alt="" />` : `<span class="file-icon">${FILE_ICON}</span>`)
       + `<span class="pending-name">${escapeHtml(p.file.name || 'image')}</span>`
-      + `<span class="pending-meta">${p.shrinking != null ? `Shrinking ${Math.round(p.shrinking * 100)}%` : p.error ? (p.error.startsWith('Too big') ? 'Too big' : 'Failed') : p.progress < 1 ? Math.round(p.progress * 100) + '%' : formatSize(p.file.size)}</span>`
-      + `<span class="bar" style="width:${p.error ? 0 : Math.round((p.shrinking ?? p.progress) * 100)}%"></span>`;
-    if (p.shrinking != null) chip.title = 'Shrinking plays the video through once, so keep Peiskos open until it finishes';
+      + `<span class="pending-meta">${UPLOAD_LABELS[p.upload.phase]?.(p) ?? Math.round(p.progress * 100) + '%'}</span>`
+      + `<span class="bar" style="width:${failed ? 0 : Math.round((shrinking ? p.shrinking : p.progress) * 100)}%"></span>`;
+    if (shrinking) chip.title = 'Shrinking plays the video through once, so keep Peiskos open until it finishes';
     // A big video can be shrunk to 720p before it goes up.
-    if (p.run && !p.shrunk && p.shrinking == null && (p.file.size > SHRINK_OFFER_BYTES || p.file.size > p.limit) && canShrinkVideo()) {
+    if (p.run && !p.shrunk && !shrinking && (p.file.size > SHRINK_OFFER_BYTES || p.file.size > p.limit) && canShrinkVideo()) {
       const sh = document.createElement('button');
       sh.type = 'button';
       sh.className = 'pending-shrink';
@@ -427,7 +456,7 @@ function renderPending() {
       };
       chip.append(sh);
     }
-    if (!p.error && p.shrinking == null) {
+    if (!failed && !shrinking) {
       const sp = document.createElement('button');
       sp.type = 'button';
       sp.className = 'pending-spoiler' + (p.spoiler ? ' on' : '');
@@ -438,7 +467,7 @@ function renderPending() {
       if (p.spoiler) chip.classList.add('spoilered');
     }
     // A picture can carry a description, read out by screen readers and shown if it can't load.
-    if (!p.error && p.shrinking == null && /^image\//.test(p.file.type)) {
+    if (!failed && !shrinking && /^image\//.test(p.file.type)) {
       const al = document.createElement('button');
       al.type = 'button';
       al.className = 'pending-spoiler' + (p.alt ? ' on' : '');
@@ -459,6 +488,7 @@ function renderPending() {
     x.textContent = '×';
     x.onclick = () => {
       p.cancelled = true;
+      p.upload.to('cancelled');
       p.xhr?.abort();
       p.cancelShrink?.();
       if (p.previewUrl) URL.revokeObjectURL(p.previewUrl);
