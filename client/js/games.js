@@ -105,9 +105,16 @@ function openGamePicker() {
   }));
 }
 
+/** A game started on a newer Peiskos than this app: its page isn't in here yet. */
+function missingGame(name) {
+  if (FIRE_GAMES[name]) return false;
+  toast(isApp ? 'This game is newer than your Peiskos app. Update the app to play it.' : 'This game is newer than this page. Reload Peiskos to play it.');
+  return true;
+}
+
 function joinFireGame() {
   const g = fireGame?.game;
-  if (!g) return;
+  if (!g || missingGame(g.name)) return;
   if (gamePlay) return showGame();
   if (!inFireGame() && g.players.length >= gameMax(g.name)) return toast(`The game is full (${gameMax(g.name)} players).`);
   gameStarting = true;
@@ -227,6 +234,11 @@ window.addEventListener('message', (e) => {
     if (!GAME_API.some((re) => re.test(path))) return reply({ error: "Games can't ask for that" });
     api(path, { method, body: m.body && typeof m.body === 'object' ? m.body : undefined })
       .then((data) => reply({ data }), (err) => reply({ error: err.message }));
+  } else if (m.kind === 'save') {
+    // A game's picture (Sketchpad): its frame can't download or open the share sheet on every phone.
+    if (!(m.blob instanceof Blob) || m.blob.size > 20e6) return;
+    const name = String(m.name ?? 'picture.png').replace(/[^\w. -]+/g, '').slice(0, 80) || 'picture.png';
+    saveOrShare(new Blob([m.blob], { type: 'image/png' }), name).catch((err) => { if (err?.name !== 'AbortError') toast("Couldn't save the picture."); });
   } else if (m.kind === 'busy') {
     // A round that can't move between windows is going.
     gamePlay.busy = !!m.on;

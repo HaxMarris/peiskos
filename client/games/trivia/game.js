@@ -32,8 +32,22 @@ function scoreList(scores) {
   return ul;
 }
 
+// Each update redraws the panel; where you'd scrolled to and what had focus stay put while the screen is the same one.
+let shown = '';
 function render() {
   if (screen === 'own') return;
+  const key = `${view.phase}:${view.index ?? ''}`;
+  const controls = () => [...panel.querySelectorAll('button, input, select')];
+  const keep = key === shown ? { top: panel.scrollTop, cats: panel.querySelector('.cats')?.scrollTop ?? 0, focus: controls().indexOf(document.activeElement) } : null;
+  shown = key;
+  draw();
+  if (!keep) return;
+  panel.scrollTop = keep.top;
+  const cats = panel.querySelector('.cats');
+  if (cats) cats.scrollTop = keep.cats;
+  if (keep.focus >= 0) controls()[keep.focus]?.focus({ preventScroll: true });
+}
+function draw() {
   const v = view;
   panel.innerHTML = '';
   if (v.phase === 'lobby') return renderLobby();
@@ -78,6 +92,7 @@ function render() {
   panel.append(top, bar, questionText(q.question), answers, gain);
   if (v.phase === 'reveal') panel.append(scoreList(v.scores));
 }
+const say = (text) => { $('say').textContent = text; };
 function questionText(text) { const h = el('h2', '', text); h.id = 'question'; return h; }
 
 setInterval(() => {
@@ -165,7 +180,7 @@ async function openOwn() {
     } catch (err) { showToast(err.message); }
   });
   form.append(q, a, ...w, add);
-  panel.append(form, list, btn('Back', 'btn secondary', () => { screen = 'game'; render(); }));
+  panel.append(form, list, btn('Back', 'btn secondary', () => { screen = 'game'; shown = ''; render(); }));
   const fill = ({ questions }) => {
     list.innerHTML = '';
     if (!questions.length) list.append(el('li', 'muted', 'None yet.'));
@@ -189,7 +204,14 @@ function onView(d) {
   view = d.view;
   endsAt = Date.now() + (view.left ?? 0);
   if (view.phase === 'question' && (before.phase !== 'question' || before.index !== view.index)) picked = view.mine ?? null;
-  if (view.phase === 'over' && before.phase !== 'over' && screen === 'own') screen = 'game';
+  // The panel is redrawn with every answer that comes in, so screen readers hear only what's new: the question, then how it went.
+  if (view.phase === 'question' && before.index !== view.index) say(`Question ${view.index + 1}. ${view.q.question}`);
+  else if (view.phase === 'reveal' && before.phase !== 'reveal') {
+    const mine = (view.gains ?? []).find(([id]) => id === Peiskos.me.id);
+    say(`${mine ? `Right, plus ${mine[1]}` : picked === null ? 'Too slow' : 'Not this time'}. The answer was ${view.q.answers[view.correct]}.`);
+  }
+  // A round starting takes you back from your questions to the game.
+  if (view.phase !== 'lobby' && before.phase === 'lobby' && screen === 'own') screen = 'game';
   render();
 }
 
@@ -229,6 +251,7 @@ function broadcast() {
 }
 
 async function hostStart() {
+  if (G.phase !== 'lobby') return; // a second tap on Start
   G.phase = 'loading';
   broadcast();
   try {
