@@ -10,7 +10,7 @@ const BONUS = { easy: 0, medium: 20, hard: 40 };
 let view = { phase: 'lobby', scores: [] };
 let endsAt = 0;
 let picked = null;
-let screen = 'game'; // or 'own' (the hearth's own questions)
+let page = 'game'; // or 'own' (the hearth's own questions)
 const panel = $('panel');
 
 function btn(text, cls = 'btn', onclick) {
@@ -35,7 +35,7 @@ function scoreList(scores) {
 // Each update redraws the panel; where you'd scrolled to and what had focus stay put while the screen is the same one.
 let shown = '';
 function render() {
-  if (screen === 'own') return;
+  if (page === 'own') return;
   const key = `${view.phase}:${view.index ?? ''}`;
   const controls = () => [...panel.querySelectorAll('button, input, select')];
   const keep = key === shown ? { top: panel.scrollTop, cats: panel.querySelector('.cats')?.scrollTop ?? 0, focus: controls().indexOf(document.activeElement) } : null;
@@ -161,7 +161,7 @@ function renderLobby() {
 // ---------- the hearth's own questions (anyone playing can add them)
 
 async function openOwn() {
-  screen = 'own';
+  page = 'own';
   panel.replaceChildren(el('h2', '', 'Our questions'), el('p', 'muted small', 'Questions about your own group. They come up under "Our hearth".'));
   const list = el('ul', 'own');
   const form = el('div', 'form');
@@ -180,7 +180,7 @@ async function openOwn() {
     } catch (err) { showToast(err.message); }
   });
   form.append(q, a, ...w, add);
-  panel.append(form, list, btn('Back', 'btn secondary', () => { screen = 'game'; shown = ''; render(); }));
+  panel.append(form, list, btn('Back', 'btn secondary', () => { page = 'game'; shown = ''; render(); }));
   const fill = ({ questions }) => {
     list.innerHTML = '';
     if (!questions.length) list.append(el('li', 'muted', 'None yet.'));
@@ -211,7 +211,7 @@ function onView(d) {
     say(`${mine ? `Right, plus ${mine[1]}` : picked === null ? 'Too slow' : 'Not this time'}. The answer was ${view.q.answers[view.correct]}.`);
   }
   // A round starting takes you back from your questions to the game.
-  if (view.phase !== 'lobby' && before.phase === 'lobby' && screen === 'own') screen = 'game';
+  if (view.phase !== 'lobby' && before.phase === 'lobby' && page === 'own') page = 'game';
   render();
 }
 

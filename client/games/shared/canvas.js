@@ -153,7 +153,7 @@ class SharedCanvas {
 }
 
 /** The colour and size pickers and the eraser, wired to a canvas. */
-function toolbar(box, sc, extra = []) {
+function drawingTools(box, sc, extra = []) {
   box.innerHTML = '';
   const swatches = el('div', 'swatches');
   swatches.setAttribute('role', 'group');
