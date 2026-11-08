@@ -576,20 +576,26 @@ if (isPhoneApp) {
 // Android shows an ongoing call notification and iPhones show the call on the lock screen, both
 // with Mute and Leave. They go away when you leave.
 let phoneCallRoom = null;
+let callPicture = null; // { sid, picture } for the call going on
 async function syncPhoneCall() {
   if (!isPhoneApp) return;
   const place = roomById(state.voice?.channelId ?? state.rejoin?.channelId);
   const muted = !!state.voice?.muted;
-  const people = Math.max(1, place?.c.voiceUsers?.length ?? 1);
+  // You count too, also while reconnecting, before the server's list has you in it again.
+  const ids = place?.c.voiceUsers ?? [];
+  const people = Math.max(1, ids.length + (ids.includes(state.me?.id) ? 0 : 1));
   const key = place ? `${place.s.id}:${place.c.id}:${muted}:${people}` : null;
   if (key === phoneCallRoom) return;
   phoneCallRoom = key;
-  if (!place) return native('VoiceCall', 'stop').catch((err) => console.warn('Call notification', err));
+  if (!place) { callPicture = null; return native('VoiceCall', 'stop').catch((err) => console.warn('Call notification', err)); }
   const text = isDm(place.s) ? dmTitle(place.s) : place.s.name;
   // The iPhone's Live Activity shows the hearth's picture (or, in a message, the other person's),
   // which has to be tiny to fit.
   const dmWith = isDm(place.s) && !place.s.group ? partner(place.s) : null;
-  const picture = dmWith ? avatarOf(dmWith.id, dmWith.avatar) : isDm(place.s) ? null : place.s.icon;
+  // A new picture would mean a new Live Activity, which iOS may refuse while Peiskos is in the
+  // background, so the picture stays the same for the rest of the call there.
+  if (callPicture?.sid !== place.s.id) callPicture = { sid: place.s.id, picture: dmWith ? avatarOf(dmWith.id, dmWith.avatar) : isDm(place.s) ? null : place.s.icon };
+  const picture = callPicture.picture;
   const icon = await callThumb(picture);
   if (phoneCallRoom !== key) return; // something changed while the picture loaded
   native('VoiceCall', 'start', {
@@ -621,7 +627,7 @@ function callThumb(url) {
         }
       }
       return '';
-    })().catch(() => ''));
+    })().catch(() => { callThumbs.delete(url); return ''; })); // tried again next time (it may have been offline)
   }
   return callThumbs.get(url);
 }

@@ -4,7 +4,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { statfs } from 'node:fs/promises';
-import { join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { Db } from './db.ts';
 import { backupNow, copyOffsite, localBackups, offsiteBackups, offsiteStatus, queueRestore } from './backup.ts';
 import type { S3Config } from './s3.ts';
@@ -205,7 +205,18 @@ export function hosting(ctx: HostingContext) {
     return { files, bytes };
   };
   if (ctx.uploadDir) {
+    // After a restore, files only the replaced database knew about are left alone for two weeks, so
+    // switching back to it (it's kept as chat.db.before-restore-*) still finds its pictures.
+    const restoredLately = () => {
+      const h = ctx.hosting;
+      if (!h) return false;
+      const dir = dirname(h.dbFile), base = basename(h.dbFile) + '.before-restore-';
+      try {
+        return readdirSync(dir).some((f) => f.startsWith(base) && !f.endsWith('-wal') && statSync(join(dir, f)).mtimeMs > now() - 14 * 864e5);
+      } catch { return false; }
+    };
     const daily = () => {
+      if (restoredLately()) return console.log('Storage clean-up: skipped, a backup was restored in the last two weeks.');
       try {
         const r = cleanUpStorage();
         if (r.files) console.log(`Storage clean-up: removed ${r.files} unused file${r.files === 1 ? '' : 's'} (${Math.round(r.bytes / 1048576)} MB).`);

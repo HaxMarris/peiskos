@@ -9,7 +9,7 @@
 // first. On a brand new server, --uploads also brings back every uploaded file from off-site.
 import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { existsSync, mkdirSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, statSync } from 'node:fs';
 import { localBackups, offsiteBackups, queueRestore } from './backup.ts';
 import { getFile, listFiles, s3FromEnv } from './s3.ts';
 
@@ -66,4 +66,6 @@ if (args.includes('--uploads')) {
 }
 
 queueRestore(dbFile, source);
+// The downloaded copy has been queued (copied), so it doesn't stay in backups/ for good.
+if (source.endsWith(`offsite-${name}`)) rmSync(source, { force: true });
 console.log(`Ready: Peiskos goes back to ${day} the next time it starts. Restart it now with:\n\n  docker compose restart burrow\n`);

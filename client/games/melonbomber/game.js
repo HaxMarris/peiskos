@@ -252,6 +252,7 @@ function syncPlayers(players){
     if(p.id===me.id || conns.some(c=>c.uid===p.id) || lobbyPlayers.length >= 4) return;
     const conn = connFor(p.id);
     const slot = nextFreeSlot();
+    delete lobbyScores[slot]; // a newcomer starts from zero, not with the wins of whoever left that slot
     conns.push(conn);
     lobbyPlayers.push({slot, name:shortName(p.name), colorIdx:slot, isHost:false, connId:conn.peer, uid:p.id, hat:'none'});
     broadcastLobby();
@@ -1496,8 +1497,18 @@ function r3Init(){
 
 function r3Dispose(){
   if(!R3.scene) return;
+  // Each round makes its own canvas textures (players, bombs) and sprite materials: freed here, or a
+  // long session runs a phone out of graphics memory. Shared ones are simply uploaded again if reused.
+  const freed = new Set();
+  const free = (m)=>{
+    if(!m || freed.has(m)) return;
+    freed.add(m);
+    if(m.map && !freed.has(m.map)){ freed.add(m.map); m.map.dispose(); }
+    m.dispose();
+  };
   R3.scene.traverse(o=>{
     if(o.isMesh && o.geometry && !Object.values(R3.geo).includes(o.geometry)) o.geometry.dispose();
+    if(o.isSprite || o.isMesh) (Array.isArray(o.material) ? o.material : [o.material]).forEach(free);
   });
   R3.scene = null;
   R3.walls = null;
@@ -2449,6 +2460,14 @@ function attachInputHandlers(){
     const k = keyMap[e.code];
     if(k){ localInput[k]=false; e.preventDefault(); inputChanged(); }
   });
+  // Clicking into the chat or switching windows swallows the key-up, so everything is let go then.
+  const letGo = ()=>{
+    if(!Object.values(localInput).some(Boolean)) return;
+    for(const k of Object.keys(localInput)) localInput[k]=false;
+    inputChanged();
+  };
+  window.addEventListener('blur', letGo);
+  document.addEventListener('visibilitychange', ()=>{ if(document.hidden) letGo(); });
 
   // touch dpad
   document.querySelectorAll('.dpad button').forEach(btn=>{
@@ -2467,8 +2486,10 @@ function attachInputHandlers(){
   const bombOff = (e)=>{ e.preventDefault(); localInput.bomb=false; inputChanged(); };
   bombBtn.addEventListener('touchstart', bombOn, {passive:false});
   bombBtn.addEventListener('touchend', bombOff, {passive:false});
+  bombBtn.addEventListener('touchcancel', bombOff, {passive:false});
   bombBtn.addEventListener('mousedown', bombOn);
   bombBtn.addEventListener('mouseup', bombOff);
+  bombBtn.addEventListener('mouseleave', bombOff);
 
   const kickBtn = $('kickBtn');
   const kickOn = (e)=>{ e.preventDefault(); localInput.kick=true; inputChanged(); };
@@ -2478,6 +2499,7 @@ function attachInputHandlers(){
   kickBtn.addEventListener('touchcancel', kickOff, {passive:false});
   kickBtn.addEventListener('mousedown', kickOn);
   kickBtn.addEventListener('mouseup', kickOff);
+  kickBtn.addEventListener('mouseleave', kickOff);
   kickBtn.addEventListener('mouseleave', kickOff);
 }
 

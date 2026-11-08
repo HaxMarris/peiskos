@@ -159,7 +159,11 @@ function onView(d) {
     endsAt = Date.now() + (view.left ?? 0);
     if (before.phase === 'draw' && view.phase === 'reveal') feed(`The word was "${view.word}".`, 'sys');
     if (before.turn !== view.turn && view.phase === 'choose') feed(`${nameOf(view.drawer)} is drawing.`, 'sys');
-    if (isDrawer() && view.phase === 'draw' && before.phase !== 'draw') Peiskos.busy(true);
+    // A guest is busy while drawing (popping out would lose the drawing), and free again after.
+    if (!Peiskos.isHost) {
+      const drawing = isDrawer() && view.phase === 'draw';
+      if (drawing !== guestBusy) Peiskos.busy((guestBusy = drawing));
+    } else if (isDrawer() && view.phase === 'draw' && before.phase !== 'draw') Peiskos.busy(true);
     render();
   } else if (d.type === 'feed') feed(String(d.text).slice(0, 200), d.cls || '', d.by ?? null);
   else if (d.type === 'stroke' && d.by !== Peiskos.me.id) sc.add(d.part, d.by);
@@ -250,8 +254,9 @@ function broadcast() {
 function toAll(d) { onView(d); Peiskos.send('all', d); }
 function toSome(ids, d) { for (const id of ids) id === Peiskos.me.id ? onView(d) : Peiskos.send(id, d); }
 
-const maskOf = (word, hints) => [...word].map((ch, i) => (/[a-z0-9]/i.test(ch) && !hints.has(i) ? '_' : ch)).join('');
-const norm = (s) => String(s).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+// Letters and numbers in any alphabet are hidden and compared (accents aside); spaces and marks show.
+const maskOf = (word, hints) => [...word].map((ch, i) => (/[\p{L}\p{N}]/u.test(ch) && !hints.has(i) ? '_' : ch)).join('');
+const norm = (s) => String(s).toLowerCase().normalize('NFKD').replace(/\p{M}/gu, '').replace(/[^\p{L}\p{N}]/gu, '');
 function near(a, b) {
   if (Math.abs(a.length - b.length) > 1 || a.length < 4) return false;
   const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -330,9 +335,9 @@ function hostTick() {
     if (now >= G.endsAt) return endTurn();
     // Hints: a letter at half time and another at three quarters (never more than a third of the word).
     const spent = (now - G.started) / G.drawTime;
-    const letters = [...G.word].map((ch, i) => (/[a-z0-9]/i.test(ch) ? i : -1)).filter((i) => i >= 0 && !G.hints.has(i));
+    const letters = [...G.word].map((ch, i) => (/[\p{L}\p{N}]/u.test(ch) ? i : -1)).filter((i) => i >= 0 && !G.hints.has(i));
     const want = (spent >= 0.5 ? 1 : 0) + (spent >= 0.75 ? 1 : 0);
-    if (G.hints.size < want && letters.length > 1 && G.hints.size < Math.floor(G.word.replace(/[^a-z0-9]/gi, '').length / 3)) {
+    if (G.hints.size < want && letters.length > 1 && G.hints.size < Math.floor(G.word.replace(/[^\p{L}\p{N}]/gu, '').length / 3)) {
       G.hints.add(letters[Math.floor(Math.random() * letters.length)]);
       broadcast();
     }
@@ -345,7 +350,7 @@ function endTurn() {
   if (G.phase === 'choose') G.word = G.choices[0];
   G.phase = 'reveal';
   G.endsAt = Date.now() + REVEAL_SECONDS * 1000;
-  Peiskos.busy(false);
+  // Still busy: popping out between turns would reload the host's copy and send everyone to the lobby.
   broadcast();
 }
 
@@ -442,6 +447,7 @@ Peiskos.on('players', (players) => {
   broadcast();
 });
 
+let guestBusy = false;
 Peiskos.on('init', (resume) => {
   $('btnLeave').textContent = Peiskos.isHost ? 'End' : 'Leave';
   $('btnLeave').title = Peiskos.isHost ? 'Ends the game for everyone' : '';

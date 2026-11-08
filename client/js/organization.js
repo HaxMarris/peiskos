@@ -780,7 +780,8 @@ function openEvent(serverId, eventId) {
   $('#ev-room')?.addEventListener('click', () => {
     closeModal();
     if (room.kind === 'voice') joinVoice(room.id);
-    else { selectChannel(room.id); showView('chat'); }
+    // Through its hearth (it may be another one), which also leaves Home.
+    else selectServer(serverId, false, { channelId: room.id }).then(() => showView('chat'));
   });
   $('#ev-edit')?.addEventListener('click', () => openEventEditor(serverId, e));
   $('#ev-delete')?.addEventListener('click', async () => {

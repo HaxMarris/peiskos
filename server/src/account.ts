@@ -235,7 +235,7 @@ export function verifyAssertion(
 export class ZipWriter {
   private central: Buffer[] = [];
   private offset = 0;
-  private count = 0;
+  count = 0; // files so far (a plain zip holds up to 65,535)
 
   add(name: string, data: Buffer, time = new Date()): Buffer[] {
     const nameBuf = Buffer.from(name, 'utf8');

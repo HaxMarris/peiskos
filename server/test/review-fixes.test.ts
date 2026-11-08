@@ -178,3 +178,32 @@ test('a negative message limit is not read as "every message"', async () => {
   assert.equal((await call(`/api/channels/${room}/messages?limit=-1&around=1`, { token: max.token })).status, 200);
   assert.equal((await call(`/api/channels/${room}/messages?limit=2.5`, { token: max.token })).data.length, 2);
 });
+
+test('leaving and rejoining keeps a timeout', async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  const server = await burrowWith(max, sam);
+  const room = server.channels[0].id;
+  await call(`/api/servers/${server.id}/members/${sam.user.id}/timeout`, { body: { minutes: 60 }, token: max.token });
+  await call(`/api/servers/${server.id}/leave`, { body: {}, token: sam.token });
+  assert.equal((await call('/api/join', { body: { inviteCode: server.inviteCode }, token: sam.token })).status, 200);
+  assert.equal((await call(`/api/channels/${room}/messages`, { body: { content: 'back!' }, token: sam.token })).status, 403);
+});
+
+test('a timeout stops poll votes too', async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  const server = await burrowWith(max, sam);
+  const room = server.channels[0].id;
+  const m = (await call(`/api/channels/${room}/messages`, { body: { content: '/poll Pizza? | yes | no' }, token: max.token })).data;
+  await call(`/api/servers/${server.id}/members/${sam.user.id}/timeout`, { body: { minutes: 60 }, token: max.token });
+  if (m.poll) assert.equal((await call(`/api/messages/${m.id}/vote`, { body: { options: [0] }, token: sam.token })).status, 403);
+});
+
+test('a pending friend request shows only a name, not the whole profile', async () => {
+  const [max, sam] = [await reg('max'), await reg('sam')];
+  await call('/api/friends', { body: { username: sam.user.username }, token: max.token });
+  const r = await call(`/api/users/${sam.user.id}`, { token: max.token });
+  assert.equal(r.status, 200);
+  assert.equal(r.data.friend, 'outgoing');
+  assert.equal(r.data.bio, undefined);
+  assert.equal((await call(`/api/users/${max.user.id}`, { token: sam.token })).data.friend, 'incoming');
+});

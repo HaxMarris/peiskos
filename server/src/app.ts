@@ -516,6 +516,7 @@ export function createApp(opts: AppOptions): Server {
   const voiceTime = voiceTimeTracker(db);
   const setVoice = (userId: number, channelId: number | null, flags?: { muted: boolean; deafened: boolean }) => {
     const prev = inVoice.get(userId);
+    voiceTokens.delete(userId); // what they say from here on is what counts
     if (channelId === null) {
       voiceFlags.delete(userId);
       voiceSockets.delete(userId);
@@ -605,6 +606,18 @@ export function createApp(opts: AppOptions): Server {
   const tellLiveKit = (what: string, call: (voice: VoiceOptions) => Promise<void>) => {
     if (opts.voice) call(opts.voice).catch((err) => console.warn(`Couldn't ${what}: ${err.message}`));
   };
+  // The fire each person last got a LiveKit pass for. An app could join LiveKit without saying so
+  // here, so moderation reaches that fire too, not only the one they announced.
+  const voiceTokens = new Map<number, { channelId: number; at: number }>();
+  /** The fire someone is at, or may be at in LiveKit without having said so (a pass from the last day). */
+  const liveFire = (userId: number) => {
+    const said = inVoice.get(userId);
+    if (said !== undefined) return said;
+    const t = voiceTokens.get(userId);
+    if (t && Date.now() - t.at < 24 * 3600_000) return t.channelId;
+    voiceTokens.delete(userId);
+    return undefined;
+  };
   /** Takes someone out of a voice room: off the room's list, and disconnected from LiveKit. */
   const kickFromVoice = (userId: number, channelId = inVoice.get(userId)) => {
     if (channelId === undefined) return;
@@ -635,6 +648,11 @@ export function createApp(opts: AppOptions): Server {
   const reactAllowance = allowance(60, 3);
   const editAllowance = allowance(30, 0.5);
   const voteAllowance = allowance(30, 1);
+  // Changes that refresh the whole hearth for everyone in it (nickname, shown role, RSVPs).
+  const refreshAllowance = allowance(20, 0.2);
+  const notTooFast = (userId: number) => {
+    if (!refreshAllowance.take(userId)) throw new HttpError(429, "You're changing things very fast. Wait a moment.");
+  };
   type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
 
   // ---- slash commands, worked out by the server so nobody can fake a dice roll
@@ -694,9 +712,12 @@ export function createApp(opts: AppOptions): Server {
       throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
     const flagged = filterCheck(channel, user.id, typeof input.content === 'string' ? withoutBidi(input.content) : '');
     // Slow mode: people who manage rooms or messages aren't held back, and nor are scheduled messages.
-    if (channel.slow && !extras.scheduled && !can(channel.serverId, user.id, 'rooms') && !can(channel.serverId, user.id, 'messages')) {
-      const last = (db.prepare('SELECT MAX(created_at) AS t FROM messages WHERE channel_id = ? AND author_id = ?').get(channelId, user.id) as { t: number | null }).t;
-      const wait = last === null ? 0 : Math.ceil((last + channel.slow * 1000 - now()) / 1000);
+    // A thread goes at its room's pace, counting the room and all its threads together.
+    const paced = channel.kind === 'thread' && channel.parentId !== null ? channelById(channel.parentId) ?? channel : channel;
+    if (paced.slow && !extras.scheduled && !can(channel.serverId, user.id, 'rooms') && !can(channel.serverId, user.id, 'messages')) {
+      const last = (db.prepare('SELECT MAX(created_at) AS t FROM messages WHERE channel_id IN (SELECT id FROM channels WHERE id = ? OR parent_id = ?) AND author_id = ?')
+        .get(paced.id, paced.id, user.id) as { t: number | null }).t;
+      const wait = last === null ? 0 : Math.ceil((last + paced.slow * 1000 - now()) / 1000);
       if (wait > 0) throw new HttpError(429, `Slow mode is on. You can send another message in ${wait} second${wait === 1 ? '' : 's'}.`);
     }
     const raw = input.content ?? '';
@@ -865,6 +886,10 @@ export function createApp(opts: AppOptions): Server {
     '/api/register',
     ({ body, ip, ua }) => {
       checkTries([`register-ip:${ip}`], 10);
+      // New accounts from one address: 20 an hour, so nobody can script thousands (each costs a
+      // password hash). Not from this machine itself (tests, or a server nobody proxies).
+      const local = /^(127\.|::1$|::ffff:127\.)/.test(ip);
+      if (!local) checkTries([`signup-ip:${ip}`], 20);
       const username = cleanUsername(body.username);
       if (typeof body.password !== 'string' || body.password.length < 8)
         throw new HttpError(400, 'Password must be at least 8 characters');
@@ -883,6 +908,7 @@ export function createApp(opts: AppOptions): Server {
         .prepare('INSERT INTO users (username, password_hash, created_at, email, email_verified) VALUES (?, ?, ?, ?, ?)')
         .run(username, hashPassword(body.password), now(), email || null, email ? 1 : 0);
       if (link && link !== 'code') admin.useSignupLink(link);
+      if (!local) failedTry([`signup-ip:${ip}`], 60 * 60 * 1000);
       return startSession(userById(Number(r.lastInsertRowid))!, { ip, ua });
     },
     false,
@@ -1061,6 +1087,9 @@ export function createApp(opts: AppOptions): Server {
     const adding = dmPeople(user, body.userIds).filter((id) => !isMember(serverId, id));
     if (serverMemberIds(serverId).length + adding.length > MAX_GROUP_DM)
       throw new HttpError(400, `A group conversation can have up to ${MAX_GROUP_DM} people`);
+    // Not someone who has blocked (or been blocked by) a person already in it.
+    const there = serverMemberIds(serverId);
+    if (adding.some((a) => there.some((b) => blocked(a, b) || blocked(b, a)))) throw new HttpError(403, "Someone you picked can't be added to this conversation");
     for (const id of adding) db.prepare('INSERT INTO members (server_id, user_id, joined_at) VALUES (?, ?, ?)').run(serverId, id, now());
     sendServerUpdate(serverId);
     return serverSummary(serverId, user.id);
@@ -1128,6 +1157,13 @@ export function createApp(opts: AppOptions): Server {
       throw new HttpError(403, "You've been banned from this hearth");
     if (!isMember(serverId, user.id)) {
       db.prepare('INSERT INTO members (server_id, user_id, joined_at) VALUES (?, ?, ?)').run(serverId, user.id, now());
+      const kept = db.prepare('SELECT value FROM app_settings WHERE key = ?').get(standingKey(serverId, user.id)) as { value: string } | undefined;
+      if (kept) {
+        const { timeoutUntil, voiceMuted } = JSON.parse(kept.value);
+        db.prepare('UPDATE members SET timeout_until = ?, voice_muted = ? WHERE server_id = ? AND user_id = ?')
+          .run((timeoutUntil ?? 0) > now() ? timeoutUntil : null, voiceMuted ? 1 : 0, serverId, user.id);
+        db.prepare('DELETE FROM app_settings WHERE key = ?').run(standingKey(serverId, user.id));
+      }
       if (invite) db.prepare('UPDATE invites SET uses = uses + 1 WHERE code = ?').run(invite);
       sendServerUpdate(serverId);
     }
@@ -1163,11 +1199,19 @@ export function createApp(opts: AppOptions): Server {
     removeBurrowPicture(serverId);
     removeBurrowPicture(serverId, 'banner');
     for (const e of db.prepare('SELECT file FROM custom_emoji WHERE server_id = ?').all(serverId) as { file: string }[]) removeEmojiFile(e.file);
+    db.prepare("DELETE FROM app_settings WHERE key LIKE ?").run(`standing:${serverId}:%`);
     db.prepare('DELETE FROM servers WHERE id = ?').run(serverId);
   };
 
+  const standingKey = (serverId: number, userId: number) => `standing:${serverId}:${userId}`;
   /** Takes someone out of a burrow: out of its voice rooms, its private rooms and its member list. */
   const removeMember = (serverId: number, userId: number) => {
+    // A timeout or a moderator's mute outlasts leaving: it's kept and comes back if they rejoin.
+    const standing = db.prepare('SELECT timeout_until AS timeoutUntil, voice_muted AS voiceMuted FROM members WHERE server_id = ? AND user_id = ?').get(serverId, userId) as
+      { timeoutUntil: number | null; voiceMuted: number } | undefined;
+    if (standing && ((standing.timeoutUntil ?? 0) > now() || standing.voiceMuted))
+      db.prepare('INSERT INTO app_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run(standingKey(serverId, userId), JSON.stringify(standing));
     // Every voice room in the burrow, not just the one we think they're in: the app may not have said.
     for (const id of voiceRoomIds(serverId)) kickFromVoice(userId, id);
     db.prepare('DELETE FROM channel_access WHERE user_id = ? AND channel_id IN (SELECT id FROM channels WHERE server_id = ?)').run(userId, serverId);
@@ -1203,9 +1247,10 @@ export function createApp(opts: AppOptions): Server {
 
   /** After rooms or roles change: anyone in a voice room they can no longer see is taken out, and everyone gets the new view. */
   const accessChanged = (serverId: number) => {
-    for (const [u, c] of inVoice) {
-      const channel = channelById(c);
-      if (channel?.serverId === serverId && !canSee(channel, u)) kickFromVoice(u);
+    for (const u of new Set([...inVoice.keys(), ...voiceTokens.keys()])) {
+      const c = liveFire(u);
+      const channel = c === undefined ? null : channelById(c);
+      if (channel?.serverId === serverId && !canSee(channel, u)) kickFromVoice(u, c);
     }
     sendServerUpdate(serverId);
   };
@@ -1244,6 +1289,7 @@ export function createApp(opts: AppOptions): Server {
     if (count.n >= MAX_ROLES) throw new HttpError(400, `A hearth can have at most ${MAX_ROLES} roles`);
     // New roles start at the bottom, below everyone's.
     const name = cleanName(body.name, 'Role name', 32);
+    uploadLimitAllowed(serverId, user.id, body);
     audit(serverId, user.id, 'role_create', null, name);
     db.prepare('INSERT INTO roles (server_id, name, color, perms, position, created_at) VALUES (?, ?, ?, ?, ?, ?)').run(
       serverId,
@@ -1258,9 +1304,14 @@ export function createApp(opts: AppOptions): Server {
     return serverSummary(serverId, user.id);
   });
 
+  /** A role's upload limit can go past the hearth's own, so only people who can change the hearth's settings set it. */
+  const uploadLimitAllowed = (serverId: number, userId: number, body: Json) => {
+    if (body.uploadMb !== undefined && !can(serverId, userId, 'burrow')) throw new HttpError(403, "Only people who can change the hearth's settings can set a role's upload limit");
+  };
   // Rename, recolor, change permissions, or move up or down one place.
   route('PATCH', '/api/roles/:id', ({ user, params, body }) => {
     const { role, me } = managedRole(Number(params[0]), user);
+    uploadLimitAllowed(role.serverId, user.id, body);
     if (body.name !== undefined) db.prepare('UPDATE roles SET name = ? WHERE id = ?').run(cleanName(body.name, 'Role name', 32), role.id);
     if (body.color !== undefined) db.prepare('UPDATE roles SET color = ? WHERE id = ?').run(cleanColor(body.color), role.id);
     if (body.perms !== undefined) db.prepare('UPDATE roles SET perms = ? WHERE id = ?').run(cleanPerms(body.perms, me, role.perms), role.id);
@@ -1467,6 +1518,7 @@ export function createApp(opts: AppOptions): Server {
     dmBlockCheck(channel.serverId, user.id);
     checkSeat(channel, user.id);
     const canSpeak = !serverMuted(channel.serverId, user.id);
+    voiceTokens.set(user.id, { channelId: channel.id, at: Date.now() });
     return { url: opts.voice.url ?? null, token: voiceToken(opts.voice, user, `room-${channel.id}`, undefined, canSpeak), canSpeak };
   });
 
@@ -1514,13 +1566,13 @@ export function createApp(opts: AppOptions): Server {
 
   route('POST', '/api/voice/disconnect', ({ user, body }) => {
     const targetId = Number(body.userId);
-    const from = channelById(inVoice.get(targetId) ?? -1);
+    const from = channelById(liveFire(targetId) ?? -1);
     // The same answer whether or not they're at a fire somewhere else, so nobody can use this to find out.
     if (!from || !isMember(from.serverId, user.id)) throw new HttpError(400, "They aren't at a fire");
     voiceTarget(from.serverId, user, targetId);
     sendTo([targetId], { type: 'voice_kicked', by: user.displayName || user.username });
     audit(from.serverId, user.id, 'voice_disconnect', targetId, `#${from.name}`);
-    kickFromVoice(targetId);
+    kickFromVoice(targetId, from.id);
     return { ok: true };
   });
 
@@ -1535,7 +1587,7 @@ export function createApp(opts: AppOptions): Server {
     audit(serverId, user.id, muted ? 'voice_mute' : 'voice_unmute', targetId);
     sendTo([targetId], { type: 'server_muted', serverId, muted });
     sendServerUpdate(serverId);
-    const channel = channelById(inVoice.get(targetId) ?? -1);
+    const channel = channelById(liveFire(targetId) ?? -1);
     if (channel?.serverId === serverId) {
       tellLiveKit(`change whether user ${targetId} can speak`, (v) => setCanSpeak(v, `room-${channel.id}`, String(targetId), !muted));
       broadcastToChannel(channel, voiceStateEvent(channel.id));
@@ -1753,6 +1805,12 @@ export function createApp(opts: AppOptions): Server {
     if (room.archivedAt !== null) throw new HttpError(403, "This room is archived, so nothing new can go in it");
     const left = timeoutLeft(channel.serverId, user.id);
     if (left) throw new HttpError(403, `You're timed out for ${left}`);
+    // A role that can only read the room can't change what's there either.
+    const me = standing(channel.serverId, user.id);
+    if (me && !me.perms.has('rooms') && me.roleIds.length) {
+      const readOnly = db.prepare('SELECT role_id FROM channel_read_only WHERE channel_id = ?').all(room.id) as { role_id: number }[];
+      if (readOnly.some((r) => me.roleIds.includes(r.role_id))) throw new HttpError(403, 'Your role can only read this room');
+    }
     if (!editAllowance.take(user.id)) throw new HttpError(429, "You're editing very fast. Wait a moment.");
     const hasFiles = !!db.prepare('SELECT 1 FROM attachments WHERE message_id = ?').get(id);
     if (typeof body.content === 'string') body.content = withoutBidi(body.content);
@@ -1869,7 +1927,7 @@ export function createApp(opts: AppOptions): Server {
   };
   /** Tells LiveKit whether someone at a fire can speak, after a timeout starts or ends. */
   const voiceRightsChanged = (serverId: number, userId: number) => {
-    const channel = channelById(inVoice.get(userId) ?? -1);
+    const channel = channelById(liveFire(userId) ?? -1);
     if (channel?.serverId !== serverId) return;
     tellLiveKit(`change whether user ${userId} can speak`, (v) => setCanSpeak(v, `room-${channel.id}`, String(userId), !serverMuted(serverId, userId)));
     broadcastToChannel(channel, voiceStateEvent(channel.id));
@@ -3396,6 +3454,10 @@ export function createApp(opts: AppOptions): Server {
       if (!limit) throw new HttpError(403, "Your roles can't share files in that hearth");
       if ((m.attachments as Json[]).some((a) => (a.size as number) > limit))
         throw new HttpError(413, `You can share files up to ${Math.round(limit / 1048576)} MB there`);
+      // Copies take room on disk like uploads, so they count toward the day's files and the free space.
+      const total = (m.attachments as Json[]).reduce((n, a) => n + (a.size as number), 0);
+      if (uploadedToday(user.id) + total > DAILY_UPLOAD) throw overDay();
+      await roomOnDisk(total);
       for (const a of m.attachments as Json[]) {
         const copy = randomBytes(16).toString('base64url');
         await copyFile(filePath(a.id as string), filePath(copy)).catch(() => {
@@ -3626,11 +3688,17 @@ export function createApp(opts: AppOptions): Server {
     if (items.length > MAX_LIST_ITEMS) throw new HttpError(400, `A list can have up to ${MAX_LIST_ITEMS} items`);
     return postMessage(user, Number(params[0]), { content: '', replyTo: body.replyTo }, { list: { title, items } });
   });
+  /** Timeouts stop votes and list changes too, not only messages. */
+  const notTimedOut = (channel: Channel, userId: number) => {
+    const left = timeoutLeft(channel.serverId, userId);
+    if (left) throw new HttpError(403, `You're timed out for ${left}`);
+  };
   /** A list someone can see and change: it's in a room they can see that isn't archived. */
   const listMessage = (user: User, id: number) => {
     const { channel, authorId } = visibleMessage(user, id);
     if (!listFor(id)) throw new HttpError(404, "That message isn't a list");
     if (channel.archivedAt !== null) throw new HttpError(403, 'This room is archived, so nothing new can go in it');
+    notTimedOut(channel, user.id);
     if (!voteAllowance.take(user.id)) throw new HttpError(429, "You're changing things very fast. Wait a moment.");
     return { channel, authorId };
   };
@@ -3718,6 +3786,7 @@ export function createApp(opts: AppOptions): Server {
     const picks = [...new Set((Array.isArray(body.options) ? body.options : []).map(Number))];
     if (picks.some((i) => !Number.isInteger(i) || i < 0 || i >= poll.options.length)) throw new HttpError(400, "That isn't one of the answers");
     if (!poll.multi && picks.length > 1) throw new HttpError(400, 'This poll takes one answer');
+    notTimedOut(channel, user.id);
     if (!voteAllowance.take(user.id)) throw new HttpError(429, "You're voting very fast. Wait a moment.");
     db.prepare('DELETE FROM poll_votes WHERE message_id = ? AND user_id = ?').run(id, user.id);
     for (const i of picks) db.prepare('INSERT INTO poll_votes (message_id, user_id, option) VALUES (?, ?, ?)').run(id, user.id, i);
@@ -4562,6 +4631,7 @@ export function createApp(opts: AppOptions): Server {
   route('POST', '/api/events/:id/rsvp', ({ user, params, body }) => {
     const ev = eventById(Number(params[0]));
     if (!ev || !isMember(ev.serverId, user.id)) throw new HttpError(404, 'That event is gone. It may have been cancelled.');
+    notTooFast(user.id);
     if (['going', 'maybe', 'no'].includes(body.status as string))
       db.prepare(
         `INSERT INTO event_rsvps (event_id, user_id, status) VALUES (?, ?, ?)
@@ -4833,8 +4903,11 @@ export function createApp(opts: AppOptions): Server {
   route('GET', '/api/users/:id', ({ user, params }) => {
     const id = Number(params[0]);
     const u = userById(id);
-    const knows = id === user.id || usersSharingServerWith(user.id).includes(id) || friendRow(user.id, id);
-    if (!u || !knows) throw new HttpError(404, "Couldn't find that person");
+    const state = friendState(user.id, id);
+    const knows = id === user.id || usersSharingServerWith(user.id).includes(id) || state === 'friends' || state === 'incoming';
+    if (!u || (!knows && state !== 'outgoing')) throw new HttpError(404, "Couldn't find that person");
+    // Asking a stranger to be friends shows only their name and picture until they say yes.
+    if (!knows) return { ...u, deleted: false, friend: state, blocked: blocked(user.id, id), mutualBurrows: [], achievements: [] };
     const mutual = db
       .prepare(
         `SELECT s.id, s.name FROM members a JOIN members b ON a.server_id = b.server_id JOIN servers s ON s.id = a.server_id
@@ -4855,6 +4928,7 @@ export function createApp(opts: AppOptions): Server {
     let nick = typeof body.nickname === 'string' ? withoutBidi(body.nickname).replace(/\s+/g, ' ').trim() : '';
     if (looksBlank(nick)) nick = '';
     if (nick.length > 32) throw new HttpError(400, 'Keep your nickname to 32 characters');
+    notTooFast(user.id);
     db.prepare('UPDATE members SET nickname = ? WHERE server_id = ? AND user_id = ?').run(nick || null, serverId, user.id);
     sendServerUpdate(serverId);
     return serverSummary(serverId, user.id);
@@ -4864,6 +4938,7 @@ export function createApp(opts: AppOptions): Server {
   route('PATCH', '/api/servers/:id/shown-role', ({ user, params, body }) => {
     const serverId = Number(params[0]);
     if (!isBurrow(serverId) || !isMember(serverId, user.id)) throw new HttpError(404, "That hearth is gone, or you're not in it.");
+    notTooFast(user.id);
     const roleId = body.roleId == null ? null : Number(body.roleId);
     if (roleId !== null && !db.prepare('SELECT 1 FROM member_roles WHERE server_id = ? AND user_id = ? AND role_id = ?').get(serverId, user.id, roleId))
       throw new HttpError(400, "You don't have that role");
@@ -5324,7 +5399,8 @@ export function createApp(opts: AppOptions): Server {
   /** Burrows someone hosts that other people are in too. */
   const busyHearths = (userId: number) =>
     (db.prepare("SELECT id, name FROM servers WHERE owner_id = ? AND kind = 'burrow'").all(userId) as { id: number; name: string }[])
-      .filter((s) => serverMemberIds(s.id).some((id) => id !== userId));
+      // Bots can't be handed a hearth, so a hearth of only bots goes with its host.
+      .filter((s) => serverMemberIds(s.id).some((id) => id !== userId && !isBotUser(id)));
 
   /**
    * Deletes an account: out of everything, their own things gone, their messages kept as
@@ -5424,7 +5500,8 @@ export function createApp(opts: AppOptions): Server {
       const addFile = async (path: string, name: string) => {
         const data = await readFile(path).catch(() => null);
         if (!data) return;
-        if (total + data.length > LIMIT) return void skipped.push(name);
+        // Nor past 65,535 entries (a few kept back for the notes and lists).
+        if (total + data.length > LIMIT || zip.count >= 65_000) return void skipped.push(name);
         total += data.length;
         await write(zip.add(name, data));
       };

@@ -62,13 +62,16 @@ PROXIES.addSubnet('10.0.0.0', 8, 'ipv4');
 PROXIES.addSubnet('172.16.0.0', 12, 'ipv4');
 PROXIES.addAddress('::1', 'ipv6');
 
+// With no reverse proxy in front (BURROW_BIND=0.0.0.0), Docker hands outside visitors over from a
+// 172.x address too, and they could then name any address they liked: TRUST_PROXY=off stops that.
+const TRUST_PROXY = process.env.TRUST_PROXY !== 'off';
 /** The visitor's address. Behind Caddy on the same machine, Caddy passes it along in X-Forwarded-For. */
 export function clientIp(req: IncomingMessage) {
   const direct = req.socket.remoteAddress ?? '';
   const forwarded = String(req.headers['x-forwarded-for'] ?? '').split(',').pop()?.trim();
   const v4 = direct.replace(/^::ffff:(?=\d+\.\d+\.\d+\.\d+$)/, '');
   const local = isIP(v4) === 4 ? PROXIES.check(v4, 'ipv4') : PROXIES.check(direct, 'ipv6');
-  return local && forwarded ? forwarded : direct;
+  return TRUST_PROXY && local && forwarded ? forwarded : direct;
 }
 
 export const readBody = (req: IncomingMessage) =>

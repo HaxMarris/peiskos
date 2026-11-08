@@ -59,10 +59,14 @@ const matches = (k, e, exact) => {
 function onDown(e) {
   if (!binds) return;
   if (matches(binds.ptt, e, true) && !pttDown) { pttDown = true; send('ptt', true); }
-  if (matches(binds.mute, e, true)) send('mute', true);
-  if (matches(binds.deafen, e, true)) send('deafen', true);
+  // Held keys repeat their key-down: mute and deafen toggle once per press.
+  if (matches(binds.mute, e, true) && !held.has('mute')) { held.add('mute'); send('mute', true); }
+  if (matches(binds.deafen, e, true) && !held.has('deafen')) { held.add('deafen'); send('deafen', true); }
 }
+const held = new Set();
 function onUp(e) {
+  if (binds?.mute && e.keycode === keycode(binds.mute.code)) held.delete('mute');
+  if (binds?.deafen && e.keycode === keycode(binds.deafen.code)) held.delete('deafen');
   // Letting go counts whatever else is held.
   if (binds && pttDown && matches(binds.ptt, e, false)) { pttDown = false; send('ptt', false); }
 }
@@ -105,7 +109,9 @@ function set(next, sender) {
   // Presses only: mute and deafen work, push to talk stays with the page.
   for (const name of ['mute', 'deafen']) {
     const acc = binds[name] && accelerator(binds[name]);
-    if (acc) try { globalShortcut.register(acc, () => send(name, true)); } catch {}
+    // No key-up here, so presses closer together than a held key's repeat count once.
+    let last = 0;
+    if (acc) try { globalShortcut.register(acc, () => { const t = Date.now(); if (t - last > 400) send(name, true); last = t; }); } catch {}
   }
   return { global: false, needsPermission };
 }

@@ -161,7 +161,8 @@ export function trivia(ctx: TriviaContext) {
     const serverId = hearth(user.id, params[0]);
     const words = [...new Set((Array.isArray(body.words) ? body.words : [])
       .map((w) => (typeof w === 'string' ? w.replace(/\s+/g, ' ').trim().toLowerCase() : ''))
-      .filter((w) => w && w.length <= 30))];
+      // A word needs a letter or number to guess (an emoji alone can't be hidden or typed).
+      .filter((w) => w && w.length <= 30 && /[\p{L}\p{N}]/u.test(w)))];
     if (words.length > MAX_WORDS) throw fail(400, `A hearth can have up to ${MAX_WORDS} words`);
     db.prepare('DELETE FROM game_words WHERE server_id = ?').run(serverId);
     const add = db.prepare('INSERT INTO game_words (server_id, word) VALUES (?, ?)');

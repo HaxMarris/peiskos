@@ -53,6 +53,7 @@ export function openDb(file: string): Db {
   db.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
+    PRAGMA busy_timeout = 5000;
 
     CREATE TABLE IF NOT EXISTS users (
       id            INTEGER PRIMARY KEY,
@@ -566,7 +567,10 @@ function addStreaming(db: Db) {
   addColumn(db, 'servers', 'live_channel_id', 'INTEGER REFERENCES channels(id) ON DELETE SET NULL');
   // A go-live announcement: JSON { voiceChannelId, endedAt }.
   addColumn(db, 'messages', 'live', 'TEXT');
-  // Nobody is still live after a restart.
+}
+
+/** Nobody is still live after a restart. Only the server calls this (not tools like reset-link, which open the database beside it). */
+export function endLiveStreams(db: Db) {
   db.prepare(`UPDATE messages SET live = json_set(live, '$.endedAt', ?) WHERE live IS NOT NULL AND json_extract(live, '$.endedAt') IS NULL`).run(Date.now());
 }
 

@@ -201,6 +201,7 @@ async function jumpTo(channelId, messageId) {
   closeModal();
   const where = roomById(channelId);
   if (!where) return notice("That message is in a room you can't see any more.");
+  closeHome(); // the room is behind Home when it's in the hearth you were last in
   showView('chat');
   if (where.s.id !== state.serverId) {
     if (isDm(where.s)) store.set('lastDm', where.s.id);
