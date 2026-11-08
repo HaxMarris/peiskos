@@ -617,6 +617,7 @@ function audioOut() {
     setChimeOutput();
   }
   if (soundCtx.state === 'suspended') soundCtx.resume().catch(() => {});
+  soundRest((MAX_SOUND_SECONDS + 2) * 1000);
   return soundCtx;
 }
 

@@ -580,36 +580,50 @@ async function syncPhoneCall() {
   if (!isPhoneApp) return;
   const place = roomById(state.voice?.channelId ?? state.rejoin?.channelId);
   const muted = !!state.voice?.muted;
-  const key = place ? `${place.s.id}:${place.c.id}:${muted}` : null;
+  const people = Math.max(1, place?.c.voiceUsers?.length ?? 1);
+  const key = place ? `${place.s.id}:${place.c.id}:${muted}:${people}` : null;
   if (key === phoneCallRoom) return;
   phoneCallRoom = key;
   if (!place) return native('VoiceCall', 'stop').catch((err) => console.warn('Call notification', err));
   const text = isDm(place.s) ? dmTitle(place.s) : place.s.name;
-  // The iPhone's Live Activity shows the hearth's picture, which has to be tiny to fit.
-  const icon = isDm(place.s) ? '' : await hearthThumb(place.s);
+  // The iPhone's Live Activity shows the hearth's picture (or, in a message, the other person's),
+  // which has to be tiny to fit.
+  const dmWith = isDm(place.s) && !place.s.group ? partner(place.s) : null;
+  const picture = dmWith ? avatarOf(dmWith.id, dmWith.avatar) : isDm(place.s) ? null : place.s.icon;
+  const icon = await callThumb(picture);
   if (phoneCallRoom !== key) return; // something changed while the picture loaded
   native('VoiceCall', 'start', {
-    title: `In ${fireName(place.c)}`, text, room: fireName(place.c), muted,
-    key: `${place.s.id}:${place.s.icon ?? ''}`, icon, initial: [...text.trim()][0]?.toUpperCase() ?? 'P',
+    title: `In ${fireName(place.c)}`, text, room: fireName(place.c), muted, people,
+    key: `${place.s.id}:${picture ?? ''}`, icon, initial: [...text.trim()][0]?.toUpperCase() ?? 'P',
   }).catch((err) => console.warn('Call notification', err));
 }
 
-const hearthThumbs = new Map(); // icon url -> Promise<base64 JPEG, or ''>
-function hearthThumb(s) {
-  if (phonePlatform !== 'ios' || !s.icon) return '';
-  if (!hearthThumbs.has(s.icon)) {
-    hearthThumbs.set(s.icon, (async () => {
-      const bitmap = await createImageBitmap(await (await fetch(state.serverUrl + s.icon)).blob());
+const callThumbs = new Map(); // picture url -> Promise<base64 JPEG, or ''>
+// A Live Activity carries at most 4 KB in all, so the picture is made smaller, then plainer,
+// until it fits. A size limit that threw every busy picture away left most hearths as a letter.
+function callThumb(url) {
+  if (phonePlatform !== 'ios' || !url) return '';
+  if (!callThumbs.has(url)) {
+    callThumbs.set(url, (async () => {
+      const bitmap = await createImageBitmap(await (await fetch(state.serverUrl + url)).blob());
       const canvas = document.createElement('canvas');
-      canvas.width = canvas.height = 64;
-      const scale = 64 / Math.min(bitmap.width, bitmap.height);
-      const w = bitmap.width * scale, h = bitmap.height * scale;
-      canvas.getContext('2d').drawImage(bitmap, (64 - w) / 2, (64 - h) / 2, w, h);
-      const jpeg = canvas.toDataURL('image/jpeg', 0.6).split(',')[1];
-      return jpeg.length < 3000 ? jpeg : '';
+      for (const size of [64, 48, 36]) {
+        canvas.width = canvas.height = size;
+        const scale = size / Math.min(bitmap.width, bitmap.height);
+        const w = bitmap.width * scale, h = bitmap.height * scale;
+        const g = canvas.getContext('2d');
+        g.fillStyle = '#1c1714'; // a see-through picture sits on the card's colour, not black
+        g.fillRect(0, 0, size, size);
+        g.drawImage(bitmap, (size - w) / 2, (size - h) / 2, w, h);
+        for (const quality of [0.7, 0.5, 0.35]) {
+          const jpeg = canvas.toDataURL('image/jpeg', quality).split(',')[1];
+          if (jpeg.length < 3000) return jpeg;
+        }
+      }
+      return '';
     })().catch(() => ''));
   }
-  return hearthThumbs.get(s.icon);
+  return callThumbs.get(url);
 }
 
 // Alerts while the phone app is closed: Apple (iPhone) or Google's Firebase (Android) gives the app

@@ -880,6 +880,7 @@ function handleEvent(ev) {
       checkRinging(ev.channelId, ev.userIds);
       renderChannels();
       renderCallButton();
+      syncPhoneCall(); // the call's Live Activity counts who's at the fire
       break;
     case 'voice_move': {
       if (!state.voice) break;

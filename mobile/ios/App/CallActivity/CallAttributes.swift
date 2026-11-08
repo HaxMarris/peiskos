@@ -14,6 +14,8 @@ struct CallAttributes: ActivityAttributes {
         var muted: Bool
         /// Where the sound plays: speaker, phone, headphones, bluetooth, car or airplay.
         var output: String
+        /// How many people are at the fire, you included.
+        var people: Int?
     }
 
     /// The hearth's picture as a small JPEG (a Live Activity can only carry a few KB), if it has one.

@@ -1355,6 +1355,17 @@ const SOUND_SETS = {
 
 let soundCtx = null;
 let soundRoom = null;
+// On a phone the chimes' audio engine rests once it has gone quiet, so it doesn't run beside a
+// call's sound and take the processor time that call needs.
+let soundRestAt = 0, soundRestTimer = 0;
+function soundRest(ms) {
+  if (!isPhoneApp) return;
+  soundRestAt = Math.max(soundRestAt, Date.now() + ms);
+  clearTimeout(soundRestTimer);
+  soundRestTimer = setTimeout(() => {
+    if (soundCtx?.state === 'running') soundCtx.suspend().catch(() => {});
+  }, soundRestAt - Date.now());
+}
 let lastMessageSound = 0;
 
 /** One note made of partials, each [multiple, share of the loudness, share of the length]. */
@@ -1423,6 +1434,7 @@ function playSound(name, force = false, set = soundPrefs.set) {
       setChimeOutput();
     }
     if (soundCtx.state === 'suspended') soundCtx.resume();
+    soundRest(3000);
     const kit = SOUND_SETS[set] ?? SOUND_SETS.kindling;
     const t0 = soundCtx.currentTime + 0.02;
     const out = soundCtx.createGain();
