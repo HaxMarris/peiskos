@@ -78,6 +78,8 @@ function threadRows(s, c) {
       li.append(name);
       if (!readingNow(t.id) && t.mentions) li.append(pingCount(t.mentions));
       li.title = `${t.name}: thread in #${c.name}`;
+      li.dataset.key = `room-${t.id}`;
+      rowMain(li, name, { role: 'link', current: t.id === state.channelId, label: rowLabel(`${t.name}, thread in ${c.name}`, isUnread(t) && 'unread') });
       li.onclick = () => { selectChannel(t.id); showView('chat'); };
       return li;
     });
@@ -589,7 +591,9 @@ function openForward(m) {
   const render = (q = '') => {
     $('#fwd-list').replaceChildren(...targets.filter((t) => t.label.toLowerCase().includes(q.toLowerCase())).slice(0, 60).map((t) => {
       const li = document.createElement('li');
-      li.textContent = t.label;
+      const name = document.createElement('span');
+      name.textContent = t.label;
+      li.append(rowMain(li, name));
       li.onclick = async () => {
         try {
           await api(`/api/messages/${m.id}/forward`, { method: 'POST', body: { channelId: t.id } });

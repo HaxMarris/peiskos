@@ -436,6 +436,8 @@ function renderDmList() {
     li.oncontextmenu = (e) => { e.preventDefault(); openNotifyMenu(li, s); };
     const n = id === state.serverId || notifyState(s, null).muted ? 0 : s.channels.reduce((sum, c) => sum + (c.unread ?? 0), 0);
     if (n) side.insertAdjacentHTML('beforeend', `<span class="ping-count">${n > 99 ? '99+' : n}</span>`);
+    li.dataset.key = `dm-${id}`;
+    rowMain(li, text, { role: 'link', current: id === state.serverId, label: rowLabel(dmTitle(s), !s.group && STATUS_LABELS[statusOf(partner(s))], n && `${n} unread`, li.classList.contains('muted-room') && 'muted') });
     li.onclick = () => { store.set('lastDm', id); selectServer(id); showView('chat'); };
     const close = iconButton('', `Close conversation with ${dmTitle(s)}`, (e) => { e.stopPropagation(); closeDm(s); });
     close.classList.add('room-gear', 'dm-close');
@@ -457,6 +459,8 @@ function renderDmList() {
   const asks = state.friends?.incoming.length ?? 0;
   friends.innerHTML = `<span class="avatar xs group-avatar">${FRIENDS_ICON}</span><span class="dm-name">Friends${online ? `<span class="small muted"> · ${online} online</span>` : ''}</span>
     <span class="ping-count ${asks ? '' : 'hidden'}">${asks > 99 ? '99+' : asks}</span>`;
+  friends.dataset.key = 'friends';
+  rowMain(friends, friends.querySelector('.dm-name'), { label: rowLabel('Friends', online && `${online} online`, asks && (asks === 1 ? '1 request' : `${asks} requests`)) });
   friends.onclick = () => openFriends();
   items.unshift(friends);
   $('#channel-list').replaceChildren(...items);

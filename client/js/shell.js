@@ -92,6 +92,46 @@ function iconButton(label, title, onclick) {
   return b;
 }
 
+/**
+ * For a row that's clicked as a whole (a room, a conversation, a person): its name becomes the part
+ * the keyboard lands on, and Enter or Space there clicks the row. The row stays a plain list item,
+ * so the buttons inside it are still buttons of their own, and a screen reader hears what the row
+ * does: a link for somewhere you go, a button for something that opens.
+ */
+function rowMain(row, main, { role = 'button', label = '', current = false } = {}) {
+  row.classList.add('focus-row');
+  main.classList.add('row-main');
+  main.tabIndex = 0;
+  main.setAttribute('role', role);
+  if (label) main.setAttribute('aria-label', label);
+  if (current) main.setAttribute('aria-current', role === 'link' ? 'page' : 'true');
+  return main;
+}
+/** A row's name for a screen reader: the parts that apply, in order. */
+const rowLabel = (...parts) => parts.filter(Boolean).join(', ');
+
+/**
+ * Redraws a list without dropping the keyboard. Lists are rebuilt whenever something in them
+ * changes, which would otherwise throw the focus back to the top of the page. Rows carry a
+ * data-key: focus returns to the same row (and the same button in it), or, when that row is gone,
+ * to the one now in its place.
+ */
+function keepFocus(box, redraw) {
+  const had = box.contains(document.activeElement) ? document.activeElement : null;
+  const row = had?.closest('[data-key]');
+  if (!row) return redraw();
+  const stops = (r) => [...r.querySelectorAll('.row-main, button')];
+  const key = row.dataset.key;
+  const stop = stops(row).indexOf(had);
+  const place = [...box.querySelectorAll('[data-key]')].indexOf(row);
+  redraw();
+  if (box.contains(document.activeElement)) return;
+  const rows = [...box.querySelectorAll('[data-key]')];
+  const same = rows.find((r) => r.dataset.key === key);
+  const next = same ?? rows[Math.min(place, rows.length - 1)];
+  if (next) ((same && stops(next)[stop]) || stops(next)[0])?.focus({ preventScroll: true });
+}
+
 function alertError(err) { notice(err?.message || String(err)); }
 
 // ---------------------------------------------------------------- theme & panes

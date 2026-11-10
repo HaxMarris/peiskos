@@ -421,14 +421,16 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------------------------------------------------------- screen readers and keyboards
 
-// Rows that act like buttons (rooms, conversations, people) can be reached with Tab and opened
-// with Enter or Space, and icon-only buttons are read out by their tooltip.
+// Rows that act like buttons can be reached with Tab and opened with Enter or Space, and icon-only
+// buttons are read out by their tooltip. The main lists (rooms, conversations, people, events) set
+// this up themselves with rowMain; this catches any other row that's clicked as a whole.
 const CLICKABLE = 'li, .voice-person, .member, .switch-row';
 let queued = false;
 function labelThings() {
   queued = false;
   for (const el of document.querySelectorAll(CLICKABLE)) {
-    if (!el.onclick || el.hasAttribute('tabindex')) continue;
+    // Not rows that have their own keyboard stop, nor choices in a box that's steered with the arrows.
+    if (!el.onclick || el.hasAttribute('tabindex') || el.getAttribute('role') === 'option' || el.querySelector('.row-main')) continue;
     el.tabIndex = 0;
     if (!el.getAttribute('role') && el.tagName !== 'LI') el.setAttribute('role', 'button');
   }
@@ -446,7 +448,8 @@ new MutationObserver(() => {
 document.addEventListener('keydown', (e) => {
   if (e.defaultPrevented || (e.key !== 'Enter' && e.key !== ' ')) return;
   const el = e.target;
-  if (!(el instanceof HTMLElement) || el.matches('button, a, input, textarea, select, [contenteditable]') || !el.matches(CLICKABLE) || !el.onclick) return;
+  if (!(el instanceof HTMLElement) || el.matches('button, a, input, textarea, select, [contenteditable]')) return;
+  if (!el.matches('.row-main') && !(el.matches(CLICKABLE) && el.onclick)) return;
   e.preventDefault();
   el.click();
 });
