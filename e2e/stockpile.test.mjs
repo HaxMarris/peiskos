@@ -35,6 +35,10 @@ async function playTurn(seat, turnNo) {
   for (let moves = 0; moves < 80; moves++) {
     const s = await table(seat);
     if (s.over || s.banner !== 'Your turn') return;
+    // Resting the mouse on a discard pile lays its cards out over the table, so the mouse goes back
+    // up to the banner between moves, the way a person's would move off the pile.
+    await g.locator('#turnBanner').hover({ force: true });
+    await g.locator('#peek.hidden').waitFor({ state: 'attached' });
     const pileFor = (c) => (c === null ? -1 : c === 0 ? 0 : s.next.indexOf(c));
     const inHand = s.hand.findIndex((c) => pileFor(c) >= 0);
     const onDiscard = s.discards.findIndex((c) => pileFor(c) >= 0);
@@ -45,8 +49,9 @@ async function playTurn(seat, turnNo) {
       await g.locator('#hand .card').nth(inHand).click();
       await g.locator('#builds .card').nth(pileFor(s.hand[inHand])).click();
     } else if (onDiscard >= 0) {
-      // Clicked without moving the mouse there: resting on a pile opens a look at its cards, over the table.
-      await g.locator('#myDiscards .fan').nth(onDiscard).dispatchEvent('click');
+      await g.locator('#myDiscards .fan').nth(onDiscard).click();
+      await g.locator('#turnBanner').hover({ force: true });
+      await g.locator('#peek.hidden').waitFor({ state: 'attached' });
       await g.locator('#builds .card').nth(pileFor(s.discards[onDiscard])).click();
     } else if (s.hand.length) {
       await g.locator('#hand .card').last().click();
