@@ -45,7 +45,8 @@ async function playTurn(seat, turnNo) {
       await g.locator('#hand .card').nth(inHand).click();
       await g.locator('#builds .card').nth(pileFor(s.hand[inHand])).click();
     } else if (onDiscard >= 0) {
-      await g.locator('#myDiscards .fan').nth(onDiscard).click();
+      // Clicked without moving the mouse there: resting on a pile opens a look at its cards, over the table.
+      await g.locator('#myDiscards .fan').nth(onDiscard).dispatchEvent('click');
       await g.locator('#builds .card').nth(pileFor(s.discards[onDiscard])).click();
     } else if (s.hand.length) {
       await g.locator('#hand .card').last().click();

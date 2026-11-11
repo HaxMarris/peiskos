@@ -1,5 +1,5 @@
 # Runs on every pull request (and on main): the server's type check and tests, a check of the
-# web client's scripts, the desktop app's scripts, the screens and speed check, and a test build of the Docker image.
+# web client's scripts, the desktop app's scripts, the screens and speed check, the fire's games played end to end, and a test build of the Docker image.
 name: Checks
 
 on:
@@ -85,6 +85,36 @@ jobs:
           retention-days: 14
       - if: failure()
         run: tail -50 $RUNNER_TEMP/server.log
+
+  # Plays the fire's games for real: a server, and one Chromium window per friend at the same fire
+  # (see e2e/README.md). A failed test leaves pictures of every player's screen in "game-failures".
+  games:
+    name: Games at the fire, end to end
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - run: npm ci
+        working-directory: server
+      - name: Playwright
+        working-directory: e2e
+        run: |
+          npm install --no-package-lock
+          npx playwright install --with-deps chromium
+      - run: npm test
+        working-directory: e2e
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: game-failures
+          path: e2e/failures
+          retention-days: 14
+          if-no-files-found: ignore
 
   docker:
     name: Docker image builds
