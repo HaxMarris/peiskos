@@ -39,6 +39,7 @@ const Peiskos = (() => {
       self.players = m.players || [];
       handlers.init.forEach((fn) => fn(m.resume || null));
     } else if (m.kind === 'players') {
+      for (const p of self.players) seenNames.set(p.id, p.name);
       self.players = m.players || [];
       handlers.players.forEach((fn) => fn(self.players));
     } else if (m.kind === 'msg') {
@@ -65,7 +66,12 @@ function el(tag, cls, text) {
   if (text !== undefined) e.textContent = text;
   return e;
 }
-const nameOf = (id) => (Peiskos.players.find((p) => p.id === id)?.name ?? 'Someone').slice(0, 24);
+// Names are kept after someone leaves, so "Ines left" and a final score still say who.
+const seenNames = new Map();
+function nameOf(id) {
+  for (const p of Peiskos.players) seenNames.set(p.id, p.name);
+  return String(seenNames.get(id) ?? 'Someone').slice(0, 24);
+}
 function shuffle(a) {
   for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
   return a;
