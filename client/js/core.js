@@ -126,6 +126,20 @@ function prefetch(paths) {
     prefetched.set(path, res);
   }
 }
+// What opening Peiskos needs first: who you are, your hearths and conversations, and the room you were last in.
+function startPaths() {
+  const room = state.lastChannel[state.serverId];
+  return ['/api/me', '/api/config', '/api/servers', '/api/dms', '/api/me/favorites', '/api/drafts', '/api/me/saved', '/api/me/scheduled', '/api/friends',
+    ...(room ? [`/api/channels/${room}/messages?limit=50`] : [])];
+}
+// In a browser they're asked for right here, while the rest of the app's scripts are still
+// downloading, so the answers are usually waiting by the time the app starts. (The apps carry
+// their scripts with them, and check the server's address first.)
+let prefetchedAs = null; // the login those early answers are for
+if (!isApp && state.token && !new URLSearchParams(location.search).has('reset')) {
+  prefetchedAs = state.token;
+  prefetch(startPaths());
+}
 
 async function api(path, { method = 'GET', body } = {}, retried = false) {
   const ask = () => fetch(state.serverUrl + path, {
@@ -536,9 +550,10 @@ $('#logout').addEventListener('click', () => logout());
 // ---------------------------------------------------------------- app bootstrap
 
 async function enterApp() {
-  const room = state.lastChannel[state.serverId];
-  prefetch(['/api/me', '/api/config', '/api/servers', '/api/dms', '/api/me/favorites', '/api/drafts', '/api/me/saved', '/api/me/scheduled', '/api/friends',
-    ...(room ? [`/api/channels/${room}/messages?limit=50`] : [])]);
+  // Early answers asked for as someone else (you logged in as another account since) aren't yours.
+  if (prefetchedAs !== state.token) prefetched.clear();
+  prefetchedAs = null;
+  prefetch(startPaths().filter((path) => !prefetched.has(path)));
   try { await enterAppNow(); } finally { prefetched.clear(); }
 }
 async function enterAppNow() {
