@@ -54,10 +54,30 @@ const gameMax = (name) => FIRE_GAMES[name]?.maxPlayers ?? 4;
 const GAME_API = [/^\/api\/trivia\/(categories\?serverId=\d+|round)$/, /^\/api\/servers\/\d+\/(trivia(\/\d+)?|game-words)$/];
 
 let fireGame = null; // { channelId, game: { name, hostId, players, since } } at your fire
-let gamePlay = null; // { name, frame, ready, queue, snapshot, busy } while you're playing, on this device
-let gameStarting = false; // you asked to start or join, so the game opens once Peiskos says you're in
+let gamePlay = null; // { name, frame, queue, snapshot, busy } while you're playing, on this device
+// Where this device is with the fire's game: see PHASES.fireGame in phases.js.
+const gamePhase = phaseMachine('fireGame', 'none', { el: () => $('#game-panel') });
+let gameAsk = null; // the latest ask, so an older one's timeout leaves a newer one alone
 
 const sendGame = (msg) => state.ws?.readyState === WebSocket.OPEN && state.ws.send(JSON.stringify({ type: 'game', ...msg }));
+
+/** Asks to start (or join) a game. It opens once Peiskos says you're in; turned down, or no answer, and the ask is over. */
+function askForGame(name) {
+  if (state.ws?.readyState !== WebSocket.OPEN) return toast("You're not connected right now, so the game can't start. Try again once you're back.");
+  const ask = {};
+  gameAsk = ask;
+  const over = () => {
+    if (gameAsk !== ask) return;
+    gameAsk = null;
+    if (gamePhase.to('none')) renderGamePanel();
+  };
+  const nonce = Math.random().toString(36).slice(2);
+  unconfirmed.set(nonce, (err) => { over(); toast(err.message); });
+  setTimeout(() => { unconfirmed.delete(nonce); if (gamePhase.is('asking')) over(); }, 15000);
+  gamePhase.to('asking');
+  sendGame({ action: 'start', game: name, nonce }); // joins, or moves your game to this device
+  renderGamePanel();
+}
 const inFireGame = () => !!fireGame?.game?.players.includes(state.me?.id);
 const gamePlayers = (g) => g.players.map((id) => ({ id, name: nameOf(id, 'Player') }));
 
@@ -106,8 +126,7 @@ function openGamePicker() {
   const card = $('#modal-card');
   card.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => {
     closeModal();
-    gameStarting = true;
-    sendGame({ action: 'start', game: b.dataset.game });
+    askForGame(b.dataset.game);
   }));
   card.querySelector('[data-join]')?.addEventListener('click', () => { closeModal(); joinFireGame(); });
   card.querySelector('[data-fishing]').onclick = () => { closeModal(); openFishing(); };
@@ -129,8 +148,8 @@ function joinFireGame() {
   if (!g || missingGame(g.name)) return;
   if (gamePlay) return showGame();
   if (!inFireGame() && g.players.length >= gameMax(g.name)) return toast(`The game is full (${gameMax(g.name)} players).`);
-  gameStarting = true;
-  sendGame({ action: 'start', game: g.name }); // joins, or moves your game to this device
+  if (gamePhase.is('asking')) return;
+  askForGame(g.name);
 }
 
 function onGameState(ev) {
@@ -146,9 +165,8 @@ function onGameState(ev) {
   }
   if (g && inFireGame()) {
     if (gamePlay) postToGame({ kind: 'players', hostId: g.hostId, players: gamePlayers(g) });
-    else if (gameStarting) loadGame(g.name);
+    else if (gamePhase.is('asking')) loadGame(g.name);
   } else if (gamePlay) closeGame(); // out of it (or playing on another device now)
-  if (g && inFireGame()) gameStarting = false;
   renderGamePanel();
 }
 
@@ -160,7 +178,7 @@ function onGameMessage(ev) {
 /** Messages wait until the game's page says it's ready for them. */
 function postToGame(msg) {
   if (!gamePlay) return;
-  if (!gamePlay.ready) return gamePlay.queue.push(msg);
+  if (!gamePhase.is('playing')) return gamePlay.queue.push(msg);
   gamePlay.frame.contentWindow?.postMessage(msg, '*');
 }
 
@@ -171,7 +189,9 @@ function loadGame(name) {
   frame.title = FIRE_GAMES[name]?.title ?? 'Game';
   frame.src = `games/${name}/index.html`;
   frame.allow = 'fullscreen';
-  gamePlay = { name, frame, ready: false, queue: [], snapshot: null, busy: false };
+  gamePlay = { name, frame, queue: [], snapshot: null, busy: false };
+  gameAsk = null;
+  gamePhase.to('loading');
   $('#game-frame').replaceChildren(frame);
   $('#game-view-title').textContent = frame.title;
   showGame();
@@ -189,6 +209,8 @@ function showGame() {
 
 function closeGame() {
   gamePlay = null;
+  gameAsk = null;
+  gamePhase.to('none');
   $('#game-frame').replaceChildren();
   closeGamePop('game');
   renderVoicePlaces();
@@ -201,7 +223,6 @@ function closeGame() {
 /** Leaving the fire leaves the game (Peiskos's server does that part). */
 function stopGame() {
   fireGame = null;
-  gameStarting = false;
   closeGame();
   renderGamePanel();
 }
@@ -225,7 +246,7 @@ window.addEventListener('message', (e) => {
   if (m.kind === 'ready') {
     const g = fireGame?.game;
     if (!g) return;
-    gamePlay.ready = true;
+    gamePhase.to('playing');
     // The page loads again when it moves between windows (popping out); the host's game picks up
     // where it left off from the last snapshot it gave.
     const hearthId = roomById(fireGame.channelId)?.s.id ?? null;
@@ -270,8 +291,9 @@ function renderGamePanel() {
   $('#game-panel-title').textContent = info.title;
   $('#game-panel-sub').textContent = `Started by ${g.hostId === state.me.id ? 'you' : nameOf(g.hostId)} · ${g.players.length} of ${max} playing`;
   const open = $('#game-panel-open');
-  open.textContent = playing ? (gamePlay ? 'Back to the game' : 'Open the game') : g.players.length >= max ? 'Full' : 'Join';
-  open.disabled = !playing && g.players.length >= max;
+  const asking = gamePhase.is('asking');
+  open.textContent = asking ? 'Joining…' : playing ? (gamePlay ? 'Back to the game' : 'Open the game') : g.players.length >= max ? 'Full' : 'Join';
+  open.disabled = asking || (!playing && g.players.length >= max);
   const leave = $('#game-panel-leave');
   leave.classList.toggle('hidden', !playing);
   leave.textContent = g.hostId === state.me.id ? 'End game' : 'Leave';

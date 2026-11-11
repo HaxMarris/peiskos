@@ -14,6 +14,8 @@
   <meta name="theme-color" content="#c4561c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-title" content="Peiskos" />
+  <link rel="preload" href="fonts/nunito-sans.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="preload" href="fonts/fraunces-600.woff2" as="font" type="font/woff2" crossorigin />
   <link rel="stylesheet" href="style.css" />
   <link rel="stylesheet" href="casino.css" />
   <script src="theme.js"></script>
@@ -544,6 +546,7 @@
   </div>
 
   <!-- The app, in parts that share one scope. Order matters: each may use what the ones before it set up. -->
+  <script src="js/phases.js"></script>
   <script src="js/core.js"></script>
   <script src="js/burrows.js"></script>
   <script src="js/chat.js"></script>

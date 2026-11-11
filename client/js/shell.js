@@ -2,6 +2,12 @@
 // Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
+// Small icons for the person card's actions.
+const AT_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 5 18.7l-1-1.7A8 8 0 1 1 20 12v1.2a1.8 1.8 0 0 1-3.6 0V7.5h-2v.9A5 5 0 1 0 15 15.6a3.8 3.8 0 0 0 7-2.4V12A10 10 0 0 0 12 2Zm0 13a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z"/></svg>';
+const TAG_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h8l10 10-8 8L3 11V3Zm4.5 6a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z"/></svg>';
+const SHIELD_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2 4 5v6c0 5 3.4 9.7 8 11 4.6-1.3 8-6 8-11V5l-8-3Zm0 2.2 6 2.2V11c0 4-2.6 7.7-6 8.9V4.2Z"/></svg>';
+const BLOCK_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20ZM4 12a8 8 0 0 1 12.9-6.3L5.7 16.9A8 8 0 0 1 4 12Zm8 8a8 8 0 0 1-4.9-1.7L18.3 7.1A8 8 0 0 1 12 20Z"/></svg>';
+
 // ---------------------------------------------------------------- helpers
 
 function escapeHtml(s) {
@@ -292,7 +298,7 @@ function openPerson(s, m) {
       ${m.deleted ? '' : `<span class="person-status${sharing?.screen ? ' live' : ''}"><span class="status-dot ${statusOf(m)}"></span>${escapeHtml(status)}</span>`}
       ${presenceLine(m) ? `<span class="person-custom">${presenceLine(m, true)}</span>` : ''}
       ${isHost(s, m.id) ? '<span class="owner-badge">host</span>' : top ? `<span class="owner-badge role" style="--role:${escapeHtml(top.color)}">${escapeHtml(top.name)}</span>` : ''}
-      <span class="small muted" id="profile-extra"></span>
+      <span class="person-facts" id="profile-extra"></span>
       <div class="achievements hidden" id="profile-badges"></div>
     </div>
     ${sharing?.screen || sharing?.camera ? `<button class="btn" id="person-watch">${sharing.screen ? 'Watch stream' : 'See camera'}</button>` : ''}
@@ -323,15 +329,25 @@ function openPerson(s, m) {
   const actions = (friend) => {
     const box = $('#person-actions');
     if (!box) return;
-    const list = [];
-    const add = (label, fn, cls = '') => list.push(Object.assign(document.createElement('button'), { className: `action ${cls}`, textContent: label, onclick: fn }));
+    const main = [], list = [];
+    // The one or two things you'd most likely do are buttons; the rest sit underneath as a short list.
+    const btn = (label, fn, icon, cls = '') => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: `btn ${cls}`, onclick: fn });
+      b.innerHTML = `${icon}<span>${escapeHtml(label)}</span>`;
+      main.push(b);
+    };
+    const add = (label, fn, cls = '', icon = '') => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', className: `action ${cls}`, onclick: fn });
+      b.innerHTML = `${icon}<span>${escapeHtml(label)}</span>`;
+      list.push(b);
+    };
     if (me) {
-      add('Edit your profile', () => openAccount('profile'));
-      if (s && !isDm(s)) add(`Change nickname in ${s.name}`, () => openNickname(s));
-      if (s && !isDm(s) && rolesOf(s, m).length > 1) add('Role to show', () => openShownRole(s));
+      btn('Edit your profile', () => openAccount('profile'), PEN_ICON);
+      if (s && !isDm(s)) add(`Change nickname in ${s.name}`, () => openNickname(s), '', TAG_ICON);
+      if (s && !isDm(s) && rolesOf(s, m).length > 1) add('Role to show', () => openShownRole(s), '', SHIELD_ICON);
     } else if (!m.deleted) {
       const blocked = isBlocked(m.id);
-      if (!blocked && !(s && isDm(s) && !s.group)) add('Send a message', () => openDm(m.id));
+      if (!blocked && !(s && isDm(s) && !s.group)) btn('Message', () => openDm(m.id), CHAT_ICON);
       if (s && !isDm(s) && !blocked) add('Mention', () => {
         closeModal();
         memberPane.classList.remove('open');
@@ -339,17 +355,20 @@ function openPerson(s, m) {
         autosize();
         showView('chat');
         input.focus();
-      });
+      }, '', AT_ICON);
       if (!blocked) {
-        if (friend === 'friends') add('Remove friend', async () => (await askConfirm(`Remove ${nameOfPerson(m)} from your friends?`)) && friendAction(m.id, 'remove', redraw));
-        else if (friend === 'incoming') add('Accept friend request', () => friendAction(m.id, 'accept', redraw));
-        else if (friend === 'outgoing') add('Cancel friend request', () => friendAction(m.id, 'remove', redraw));
-        else add('Add friend', () => friendAction(m.id, 'add', redraw));
+        if (friend === 'friends') add('Remove friend', async () => (await askConfirm(`Remove ${nameOfPerson(m)} from your friends?`)) && friendAction(m.id, 'remove', redraw), '', FRIENDS_ICON);
+        else if (friend === 'incoming') btn('Accept friend request', () => friendAction(m.id, 'accept', redraw), FRIENDS_ICON, 'secondary');
+        else if (friend === 'outgoing') btn('Request sent', () => friendAction(m.id, 'remove', redraw), FRIENDS_ICON, 'secondary');
+        else btn('Add friend', () => friendAction(m.id, 'add', redraw), FRIENDS_ICON, 'secondary');
       }
-      if (s && canActOn(s, m)) add(`Manage ${nameOfPerson(m)}`, () => openMemberMenu(s, m));
-      add(blocked ? 'Unblock' : 'Block', () => toggleBlock(m, redraw), 'danger-item');
+      if (s && canActOn(s, m)) add(`Manage ${nameOfPerson(m)}`, () => openMemberMenu(s, m), '', SHIELD_ICON);
+      add(blocked ? 'Unblock' : 'Block', () => toggleBlock(m, redraw), 'danger-item', BLOCK_ICON);
     }
-    box.replaceChildren(...list);
+    const row = document.createElement('div');
+    row.className = 'person-buttons';
+    row.append(...main);
+    box.replaceChildren(...(main.length ? [row] : []), ...list);
   };
   const redraw = () => actions(profile.friend ?? friendStateOf(m.id));
   actions(friendStateOf(m.id));
@@ -359,13 +378,13 @@ function openPerson(s, m) {
     profile = { ...m, ...p, nickname: m.nickname };
     draw();
     const extra = [];
-    if (p.joinedAt && !p.deleted) extra.push(`On Peiskos since ${formatDay(p.joinedAt)}`);
-    if (p.mutualBurrows?.length) extra.push(`Hearths you share: ${p.mutualBurrows.map((b) => b.name).join(', ')}`);
-    $('#profile-extra').textContent = extra.join(' · ');
+    if (p.joinedAt && !p.deleted) extra.push([CALENDAR_ICON, `On Peiskos since ${formatDay(p.joinedAt)}`]);
+    if (p.mutualBurrows?.length) extra.push([PEOPLE_ICON, `Hearths you share: ${p.mutualBurrows.map((b) => b.name).join(', ')}`]);
+    $('#profile-extra').innerHTML = extra.map(([icon, text]) => `<span class="person-fact">${icon}<span>${escapeHtml(text)}</span></span>`).join('');
     const badges = p.achievements ?? [];
     if (badges.length && $('#profile-badges')) {
       const got = badges.filter((b) => b.earned).length;
-      $('#profile-badges').innerHTML = `${me ? `<span class="small muted achievements-count">${got} of ${badges.length} achievements</span>` : ''}${badges.map((b) =>
+      $('#profile-badges').innerHTML = `<span class="small muted achievements-count">${me ? `${got} of ${badges.length} achievements` : `Achievements · ${got}`}</span>${badges.map((b) =>
         `<span class="achievement${b.earned ? '' : ' locked'}" tabindex="0" role="img" aria-label="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}" title="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}">${emojiHtml(b.icon)}</span>`).join('')}`;
       $('#profile-badges').classList.remove('hidden');
     }

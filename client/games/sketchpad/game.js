@@ -34,7 +34,7 @@ clearBtn.onclick = () => {
   Peiskos.send('all', { type: 'clear' });
   saveSoon();
 };
-toolbar($('tools'), sc, [undo, clearBtn]);
+drawingTools($('tools'), sc, [undo, clearBtn]);
 
 // ---- host
 

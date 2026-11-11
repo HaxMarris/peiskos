@@ -10,6 +10,12 @@
 const SPEAKER_ICON = '<svg viewBox="0 0 24 24" class="voice-icon"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-8.8v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>';
 const MUTED_ICON = '<svg viewBox="0 0 24 24" class="muted-icon" aria-label="Muted"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-.6 2.6l1.5 1.5A8 8 0 0 0 20 11h-2ZM3.3 2 2 3.3l16.7 16.7 1.3-1.3L3.3 2ZM6 11H4a8 8 0 0 0 7 7.9V22h2v-3.1c.8-.1 1.5-.3 2.2-.6l-1.6-1.6A6 6 0 0 1 6 11Z"/></svg>';
 
+// Where you are with voice: see PHASES.voice in phases.js. The voice bar carries it as data-phase.
+const voicePhase = phaseMachine('voice', 'idle', { el: () => $('#voice-bar') });
+/** What voice says while you can't talk yet, or undefined once you're in the room. */
+const voiceWaitText = () => (voicePhase.is('connecting') ? 'Connecting…' : voicePhase.is('rejoining', 'reconnecting') ? 'Reconnecting…' : undefined);
+const voiceSealed = (voice) => voice.crypto?.index >= 0;
+
 let livekitLoading = null;
 function loadLivekit() {
   if (window.LivekitClient) return Promise.resolve(window.LivekitClient);
@@ -31,6 +37,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   leaveVoice(true);
   const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted };
   state.voice = voice;
+  voicePhase.to(rejoin ? 'rejoining' : 'connecting');
   store.set('firstWeekFire', '1');
   state.fireside = { channelId, messages: [], unread: 0 };
   // Made now, while the click still counts, or some browsers start it paused.
@@ -43,7 +50,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     voice.mixCtx = keepAwake(new AudioContext({ latencyHint: 'playback' }));
     voice.talkCtx = voice.mixCtx;
   } else voice.talkCtx = keepAwake(new AudioContext({ latencyHint: 'interactive' }));
-  renderVoiceBar(rejoin ? 'Reconnecting…' : 'Connecting…');
+  renderVoiceBar();
   if (!rejoin) goToVoice(); // sit down at the fire
   try {
     const LK = await loadLivekit();
@@ -130,8 +137,17 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       })
       .on(LK.RoomEvent.TrackMuted, (pub, p) => (pub.kind === 'audio' && pub.source === LK.Track.Source.Microphone ? setMuted(p, true) : renderStage()))
       .on(LK.RoomEvent.TrackUnmuted, (pub, p) => (pub.kind === 'audio' && pub.source === LK.Track.Source.Microphone ? setMuted(p, false) : renderStage()))
-      .on(LK.RoomEvent.Reconnecting, () => renderVoiceBar('Reconnecting…'))
-      .on(LK.RoomEvent.Reconnected, () => renderVoiceBar())
+      // The voice server getting the call back by itself (a short drop). It says so until it's back.
+      .on(LK.RoomEvent.Reconnecting, () => {
+        if (state.voice !== voice || !voice.connected) return;
+        voicePhase.to('reconnecting');
+        renderVoiceBar();
+      })
+      .on(LK.RoomEvent.Reconnected, () => {
+        if (state.voice !== voice || !voicePhase.is('reconnecting')) return;
+        voicePhase.to(voiceSealed(voice) ? 'connected' : 'securing');
+        renderVoiceBar();
+      })
       .on(LK.RoomEvent.Disconnected, (reason) => {
         // Never got in: the failed connect below says why, instead of quietly retrying.
         if (state.voice !== voice || !voice.connected) return;
@@ -160,6 +176,8 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     voice.connected = true;
     voice.connectedAt = Date.now();
     if (state.voice !== voice) return room.disconnect();
+    // In the room. Talking waits for the room's key, which may already be here.
+    voicePhase.to(voiceSealed(voice) ? 'connected' : 'securing');
     await room.setE2EEEnabled(true);
     startKeyExchange(voice);
     await room.startAudio();
@@ -325,6 +343,8 @@ function leaveVoice(quiet) {
   const voice = state.voice;
   if (!voice) return;
   state.voice = null;
+  // A try at getting back in that failed: still getting back in, between tries.
+  voicePhase.to(state.rejoin ? 'rejoining' : 'idle');
   if (quiet !== true) playSound('leave');
   state.speaking.clear();
   state.mutedInVoice.clear();
@@ -414,14 +434,14 @@ function voiceChanged() {
 }
 const voiceFlags = () => ({ muted: !!state.voice?.muted, deafened: !!state.voice?.deafened });
 
-function renderVoiceBar(status) {
+function renderVoiceBar() {
   const voice = state.voice;
-  $('#voice-bar').classList.toggle('hidden', !voice && !state.rejoin);
+  $('#voice-bar').classList.toggle('hidden', voicePhase.is('idle'));
   renderVoicePlaces();
   syncPhoneCall();
   if (!voice) {
     // Between tries at getting back into voice after the connection dropped.
-    if (state.rejoin) {
+    if (voicePhase.is('rejoining')) {
       $('#voice-status').textContent = 'Reconnecting…';
       $('#voice-status').classList.remove('ok', 'talking');
       $('#voice-lock').classList.add('hidden');
@@ -430,7 +450,9 @@ function renderVoiceBar(status) {
     return;
   }
   const ch = [...state.servers.values()].flatMap((s) => s.channels).find((c) => c.id === voice.channelId);
-  const sealed = voice.crypto?.index >= 0;
+  // Kept by voicePhase, so whatever redraws the bar while you're still getting in says so too.
+  const status = voiceWaitText();
+  const sealed = voiceSealed(voice);
   // With push to talk, the status says how to talk, and when you are.
   const ptt = voicePrefs.mode === 'ptt' && !voice.muted && sealed && !status;
   $('#voice-status').textContent = status ?? (!sealed ? 'Securing voice…' : voice.serverMuted ? 'Muted by a moderator'
@@ -466,7 +488,7 @@ function renderVoiceBar(status) {
   // Direct-message calls have no soundboard (sounds belong to a burrow).
   $('#fire-board').parentElement.classList.toggle('hidden', !fireServer() || isDm(fireServer()));
   for (const id of ['#fire-board', '#fire-listen']) $(id).disabled = !voice.room || !!status;
-  renderFire(status);
+  renderFire();
 }
 
 const HEADPHONES_ON = '<svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-9 9v6a3 3 0 0 0 3 3h2v-8H5v-1a7 7 0 0 1 14 0v1h-3v8h2a3 3 0 0 0 3-3v-6a9 9 0 0 0-9-9Z"/></svg>';
