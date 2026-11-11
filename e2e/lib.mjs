@@ -160,8 +160,8 @@ export async function fireWith(t, base, names, { phone = [] } = {}) {
 }
 
 /** Starts a game from the picker, as the fire's stage shows it. The window's clock can be moved on from here. */
-export async function startGame(seat, name) {
-  await seat.page.clock.install();
+export async function startGame(seat, name, { clock = true } = {}) {
+  if (clock) await seat.page.clock.install();
   await seat.page.click('#fire-game');
   await seat.page.click(`#modal-card [data-game="${name}"]`);
   await seat.page.locator('#game-frame iframe').waitFor();
