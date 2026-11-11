@@ -1,0 +1,18 @@
+/* Odd One Out and Same Page: one panel, a countdown on top, big serif for the thing everyone is looking at. */
+.panel { gap: 12px; }
+/* A tall round scrolls the panel; nothing in it is squeezed. */
+.panel > * { flex-shrink: 0; }
+.head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
+.secs { font-weight: 800; font-size: 16px; color: var(--glow); font-variant-numeric: tabular-nums; }
+.secs.low { color: var(--bad); }
+.bar { height: 6px; border-radius: 3px; background: var(--surface-2); overflow: hidden; }
+.bar span { display: block; height: 100%; background: var(--ember); transition: width .25s linear; }
+.opts { display: grid; grid-template-columns: auto 1fr; gap: 8px 12px; align-items: center; }
+.how { margin: 0; line-height: 1.5; max-width: 60ch; }
+.composer { display: flex; gap: 8px; margin: 0; }
+.composer input { flex: 1; min-width: 0; padding: 10px 12px; }
+.note { margin: 0; min-height: 22px; line-height: 1.45; }
+.note b { color: var(--strong); }
+.gain { font-weight: 800; color: var(--glow); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (prefers-reduced-motion: reduce) { .bar span, .toast { transition: none; } }

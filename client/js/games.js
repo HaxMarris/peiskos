@@ -30,6 +30,18 @@ const FIRE_GAMES = {
     maxPlayers: 12,
     blurb: 'Thousands of questions in two dozen categories, plus your hearth\'s own. Faster right answers score more.',
   },
+  oddoneout: {
+    title: 'Odd One Out',
+    icon: '🕵️',
+    maxPlayers: 12,
+    blurb: 'Everyone gets the same secret word except one of you. Give one-word clues, then vote on who has the other word. Three to twelve players.',
+  },
+  samepage: {
+    title: 'Same Page',
+    icon: '📖',
+    maxPlayers: 12,
+    blurb: 'Everyone answers the same prompt in secret. Score a point for every friend who wrote what you wrote. Two to twelve players.',
+  },
   sketchpad: {
     title: 'Sketchpad',
     icon: '🎨',
