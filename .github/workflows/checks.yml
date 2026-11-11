@@ -73,7 +73,9 @@ jobs:
       - name: Playwright and axe-core
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1 axe-core@4.10.2
-          npx playwright install --with-deps chromium
+          # Without --with-deps: GitHub's runners already have Chromium's libraries, and the extra
+          # fonts it fetches with apt aren't used here (and fail the job when Ubuntu's mirror is down).
+          npx playwright install chromium
       - run: node .github/scripts/ui-check.mjs
         env:
           OUT_DIR: screens
@@ -105,7 +107,9 @@ jobs:
         working-directory: e2e
         run: |
           npm install --no-package-lock
-          npx playwright install --with-deps chromium
+          # Without --with-deps: GitHub's runners already have Chromium's libraries, and the extra
+          # fonts it fetches with apt aren't used here (and fail the job when Ubuntu's mirror is down).
+          npx playwright install chromium
       - run: npm test
         working-directory: e2e
       - if: failure()
