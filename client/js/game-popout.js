@@ -69,7 +69,7 @@ function popOutGame(kind) {
   // A frame's page loads again in its new window. Fireside Angler's last save still comes from
   // the page it leaves, so that one is let through too.
   if (kind === 'fishing' && fishing.play) fishing.play.before = fishing.play.frame.contentWindow;
-  if (kind === 'game' && gamePlay) gamePlay.ready = false;
+  if (kind === 'game' && gamePlay) gamePhase.to('loading'); // its page loads again over there
   gamePop = { kind, win, doc, view, home: { parent: view.parentNode, next: view.nextSibling }, look, pin };
   doc.body.append(view);
   for (const [type, fn, options] of docListeners) doc.addEventListener(type, fn, options);
@@ -98,7 +98,7 @@ function putGameBack({ show = true } = {}) {
     if (el) document.body.append(el);
   }
   if (p.kind === 'fishing' && fishing.play) fishing.play.before = fishing.play.frame.contentWindow;
-  if (p.kind === 'game' && gamePlay) gamePlay.ready = false;
+  if (p.kind === 'game' && gamePlay) gamePhase.to('loading');
   p.home.parent.insertBefore(p.view, p.home.next?.parentNode === p.home.parent ? p.home.next : null);
   if (!p.win.closed) p.win.close();
   renderGamePopButtons();
