@@ -426,6 +426,7 @@ function drawChannels() {
       if (c.voiceServerMuted?.includes(id)) row.insertAdjacentHTML('beforeend', SERVER_MUTED_ICON);
       else if (c.voiceDeafened?.includes(id)) row.insertAdjacentHTML('beforeend', DEAFENED_ICON);
       else if (state.mutedInVoice.has(id) || c.voiceMuted?.includes(id)) row.insertAdjacentHTML('beforeend', MUTED_ICON);
+      if (joined && state.voice.weak.has(id)) row.insertAdjacentHTML('beforeend', WEAK_ICON);
       const sharing = joined ? state.sharing.get(id) : null;
       if (sharing?.camera) row.insertAdjacentHTML('beforeend', `<span class="cam-tag" title="Camera on">${CAMERA_ICON}</span>`);
       if (sharing?.screen) {

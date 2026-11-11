@@ -9,6 +9,8 @@
 
 const SPEAKER_ICON = '<svg viewBox="0 0 24 24" class="voice-icon"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-8.8v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>';
 const MUTED_ICON = '<svg viewBox="0 0 24 24" class="muted-icon" aria-label="Muted"><path d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm6-3a6 6 0 0 1-.6 2.6l1.5 1.5A8 8 0 0 0 20 11h-2ZM3.3 2 2 3.3l16.7 16.7 1.3-1.3L3.3 2ZM6 11H4a8 8 0 0 0 7 7.9V22h2v-3.1c.8-.1 1.5-.3 2.2-.6l-1.6-1.6A6 6 0 0 1 6 11Z"/></svg>';
+/** Shown beside someone whose call is getting through badly. */
+const WEAK_ICON = '<svg viewBox="0 0 24 24" class="weak-icon" role="img" aria-label="Weak connection"><title>Weak connection</title><path d="M3 17h3v4H3v-4Z"/><path d="M8.5 13h3v8h-3v-8Zm5.5-4h3v12h-3V9Zm5.5-5h3v17h-3V4Z" opacity=".3"/></svg>';
 
 // Where you are with voice: see PHASES.voice in phases.js. The voice bar carries it as data-phase.
 const voicePhase = phaseMachine('voice', 'idle', { el: () => $('#voice-bar') });
@@ -35,7 +37,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   if (!state.voiceEnabled) return notice("Fires aren't set up on this server yet. Tell whoever runs it.");
   if (!rejoin) cancelRejoin();
   leaveVoice(true);
-  const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted };
+  const voice = { channelId, room: null, muted: muted || deafened, deafened, mutedBeforeDeafen: muted, weak: new Set() };
   state.voice = voice;
   voicePhase.to(rejoin ? 'rejoining' : 'connecting');
   store.set('firstWeekFire', '1');
@@ -54,7 +56,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   if (!rejoin) goToVoice(); // sit down at the fire
   try {
     const LK = await loadLivekit();
-    const { url, token, canSpeak = true } = await api(`/api/channels/${channelId}/voice`, { method: 'POST' });
+    const { url, token, canSpeak = true } = await api(`/api/channels/${channelId}/voice`, { method: 'POST', timeout: 15000 });
     if (state.voice !== voice) return;
     if (!LK.isE2EESupported()) throw new Error("this app can't encrypt voice. Update Peiskos or use a current browser.");
     // Muted for everyone by a moderator: your mic stays off until they let you speak.
@@ -155,7 +157,11 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
         // server restarted) and you're put back at the same fire once you can be.
         const R = LK.DisconnectReason ?? {};
         const final = [R.CLIENT_INITIATED, R.DUPLICATE_IDENTITY, R.PARTICIPANT_REMOVED, R.ROOM_DELETED].includes(reason);
-        if (final) return leaveVoice();
+        if (final) {
+          leaveVoice();
+          if (reason === R.DUPLICATE_IDENTITY) toast('You sat down at this fire on another device, so this one left.');
+          return;
+        }
         playSound('lost');
         const again = { channelId: voice.channelId, muted: voice.deafened ? voice.mutedBeforeDeafen : voice.muted, deafened: voice.deafened };
         leaveVoice(true);
@@ -164,10 +170,27 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       .on(LK.RoomEvent.DataReceived, (payload, participant, kind, topic) => (topic === ROOM_TOPIC ? onRoomData(voice, payload, participant) : onCryptoMessage(voice, payload, participant, topic)))
       .on(LK.RoomEvent.ParticipantDisconnected, (p) => {
         vc.pubs.delete(p.identity);
+        voice.weak.delete(Number(p.identity));
         watchersOf(voice).delete(Number(p.identity));
         thumbsOf(voice).delete(Number(p.identity));
         keysChanged(voice);
         renderStage();
+      })
+      // How well each person's call is getting through, as the voice server measures it.
+      .on(LK.RoomEvent.ConnectionQualityChanged, (quality, p) => {
+        const id = Number(p.identity);
+        const weak = quality === LK.ConnectionQuality.Poor || quality === LK.ConnectionQuality.Lost;
+        if (weak === voice.weak.has(id)) return;
+        if (weak) voice.weak.add(id);
+        else voice.weak.delete(id);
+        if (state.voice !== voice) return;
+        renderVoiceBar();
+        renderChannels();
+      })
+      // The browser stopped the call's sound until you touch the page (it does after a reload,
+      // or a long time in the background).
+      .on(LK.RoomEvent.AudioPlaybackStatusChanged, () => {
+        if (state.voice === voice && !room.canPlaybackAudio) wakeOnTouch();
       })
       .on(LK.RoomEvent.EncryptionError, (err) => console.warn('Voice encryption:', err?.message ?? err));
     voice.reaching = true;
@@ -195,9 +218,13 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     // Left while connecting: LiveKit calls that cancelling an error, but there's nothing to tell.
     if (state.voice !== voice) { voice.room?.disconnect().catch(() => {}); return; }
     leaveVoice(true);
-    // Still offline: keep trying quietly rather than showing an error each time.
-    if (rejoin && state.rejoin) return scheduleRejoin(state.rejoin);
     const denied = err?.name === 'NotAllowedError' || /permission/i.test(err?.message ?? '');
+    // Peiskos said no (the fire is full or gone, or you can't sit there any more), or the
+    // microphone was refused: trying again would get the same answer.
+    const refused = denied || (err?.status >= 400 && err.status < 500 && err.status !== 408 && err.status !== 429);
+    // Still offline: keep trying quietly rather than showing an error each time.
+    if (rejoin && state.rejoin && !refused) return scheduleRejoin(state.rejoin);
+    cancelRejoin();
     if (denied) return notice('Peiskos needs microphone access for voice. Allow it in your system settings and try again.');
     // The voice server itself didn't answer: down, or blocked by this network.
     const unreachable = voice.reaching;
@@ -241,6 +268,18 @@ function wakeVoiceAudio() {
   if (!document.hidden && micTrack()?.mediaStreamTrack?.readyState === 'ended' && !voice.serverMuted) republishMic();
 }
 document.addEventListener('visibilitychange', wakeVoiceAudio);
+/** Sound the browser is holding back starts again with the next tap or key. */
+let wakingOnTouch = false;
+function wakeOnTouch() {
+  if (wakingOnTouch) return;
+  wakingOnTouch = true;
+  const wake = () => {
+    wakingOnTouch = false;
+    for (const type of ['pointerdown', 'keydown']) document.removeEventListener(type, wake, true);
+    wakeVoiceAudio();
+  };
+  for (const type of ['pointerdown', 'keydown']) document.addEventListener(type, wake, true);
+}
 function keepAwake(ctx) {
   ctx.addEventListener('statechange', () => { if (ctx.state === 'interrupted' || ctx.state === 'suspended') wakeVoiceAudio(); });
   return ctx;
@@ -455,9 +494,11 @@ function renderVoiceBar() {
   const sealed = voiceSealed(voice);
   // With push to talk, the status says how to talk, and when you are.
   const ptt = voicePrefs.mode === 'ptt' && !voice.muted && sealed && !status;
+  const weak = sealed && !status && voice.weak.has(state.me.id);
   $('#voice-status').textContent = status ?? (!sealed ? 'Securing voice…' : voice.serverMuted ? 'Muted by a moderator'
-    : ptt ? (pttHeld ? 'Talking' : `Hold ${keyLabel(voicePrefs.keys.ptt)} to talk`) : 'Voice connected');
-  $('#voice-status').classList.toggle('ok', !status && sealed && !voice.serverMuted);
+    : weak ? 'Weak connection' : ptt ? (pttHeld ? 'Talking' : `Hold ${keyLabel(voicePrefs.keys.ptt)} to talk`) : 'Voice connected');
+  $('#voice-status').classList.toggle('ok', !status && sealed && !voice.serverMuted && !weak);
+  $('#voice-status').title = weak ? 'Your connection to the voice server is weak, so you may cut in and out.' : '';
   $('#voice-status').classList.toggle('talking', ptt && pttHeld);
   $('#voice-lock').classList.toggle('hidden', !!status || !sealed);
   $('#voice-room-name').textContent = fireName(ch);

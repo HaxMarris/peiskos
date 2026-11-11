@@ -633,6 +633,7 @@ label.check input { width: auto; }
 .voice-person { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; color: var(--text); }
 .avatar.xs { width: 22px; height: 22px; border-radius: var(--radius-sm); font-size: 11px; transition: box-shadow .12s; }
 .muted-icon { width: 14px; height: 14px; fill: var(--berry); flex: none; }
+.weak-icon { width: 14px; height: 14px; fill: var(--berry); flex: none; }
 .voice-bar { display: flex; flex-direction: column; gap: 4px; background: var(--surface); border-radius: var(--radius); padding: 8px 8px 6px 12px; box-shadow: var(--shadow); flex: none; }
 .voice-top { display: flex; align-items: center; gap: 4px; }
 .voice-controls { display: flex; justify-content: space-between; margin-left: -6px; }
