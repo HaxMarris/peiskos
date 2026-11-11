@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Same Page</title>
+<link rel="stylesheet" href="../shared/game.css">
+<link rel="stylesheet" href="../shared/party.css">
+<style>
+  #ask { font-family: 'Fraunces', Georgia, serif; font-size: 26px; line-height: 1.25; color: var(--strong); text-wrap: balance; }
+  .sent { margin: 0; padding: 10px 14px; border-radius: 14px; border: 1.5px solid var(--ember); background: rgba(240, 138, 75, .18); }
+  .sent b { font-family: 'Fraunces', Georgia, serif; font-size: 20px; color: var(--strong); overflow-wrap: anywhere; }
+  /* Answers as pages: the more friends on one, the wider its ember spine. */
+  .pages { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .page { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: baseline; padding: 9px 14px; border-radius: 4px 14px 14px 4px;
+    background: var(--surface-2); border: 1px solid var(--line); border-left: 3px solid var(--line); }
+  .page .said { font-family: 'Fraunces', Georgia, serif; font-size: 20px; color: var(--strong); overflow-wrap: anywhere; }
+  .page .names { grid-column: 1; font-size: 13px; color: var(--muted); }
+  .page .pts { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-weight: 800; color: var(--glow); white-space: nowrap; }
+  .page.shared { border-left-color: var(--ember); border-left-width: calc(3px + var(--n) * 2px); }
+  .page.mine { border-color: var(--ember); border-left-color: var(--ember); }
+  .page.alone .said { font-size: 16px; color: var(--text); }
+  .page.alone .pts { color: var(--muted); font-weight: 400; font-size: 13px; }
+  @media (max-width: 520px) { #ask { font-size: 22px; } }
+</style>
+</head>
+<body>
+<div class="screen"><div class="panel wide" id="panel"></div></div>
+<div id="say" class="sr-only" role="status"></div>
+<script src="../shared/bridge.js"></script>
+<script src="../shared/party.js"></script>
+<script src="prompts.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
