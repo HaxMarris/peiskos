@@ -23,8 +23,6 @@ function bdCross(x, w, d, delay, leftward = false) {
   return `--from:${(leftward ? to : from).toFixed(0)}%;--to:${(leftward ? from : to).toFixed(0)}%;--d:${d}s;--delay:${delay}s`;
 }
 const bdVars = (d, delay, more = '') => `--d:${d}s;--delay:${delay}s;${more}`;
-/** Where the sun or moon sits in a sky running from x0 to x1, rising at y0 and highest at y1. */
-const bdArc = (body, x0, x1, y0, y1) => [x0 + (x1 - x0) * body.x, y0 - (y0 - y1) * body.alt];
 
 /** A fish facing right, centred on x,y, len long. */
 function bdFish(x, y, len, body, { fin = null, stripe = null, eye = '#08151e', left = false, opacity = 1 } = {}) {
@@ -199,7 +197,7 @@ function bdVolcanoScene(t) {
   const coneDark = dlTone(t, '#120505', '#2a211f', '#1e1010');
   const ground = dlTone(t, '#100404', '#2c2420', '#1e1210');
   const ash = dlTone(t, '#2a1110', '#6e6662', '#4a2a2a');
-  const [sx, sy] = bdArc(t.sun, 140, 1460, 560, 120);
+  const [sx, sy] = bdArc(t.sun, 140, 1460, 470, 120);
   const [mx, my] = bdArc(t.moon, 140, 1460, 560, 110);
   const rnd = bdRandom(401);
   let gullies = '';
@@ -239,7 +237,7 @@ function bdVolcanoScene(t) {
       ${bdGrad('vo', [[0, cone], [1, coneDark]])}${bdGrad('lava', [[0, '#ffe08a'], [0.4, '#ff6a1c'], [1, '#c4200c']])}${bdBlur('b', 16)}${bdBlur('b2', 5)}${bdVignette(0.6)}</defs>
     <rect width="1600" height="900" fill="url(#s)"/>
     <g opacity="${(t.night * 0.9).toFixed(2)}">${bdStars(401, 140, 380, '#ffe8d8')}</g>
-    ${t.sun.up ? `<circle cx="${sx.toFixed(0)}" cy="${sy.toFixed(0)}" r="200" fill="url(#sun)" opacity="${(t.light * 0.8).toFixed(2)}"/><circle cx="${sx.toFixed(0)}" cy="${sy.toFixed(0)}" r="38" fill="#fff3d6" opacity="${(0.4 + t.light * 0.5).toFixed(2)}"/>` : ''}
+    ${t.sun.up || t.warm > 0.6 ? `<circle cx="${sx.toFixed(0)}" cy="${sy.toFixed(0)}" r="200" fill="url(#sun)" opacity="${Math.max(t.light, t.warm) * 0.8}"/><circle cx="${sx.toFixed(0)}" cy="${sy.toFixed(0)}" r="38" fill="${dlMix('#fff3d6', t.sun.x < 0.5 ? '#ffb0a0' : '#ff9a4a', 1 - t.sun.alt * 3)}" opacity="${(0.5 + Math.max(t.light, t.warm) * 0.45).toFixed(2)}"/>` : ''}
     ${t.moon.up && t.night > 0.1 ? `<g opacity="${(t.night * 0.95).toFixed(2)}">${dlMoonSvg(mx, my, 34, t.moon.phase, { color: '#f6e6d4', dark: '#c8a898', south: t.south })}</g>` : ''}
     <ellipse cx="${cx}" cy="${cy}" rx="360" ry="230" fill="url(#g)" opacity="${glow.toFixed(2)}"/>
     <g filter="url(#b)" fill="${ash}"><ellipse cx="${cx - 40}" cy="${cy - 130}" rx="150" ry="90" opacity=".8"/><ellipse cx="${cx - 150}" cy="${cy - 220}" rx="210" ry="100" opacity=".65"/><ellipse cx="${cx - 300}" cy="${cy - 270}" rx="250" ry="90" opacity=".45"/></g>
@@ -411,7 +409,7 @@ function bdLoungeScene(t) {
   const lamps = 0.35 + t.night * 0.65;
   const rnd = bdRandom(601);
   // The sun or moon shows in whichever window its place in the sky falls nearer.
-  const body = (b) => { const [x, y, w] = BD_WINDOWS[b.x < 0.5 ? 0 : 1]; const f = b.x < 0.5 ? b.x * 2 : b.x * 2 - 1; return [x + 50 + f * (w - 100), y + 290 - b.alt * 210]; };
+  const body = (b) => { const [x, y, w] = BD_WINDOWS[b.x < 0.5 ? 0 : 1]; const f = b.x < 0.5 ? b.x * 2 : b.x * 2 - 1; return [x + 50 + f * (w - 100), y + 250 - b.alt * 170]; };
   const pane = ([x, y, w, h], i) => {
     let lights = '';
     let skyline = '';
@@ -425,7 +423,7 @@ function bdLoungeScene(t) {
     return `<clipPath id="win${i}"><path d="M${x} ${y + h}V${y + w / 2}A${w / 2} ${w / 2} 0 0 1 ${x + w} ${y + w / 2}V${y + h}Z"/></clipPath>
       <g clip-path="url(#win${i})"><rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#sky)"/>
         <g opacity="${(t.night * 0.9).toFixed(2)}">${bdStars(611 + i, 30, 260, '#ffffff').replace(/cx="(\d+)"/g, (m, v) => `cx="${x + (v % w)}"`).replace(/cy="(\d+)"/g, (m, v) => `cy="${y + (v % 260)}"`)}</g>
-        ${t.sun.up && (t.sun.x < 0.5) === (i === 0) ? (() => { const [bx2, by] = body(t.sun); return `<circle cx="${bx2}" cy="${by}" r="80" fill="#fff2c8" opacity=".35"/><circle cx="${bx2}" cy="${by}" r="26" fill="#fff6dc"/>`; })() : ''}
+        ${(t.sun.up || t.warm > 0.6) && (t.sun.x < 0.5) === (i === 0) ? (() => { const [bx2, by] = body(t.sun); const c = dlMix('#fff6dc', t.sun.x < 0.5 ? '#ffb8a8' : '#ffa850', 1 - t.sun.alt * 3); return `<circle cx="${bx2}" cy="${by}" r="80" fill="${c}" opacity=".35"/><circle cx="${bx2}" cy="${by}" r="26" fill="${c}"/>`; })() : ''}
         ${t.moon.up && t.night > 0.15 && (t.moon.x < 0.5) === (i === 0) ? (() => { const [bx2, by] = body(t.moon); return dlMoonSvg(bx2, by, 24, t.moon.phase, { color: '#f6f0e0', dark: '#8a8ab0', south: t.south }); })() : ''}
         ${skyline}<g opacity="${(t.night * 0.95).toFixed(2)}">${lights}</g></g>
       <path d="M${x} ${y + h}V${y + w / 2}A${w / 2} ${w / 2} 0 0 1 ${x + w} ${y + w / 2}V${y + h}" stroke="url(#gold)" stroke-width="12" fill="none"/>
@@ -504,7 +502,8 @@ function bdLoungeParts(t) {
   };
   const cloud = dlTone(t, '#3a3a5a', '#ffffff', '#ffb48a', 0.8);
   const clouds = (i) => {
-    const [x, y, w] = BD_WINDOWS[i];
+    // Just inside the frame, so the clouds pass behind it.
+    const [x, y, w] = BD_WINDOWS[i].map((v, k) => (k < 2 ? v + 8 : v - 16));
     const r2 = bdRandom(640 + i);
     let s = '';
     for (let k = 0; k < 4; k++) { const cx = r2() * w; const cy = 40 + r2() * 160; s += `<g fill="${cloud}" opacity="${(0.6 + r2() * 0.3).toFixed(2)}"><ellipse cx="${cx.toFixed(0)}" cy="${cy.toFixed(0)}" rx="46" ry="14"/><ellipse cx="${(cx + 20).toFixed(0)}" cy="${(cy - 10).toFixed(0)}" rx="26" ry="14"/></g>`; }
@@ -528,9 +527,93 @@ function bdLoungeParts(t) {
   ].join('');
 }
 
+/* ---------------------------------------------------------------- The quieter five */
+
+/** Stars that come and go, in three sets taking turns, faded out by day. */
+function bdTwinkles(t, h, seed, color = '#ffffff') {
+  if (t.night < 0.1) return '';
+  return [0, 1].map((k) => {
+    const rnd = bdRandom(seed + k);
+    let s = '';
+    for (let i = 0; i < 22; i++) { const x = rnd() * 1600; const y = Math.pow(rnd(), 1.3) * h; s += `<circle cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" r="${(1.4 + rnd() * 1.2).toFixed(1)}" fill="${color}"/>`; }
+    return bdPart(0, 0, 1600, h, s, { anim: 'bd-twinkle', vars: bdVars(4 + k * 1.5, -k * 2, '--lo:0'), op: t.night, more: k > 0 });
+  }).join('');
+}
+/** A few birds flapping across by day: wings drawn twice, taking turns. */
+function bdBirds(t, y, d, delay, color, leftward = false) {
+  const up = (x, yy, s) => `M${x - 10 * s} ${yy - 4 * s}q${5 * s} -4 ${10 * s} 4q${5 * s} -8 ${10 * s} -4`;
+  const down = (x, yy, s) => `M${x - 10 * s} ${yy + 3 * s}q${5 * s} 2 ${10 * s} -3q${5 * s} 5 ${10 * s} 3`;
+  const flock = [[20, 20, 1], [44, 30, 0.8], [36, 10, 0.7], [64, 22, 0.9], [80, 36, 0.6]];
+  const wings = (f) => `<path d="${flock.map(([x, yy, s]) => f(x, yy, s)).join('')}" stroke="${color}" stroke-width="2.4" fill="none" stroke-linecap="round"/>`;
+  return bdPart(200, y, 100, 50, '', { anim: 'bd-swim', vars: bdCross(200, 100, d, delay, leftward), op: t.light, inner: `<svg viewBox="0 0 100 50"${leftward ? ' style="scale:-1 1"' : ''}><g class="bd-blink2" style="--d:.7s">${wings(up)}</g><g class="bd-blink2 bd-alt" style="--d:.7s;--delay:-.35s">${wings(down)}</g></svg>` });
+}
+/** Bits falling across the scene (snow, petals): each part a few of them, falling the height of the scene and drifting. */
+function bdFalling(seed, n, draw, d0, d1, more = 0) {
+  const rnd = bdRandom(seed);
+  let out = '';
+  for (let i = 0; i < n; i++) {
+    const x = rnd() * 1600; const d = d0 + rnd() * (d1 - d0);
+    out += bdPart(x, -80, 60, 80, draw(rnd), { anim: 'bd-rise', vars: bdVars(d.toFixed(1), (-rnd() * d).toFixed(1), `--rise:${(980 / 80 * 100).toFixed(0)}%;--dx:${(rnd() * 400 - 120).toFixed(0)}%`), more: i >= n - more });
+  }
+  return out;
+}
+
+function bdFjordParts(t) {
+  const shine = bdShine(t, 140, 1460);
+  return [
+    bdTwinkles(t, 480, 701),
+    shine ? bdPart(shine[0] - 80, 600, 160, 280, Array.from({ length: 10 }, (_, i) => `<rect x="${20 + ((i * 41) % 80)}" y="${20 + i * 26}" width="${30 + ((i * 29) % 40)}" height="2.5" rx="1" fill="${shine[1]}"/>`).join(''), { anim: 'bd-pulse', vars: bdVars(2.2, 0, '--lo:.2'), op: shine[2] + 0.3 }) : '',
+    bdBirds(t, 300, 60, -20, '#24324a'),
+  ].join('');
+}
+function bdPinesParts(t) {
+  const flake = (rnd) => `<circle cx="${(10 + rnd() * 40).toFixed(0)}" cy="${(10 + rnd() * 30).toFixed(0)}" r="${(2 + rnd() * 2.5).toFixed(1)}" fill="#ffffff" opacity=".9"/><circle cx="${(10 + rnd() * 40).toFixed(0)}" cy="${(40 + rnd() * 30).toFixed(0)}" r="${(1.2 + rnd() * 1.5).toFixed(1)}" fill="#ffffff" opacity=".7"/>`;
+  return [
+    bdTwinkles(t, 400, 711, '#e8fbff'),
+    t.night > 0.6 ? bdPart(-50, 80, 1700, 260, `<defs><linearGradient id="bdp-au" x1="0" x2="1"><stop offset="0" stop-color="#3fd6a0" stop-opacity="0"/><stop offset=".5" stop-color="#6be8b0" stop-opacity=".45"/><stop offset="1" stop-color="#7a6ff0" stop-opacity="0"/></linearGradient><filter id="bdp-aub" x="-10%" y="-60%" width="120%" height="220%"><feGaussianBlur stdDeviation="16"/></filter></defs><path d="M0 150C350 60 650 200 950 110S1450 60 1700 140" stroke="url(#bdp-au)" stroke-width="70" fill="none" filter="url(#bdp-aub)"/>`, { anim: 'bd-bob', vars: bdVars(14, -3, '--dx:3%;--dy:12%'), op: (t.night - 0.6) * 2.5 }) : '',
+    bdFalling(721, 26, flake, 14, 22, 12),
+  ].join('');
+}
+function bdCabinParts(t) {
+  const puff = (delay) => bdPart(1300, 470, 70, 80, `<g fill="${dlTone(t, '#8a8098', '#e8eaee', '#d0b0b0')}"><circle cx="30" cy="50" r="18"/><circle cx="42" cy="36" r="14"/></g>`, { anim: 'bd-billow', vars: bdVars(10, delay, '--dx:-120%;--dy:-220%;--s:2.6;--hi:.5'), go: true });
+  const fireflies = (seed, delay) => {
+    const rnd = bdRandom(seed);
+    let s = '';
+    for (let i = 0; i < 10; i++) s += `<circle cx="${(rnd() * 600).toFixed(0)}" cy="${(rnd() * 160).toFixed(0)}" r="2.6" fill="#ffe88a"/><circle cx="${(rnd() * 600).toFixed(0)}" cy="${(rnd() * 160).toFixed(0)}" r="6" fill="#ffe88a" opacity=".25"/>`;
+    return bdPart(seed % 2 ? 100 : 900, 680, 600, 160, s, { anim: 'bd-twinkle', vars: bdVars(3.2, delay, '--lo:0'), op: t.night * 0.9, more: seed % 2 === 0 });
+  };
+  return [
+    bdTwinkles(t, 430, 731, '#fff4dc'),
+    puff(0), puff(-3.3), puff(-6.6),
+    bdPart(1100, 620, 320, 160, bdHalo(160, 80, 160, '#ffc46b', 0.5), { anim: 'bd-pulse', vars: bdVars(3, -1, '--lo:.6'), op: t.night * 0.8 }),
+    fireflies(741, 0), fireflies(742, -1.6),
+    bdBirds(t, 220, 55, -30, '#2a3448', true),
+  ].join('');
+}
+function bdDunesParts(t) {
+  const wisp = (y, d, delay, more = false) => bdPart(200, y, 260, 40, `<path d="M0 26C60 14 120 30 180 18S240 12 260 16" stroke="${dlTone(t, '#6a5a70', '#fff0d0', '#ffd0a0')}" stroke-width="3" fill="none" stroke-linecap="round" opacity=".55"/><path d="M40 34C90 26 150 36 210 28" stroke="${dlTone(t, '#6a5a70', '#fff0d0', '#ffd0a0')}" stroke-width="2" fill="none" opacity=".4"/>`, { anim: 'bd-swim', vars: bdCross(200, 260, d, delay), more });
+  const hawk = `<path d="M0 10Q14 0 30 8Q46 0 60 10Q46 6 30 14Q14 6 0 10Z" fill="${dlTone(t, '#1a1020', '#3a2a24', '#2a1418')}"/>`;
+  return [
+    bdTwinkles(t, 500, 751, '#fff0e0'),
+    wisp(640, 16, -2), wisp(730, 12, -7), wisp(800, 14, -11, true),
+    bdPart(1080, 220, 60, 20, hawk, { anim: 'bd-hover', vars: bdVars(24, -5), op: Math.max(t.light, t.warm) }),
+  ].join('');
+}
+function bdBlossomParts(t) {
+  const petal = (rnd) => {
+    const c = dlMix(['#ffc8d8', '#f7a6c0', '#ffe2ea'][Math.floor(rnd() * 3)], '#3a2a50', t.night * 0.5);
+    return `<ellipse cx="${(15 + rnd() * 30).toFixed(0)}" cy="${(15 + rnd() * 20).toFixed(0)}" rx="6" ry="3.5" fill="${c}" transform="rotate(${(rnd() * 180).toFixed(0)} 30 25)"/><ellipse cx="${(15 + rnd() * 30).toFixed(0)}" cy="${(45 + rnd() * 20).toFixed(0)}" rx="4.5" ry="2.8" fill="${c}" opacity=".85"/>`;
+  };
+  return [
+    bdTwinkles(t, 400, 761, '#fff0f6'),
+    bdFalling(771, 22, petal, 12, 20, 10),
+    bdBirds(t, 260, 50, -14, '#4a3a58'),
+  ].join('');
+}
+
 Object.assign(BACKDROP_SCENES, { ocean: bdOceanScene, volcano: bdVolcanoScene, space: bdSpaceScene, lounge: bdLoungeScene });
 /** The moving parts over a live backdrop, made for a time of day. */
-const BACKDROP_LIVE = { ocean: bdOceanParts, volcano: bdVolcanoParts, space: bdSpaceParts, lounge: bdLoungeParts };
+const BACKDROP_LIVE = { ocean: bdOceanParts, volcano: bdVolcanoParts, space: bdSpaceParts, lounge: bdLoungeParts, fjord: bdFjordParts, pines: bdPinesParts, cabin: bdCabinParts, dunes: bdDunesParts, blossom: bdBlossomParts };
 
 /**
  * Puts a live backdrop in the fire's sky layer, or takes it away (no layer). It looks at the clock every two

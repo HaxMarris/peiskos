@@ -68,8 +68,8 @@ function dlMix(a, b, t) {
   const ch = (s) => Math.round(((pa >> s) & 255) + (((pb >> s) & 255) - ((pa >> s) & 255)) * t);
   return `#${((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1)}`;
 }
-/** A color for this time of day: the night one, the day one, and the dusk one blended in at sunrise and sunset. */
-const dlTone = (sky, night, day, dusk = null, duskAmount = 0.65) => (dusk ? dlMix(dlMix(night, day, sky.light), dusk, sky.warm * duskAmount) : dlMix(night, day, sky.light));
+/** A color for this time of day: the night one, the day one, and the dusk one blended in at sunrise and sunset (pinker at dawn, so the two can be told apart). */
+const dlTone = (sky, night, day, dusk = null, duskAmount = 0.65) => (dusk ? dlMix(dlMix(night, day, sky.light), sky.sun.x < 0.5 ? dlMix(dusk, '#ff9ec0', 0.35) : dusk, sky.warm * duskAmount) : dlMix(night, day, sky.light));
 
 /** The sunlit part of a round body (a moon, a planet) in a phase, as an SVG path; '' when none of it is lit. */
 function dlLitPath(cx, cy, r, phase) {
