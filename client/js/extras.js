@@ -236,14 +236,21 @@ function decorateFire(s) {
 function backdropLayer(id) {
   const wrap = $('.fire-ring-wrap');
   if (!id) {
-    if (wrap.dataset.backdrop) { delete wrap.dataset.backdrop; wrap.style.background = ''; delete wrap.dataset.sky; }
+    if (wrap.dataset.backdrop) { delete wrap.dataset.backdrop; wrap.style.background = ''; delete wrap.dataset.sky; backdropLive(null); $('#sky-layer').replaceChildren(); }
     return;
   }
   if (wrap.dataset.backdrop === id) return;
   wrap.dataset.backdrop = id;
   wrap.dataset.sky = 'backdrop';
-  $('#sky-layer').replaceChildren();
-  wrap.style.background = backdropCss(id);
+  // The live ones move and follow the time of day, in the sky layer; the rest are one still picture.
+  if (BACKDROP_LIVE[id]) {
+    wrap.style.background = '';
+    backdropLive($('#sky-layer'), id);
+  } else {
+    backdropLive(null);
+    $('#sky-layer').replaceChildren();
+    wrap.style.background = backdropCss(id);
+  }
 }
 
 // The sky above the fire: stars scattered over it, with a moon, northern lights or shooting stars.

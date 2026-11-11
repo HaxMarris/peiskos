@@ -222,90 +222,24 @@ const BACKDROP_SCENES = {
     ${bdBits(91, 70, 0, 0, 1600, 900, 2, 5, '#ffd4e2', 0.5, 0.95)}
     <rect y="820" width="1600" height="80" fill="#24101e"/>
     ${bdVignetteRect}`,
-
-  volcano: () => `
-    <defs>${bdGrad('s', [[0, '#120404'], [0.5, '#3a0c0a'], [1, '#7a2410']])}${bdGlow('g', '#ff6a1c', 0.65)}${bdGrad('vo', [[0, '#3a1612'], [1, '#160807']])}
-      ${bdGrad('lava', [[0, '#ffd36b'], [0.4, '#ff6a1c'], [1, '#c4200c']])}${bdBlur('b', 14)}${bdBlur('b2', 4)}${bdVignette(0.6)}</defs>
-    <rect width="1600" height="900" fill="url(#s)"/>
-    <g filter="url(#b)" fill="#2a1414"><ellipse cx="1150" cy="190" rx="160" ry="90" opacity=".8"/><ellipse cx="1260" cy="110" rx="200" ry="100" opacity=".6"/><ellipse cx="1050" cy="80" rx="220" ry="90" opacity=".5"/></g>
-    <ellipse cx="1150" cy="330" rx="300" ry="190" fill="url(#g)"/>
-    ${bdRidge(101, 640, 90, 7, '#2a0e0c')}
-    <path d="M700 820 1060 330Q1150 300 1240 330L1600 820Z" fill="url(#vo)"/>
-    <path d="M1060 330Q1150 300 1240 330L1210 360 1180 350 1160 380 1135 352 1110 368 1085 350Z" fill="url(#lava)"/>
-    <g filter="url(#b2)"><path d="M1160 370C1150 450 1185 520 1150 600S1160 720 1130 820" stroke="#ff6a1c" stroke-width="16" fill="none"/><path d="M1190 360C1220 430 1240 500 1290 560S1340 680 1380 760" stroke="#ff6a1c" stroke-width="10" fill="none"/></g>
-    <path d="M1160 370C1150 450 1185 520 1150 600S1160 720 1130 820M1190 360C1220 430 1240 500 1290 560S1340 680 1380 760" stroke="#ffcf6a" stroke-width="4" fill="none"/>
-    ${bdBits(103, 70, 900, 80, 520, 520, 1.2, 3.6, '#ffb04f', 0.4, 1)}
-    ${bdRidge(107, 820, 70, 6, '#0e0404')}
-    ${bdVignetteRect}`,
-
-  ocean: () => `
-    <defs>${bdGrad('s', [[0, '#1aa0b0'], [0.35, '#0a5c74'], [1, '#021628']])}${bdGrad('ray', [[0, '#d8fbff', 0.38], [1, '#d8fbff', 0]])}${bdGrad('sand', [[0, '#d8bc84'], [1, '#8a6a42']])}
-      ${bdBlur('b', 10)}${bdVignette(0.6)}</defs>
-    <rect width="1600" height="900" fill="url(#s)"/>
-    <g filter="url(#b)"><path d="M260 -20h140L180 760H80ZM640 -20h90L560 620h-70ZM1060 -20h160l-90 800h-110ZM1380 -20h70l-40 560h-60Z" fill="url(#ray)"/></g>
-    ${(() => {
-      const rnd = bdRandom(111);
-      let fish = '';
-      for (let i = 0; i < 9; i++) {
-        const x = rnd() < 0.5 ? 120 + rnd() * 380 : 1100 + rnd() * 380;
-        const y = 140 + rnd() * 320;
-        const s = 0.6 + rnd() * 0.8;
-        fish += `<path d="M${x.toFixed(0)} ${y.toFixed(0)}q${(18 * s).toFixed(1)} ${(-12 * s).toFixed(1)} ${(36 * s).toFixed(1)} 0q${(-18 * s).toFixed(1)} ${(12 * s).toFixed(1)} ${(-36 * s).toFixed(1)} 0Zm${(36 * s).toFixed(1)} 0l${(12 * s).toFixed(1)} ${(-8 * s).toFixed(1)}v${(16 * s).toFixed(1)}Z" fill="#0a3a50" opacity=".7"/>`;
-      }
-      const bubbles = Array.from({ length: 50 }, () => `<circle cx="${(rnd() * 1600).toFixed(0)}" cy="${(rnd() * 820).toFixed(0)}" r="${(2 + rnd() * 6).toFixed(1)}" fill="none" stroke="#c8f6ff" stroke-width="1.5" opacity="${(0.25 + rnd() * 0.5).toFixed(2)}"/>`).join('');
-      return fish + bubbles;
-    })()}
-    <path d="M-10 900V770C300 730 600 790 900 760S1400 740 1610 770V900Z" fill="url(#sand)"/>
-    ${Array.from({ length: 7 }, (_, i) => `<path d="M${120 + i * 210} ${820 + (i % 3) * 18}q40 -10 80 0" stroke="#b89a64" stroke-width="3" fill="none"/>`).join('')}
-    ${(() => {
-      const kelp = (x, h, c) => `<path d="M${x} 900C${x - 30} ${900 - h * 0.3} ${x + 30} ${900 - h * 0.6} ${x} ${900 - h}" stroke="${c}" stroke-width="16" fill="none" stroke-linecap="round"/>${Array.from({ length: 6 }, (_, i) => `<ellipse cx="${x + (i % 2 ? 16 : -16)}" cy="${(900 - (h * (i + 1)) / 7).toFixed(0)}" rx="16" ry="7" fill="${c}" transform="rotate(${i % 2 ? -30 : 30} ${x} ${(900 - (h * (i + 1)) / 7).toFixed(0)})"/>`).join('')}`;
-      return kelp(90, 520, '#1f8a6a') + kelp(170, 380, '#2a9a74') + kelp(1440, 560, '#1f8a6a') + kelp(1530, 400, '#2a9a74');
-    })()}
-    <g><circle cx="300" cy="830" r="34" fill="#e8607a"/><circle cx="330" cy="818" r="24" fill="#f07a8e"/><circle cx="1270" cy="836" r="30" fill="#f0a040"/><path d="M1320 860c0-40 20-60 30-90m-10 30c20-10 30-30 32-50" stroke="#c84a6a" stroke-width="10" fill="none" stroke-linecap="round"/></g>
-    ${bdVignetteRect}`,
-
-  space: () => `
-    <defs><radialGradient id="p" cx=".32" cy=".3"><stop offset="0" stop-color="#9ad8ff"/><stop offset=".55" stop-color="#3a6ad0"/><stop offset="1" stop-color="#0a1442"/></radialGradient>
-      ${bdGrad('ring', [[0, '#e8dcff', 0.1], [0.5, '#e8dcff', 0.8], [1, '#e8dcff', 0.1]], 1, 0)}${bdBlur('b', 40)}
-      ${bdGrad('gr', [[0, '#6a6672'], [1, '#2e2b34']])}<radialGradient id="cr" cx=".5" cy=".35"><stop offset="0" stop-color="#26232c"/><stop offset="1" stop-color="#4a4652"/></radialGradient>${bdVignette(0.5)}</defs>
-    <rect width="1600" height="900" fill="#03030c"/>
-    <g filter="url(#b)"><ellipse cx="380" cy="260" rx="420" ry="170" fill="#7a3ad8" opacity=".45"/><ellipse cx="560" cy="330" rx="260" ry="110" fill="#d84a9a" opacity=".3"/><ellipse cx="1300" cy="520" rx="320" ry="140" fill="#3a6ad8" opacity=".3"/></g>
-    ${bdStars(37, 420, 820, '#ffffff')}
-    <circle cx="320" cy="140" r="22" fill="#e8e0d0"/><circle cx="312" cy="133" r="21" fill="#03030c" opacity=".4"/>
-    <path d="M1025 230A215 40 0 0 1 1455 230" transform="rotate(-14 1240 230)" fill="none" stroke="url(#ring)" stroke-width="12"/>
-    <circle cx="1240" cy="230" r="118" fill="url(#p)"/>
-    <path d="M1128 214Q1240 190 1352 230M1124 250Q1240 226 1356 266" stroke="#cfe8ff" stroke-width="5" fill="none" opacity=".2"/>
-    <path d="M1025 230A215 40 0 0 0 1455 230" transform="rotate(-14 1240 230)" fill="none" stroke="url(#ring)" stroke-width="12"/>
-    <path d="M-10 900V790Q800 690 1610 790V900Z" fill="url(#gr)"/>
-    ${[[380, 830, 40], [1130, 810, 26], [700, 860, 18], [1450, 850, 32], [180, 870, 20]].map(([x, y, r]) => `<ellipse cx="${x}" cy="${y}" rx="${r}" ry="${(r * 0.35).toFixed(1)}" fill="url(#cr)"/>`).join('')}
-    ${bdVignetteRect}`,
-
-  lounge: () => `
-    <defs>${bdGrad('wall', [[0, '#3a0812'], [1, '#5a0e1f']])}<pattern id="fan" width="120" height="70" patternUnits="userSpaceOnUse"><path d="M0 70a60 60 0 0 1 120 0M15 70a45 45 0 0 1 90 0M30 70a30 30 0 0 1 60 0M60 70V10M60 70 25 22M60 70 95 22" fill="none" stroke="#d9b45a" stroke-width="2" opacity=".28"/></pattern>
-      ${bdGrad('gold', [[0, '#f6dc8a'], [0.5, '#c8962a'], [1, '#8a6214']], 1, 0)}${bdGrad('cur', [[0, '#7a0e22'], [0.5, '#a81a32'], [1, '#5a0818']], 1, 0)}${bdGlow('lamp', '#ffd890', 0.45)}
-      ${bdGrad('floor', [[0, '#1e0408'], [1, '#0e0204']])}<pattern id="carpet" width="80" height="80" patternUnits="userSpaceOnUse"><path d="M40 0 80 40 40 80 0 40Z" fill="none" stroke="#d9b45a" stroke-width="1.5" opacity=".18"/></pattern>${bdVignette(0.55)}</defs>
-    <rect width="1600" height="620" fill="url(#wall)"/>
-    <rect width="1600" height="620" fill="url(#fan)"/>
-    ${[260, 560, 1040, 1340].map((x) => `<rect x="${x - 22}" y="0" width="44" height="620" fill="url(#gold)" opacity=".85"/><rect x="${x - 30}" y="590" width="60" height="30" fill="url(#gold)"/>`).join('')}
-    ${[410, 1190].map((x) => `<circle cx="${x}" cy="170" r="150" fill="url(#lamp)"/><path d="M${x} 0v90" stroke="#d9b45a" stroke-width="3"/><path d="M${x - 46} 90h92l-16 44h-60Z" fill="url(#gold)"/><path d="M${x - 30} 134h60l-6 10h-48Z" fill="#fff0c4"/>`).join('')}
-    <rect y="610" width="1600" height="16" fill="url(#gold)"/>
-    <rect y="626" width="1600" height="274" fill="url(#floor)"/><rect y="626" width="1600" height="274" fill="url(#carpet)"/>
-    <path d="M0 0h170C150 160 190 360 130 620H0Z" fill="url(#cur)"/><path d="M1600 0h-170c20 160-20 360 40 620h130Z" fill="url(#cur)"/>
-    <path d="M40 0c-10 200 20 400-10 620M90 0c10 200-20 400 20 620M1560 0c10 200-20 400 10 620M1510 0c-10 200 20 400-20 620" stroke="#4a0410" stroke-width="5" fill="none" opacity=".6"/>
-    <path d="M0 300c60 40 120 40 160 10M1600 300c-60 40-120 40-160 10" stroke="url(#gold)" stroke-width="10" fill="none" stroke-linecap="round"/>
-    ${bdVignetteRect}`,
 };
 
-/** A backdrop as an SVG image, cropped to fill. Each one's ids get its name, so two never clash. */
-function backdropSvg(id) {
+/** A backdrop as an SVG image, cropped to fill, lit for a time of day (see daylight.js). Each one's ids get its name, so two never clash. */
+function backdropSvg(id, sky = daylight()) {
   const scene = BACKDROP_SCENES[id];
   if (!scene) return '';
-  const body = scene().replace(/id="(\w+)"/g, `id="${id}-$1"`).replace(/url\(#(\w+)\)/g, `url(#${id}-$1)`);
+  const body = scene(sky).replace(/id="(\w+)"/g, `id="${id}-$1"`).replace(/url\(#(\w+)\)/g, `url(#${id}-$1)`);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" preserveAspectRatio="xMidYMid slice">${body}</svg>`;
 }
-/** As a CSS background, made once each: the scenes never change. */
+/** The sky rounded off, so a picture is only remade once the light has visibly moved on. */
+const bdSkyKey = (sky) => [sky.light, sky.warm, sky.sun.x, sky.sun.alt, sky.moon.x, sky.moon.alt, sky.moon.phase].map((v) => Math.round(v * 40)).join(',') + (sky.sun.up ? 's' : '') + (sky.moon.up ? 'm' : '');
+/** As a CSS background, made once each (once for each look of the sky, for the ones lit by the time of day). */
 const backdropCssMade = new Map();
-function backdropCss(id) {
-  if (!backdropCssMade.has(id)) backdropCssMade.set(id, `url("data:image/svg+xml,${encodeURIComponent(backdropSvg(id))}") center / cover no-repeat`);
-  return backdropCssMade.get(id);
+function backdropCss(id, sky = daylight()) {
+  const key = BACKDROP_LIVE[id] ? `${id}|${bdSkyKey(sky)}` : id;
+  if (!backdropCssMade.has(key)) {
+    if (backdropCssMade.size > 60) backdropCssMade.clear();
+    backdropCssMade.set(key, `url("data:image/svg+xml,${encodeURIComponent(backdropSvg(id, sky))}") center / cover no-repeat`);
+  }
+  return backdropCssMade.get(key);
 }

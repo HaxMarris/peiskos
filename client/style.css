@@ -1835,6 +1835,51 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 [data-motion="reduce"] .sky-layer * { animation: none !important; }
 [data-motion="reduce"] .sky-layer .meteor { display: none; }
 @media (prefers-reduced-motion: reduce) { [data-motion="system"] .sky-layer * { animation: none !important; } [data-motion="system"] .sky-layer .meteor { display: none; } }
+/* Live backdrops (backdrops-live.js): a 16:9 stage cropped to fill the sky layer like the still ones, with
+   moving parts that only animate transform and opacity. Small screens get fewer of them. */
+.sky-layer { container-type: size; }
+.bd-stage { position: absolute; left: 50%; top: 50%; width: max(100cqw, 177.78cqh); aspect-ratio: 16 / 9; translate: -50% -50%; overflow: hidden; }
+.bd-part { position: absolute; }
+.bd-part > div, .bd-part svg { display: block; width: 100%; height: 100%; overflow: visible; }
+@container (max-width: 560px) { .bd-stage .bd-more { display: none; } }
+.bd-swim { animation: bd-swim var(--d) linear var(--delay) infinite; }
+@keyframes bd-swim { from { translate: var(--from) 0; } to { translate: var(--to) 0; } }
+.bd-sway { transform-origin: 50% 100%; animation: bd-sway var(--d) ease-in-out var(--delay) infinite alternate; }
+@keyframes bd-sway { from { rotate: calc(-1 * var(--a, 3deg)); } to { rotate: var(--a, 3deg); } }
+.bd-bob { animation: bd-bob var(--d) ease-in-out var(--delay) infinite alternate; }
+@keyframes bd-bob { to { translate: var(--dx, 0) var(--dy, -20%); } }
+.bd-squish { animation: bd-bob var(--d) ease-in-out var(--delay) infinite alternate, bd-squish 2.6s ease-in-out infinite; transform-origin: 50% 20%; }
+@keyframes bd-squish { 50% { scale: 1.06 .92; } }
+.bd-pulse { animation: bd-pulse var(--d) ease-in-out var(--delay) infinite alternate; }
+@keyframes bd-pulse { from { opacity: var(--lo, .4); } to { opacity: 1; } }
+.bd-twinkle { animation: bd-twinkle var(--d) ease-in-out var(--delay) infinite; }
+@keyframes bd-twinkle { 50% { opacity: var(--lo, .15); } }
+.bd-rise { animation: bd-rise var(--d) linear var(--delay) infinite; }
+@keyframes bd-rise { 0% { translate: 0 0; opacity: 0; } 10%, 80% { opacity: 1; } 100% { translate: var(--dx, 0) var(--rise); opacity: 0; } }
+.bd-spin { animation: bd-spin var(--d) linear var(--delay) infinite; }
+.bd-rev { animation-direction: reverse; }
+@keyframes bd-spin { to { rotate: 360deg; } }
+.bd-drift { animation: bd-drift var(--d) linear var(--delay) infinite; }
+@keyframes bd-drift { to { translate: -100% 0; } }
+.bd-billow { animation: bd-billow var(--d) linear var(--delay) infinite; }
+@keyframes bd-billow { 0% { translate: 0 0; scale: .6; opacity: 0; } 12% { opacity: var(--hi, .8); } 100% { translate: var(--dx) var(--dy); scale: var(--s, 2.4); opacity: 0; } }
+.bd-flash { opacity: 0; animation: bd-flash var(--d) linear var(--delay) infinite; }
+@keyframes bd-flash { 0%, 90%, 96%, 100% { opacity: 0; } 90.6% { opacity: 1; } 91.4% { opacity: .15; } 92.4% { opacity: .9; } }
+.bd-blink, .bd-part .bd-blink { animation: bd-blink var(--d, 2.4s) steps(1) var(--delay, 0s) infinite; }
+@keyframes bd-blink { 0% { opacity: 1; } 12% { opacity: .1; } }
+.bd-blink2 { animation: bd-blink2 var(--d) steps(1) var(--delay) infinite; }
+@keyframes bd-blink2 { 0% { opacity: 1; } 50% { opacity: .12; } }
+.bd-flicker { animation: bd-flicker var(--d) linear var(--delay) infinite; }
+@keyframes bd-flicker { 0%, 40%, 43%, 46%, 79%, 81%, 100% { opacity: 1; } 41.5% { opacity: .25; } 44.5% { opacity: .5; } 80% { opacity: .4; } }
+.bd-meteor { opacity: 0; animation: bd-meteor var(--d) linear var(--delay) infinite; }
+@keyframes bd-meteor { 0% { translate: 0 0; opacity: 0; } 1% { opacity: 1; } 6% { translate: -300% 180%; opacity: 0; } 100% { translate: -300% 180%; opacity: 0; } }
+.bd-bomb-x { animation: bd-bomb-x var(--d) linear var(--delay) infinite; }
+@keyframes bd-bomb-x { 0% { translate: 0 0; opacity: 1; } 28% { translate: var(--dx) 0; opacity: 1; } 29%, 100% { translate: var(--dx) 0; opacity: 0; } }
+.bd-bomb-y { width: 100%; height: 100%; animation: bd-bomb-y var(--d) linear var(--delay) infinite; }
+@keyframes bd-bomb-y { 0% { translate: 0 0; animation-timing-function: ease-out; } 12% { translate: 0 var(--up); animation-timing-function: ease-in; } 28%, 100% { translate: 0 var(--down); } }
+[data-motion="reduce"] .bd-stage * { animation: none !important; }
+[data-motion="reduce"] .bd-stage .bd-go { display: none; }
+@media (prefers-reduced-motion: reduce) { [data-motion="system"] .bd-stage * { animation: none !important; } [data-motion="system"] .bd-stage .bd-go { display: none; } }
 .fire-sparks span { position: absolute; left: calc(50% + var(--fire) * var(--x)); top: var(--cy, 50%); width: 4px; height: 4px; border-radius: 50%; background: #ffcf6b; box-shadow: 0 0 6px 2px rgba(255, 170, 60, .7); animation: spark-rise var(--d) ease-out var(--delay) infinite; }
 @keyframes spark-rise { from { translate: 0 0; opacity: 1; } to { translate: var(--drift) -150px; opacity: 0; scale: .3; } }
 
