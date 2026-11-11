@@ -178,7 +178,7 @@ function bdOceanParts(t) {
     lone(380, 680, 48, '#f07a2a', '#fff4e8', 6, -1, false), lone(1130, 690, 44, '#3a8af0', null, 7, -3, true), lone(250, 560, 36, '#f6d23a', null, 5, -2, false, true), lone(1330, 600, 40, '#e8506a', '#ffe0e6', 6.5, -4, true, true),
     kelp(60, 560, kc('#1f8a6a'), 6, -1), kelp(150, 420, kc('#2a9a74'), 7.5, -3), kelp(225, 300, kc('#3aa47a'), 5.5, -2, true),
     kelp(1395, 380, kc('#2a9a74'), 7, -4, true), kelp(1475, 600, kc('#1f8a6a'), 6.5, -2), kelp(1555, 440, kc('#2a9a74'), 8, -5),
-    bdLive.catch?.look ? bdCatchPart(t, bdLive.catch) : '',
+    ...(bdLive.catch ?? []).filter((f) => f?.look).map((f, i) => bdCatchPart(t, f, i)),
     bubbles(330, 790, 11, -2), bubbles(470, 820, 14, -9), bubbles(1110, 830, 12, -5), bubbles(1255, 800, 10, -1), bubbles(720, 850, 15, -11, true), bubbles(940, 840, 13, -6, true),
   ].join('');
 }
@@ -615,7 +615,7 @@ function bdBlossomParts(t) {
 /* ---------------------------------------------------------------- Your catch of the day */
 
 /** A fish from Fireside Angler as SVG, centred on 0,0 and len long, in its look from the game (see drawFish there). */
-function bdAnglerFish(k, len) {
+function bdAnglerFish(k, len, id = 'bdp') {
   const L = len;
   const n = (v) => +v.toFixed(1);
   const glow = k.glow ? bdHalo(0, 0, n(L * 0.62), k.glow, 0.5) : '';
@@ -623,15 +623,15 @@ function bdAnglerFish(k, len) {
     const h = L * (k.h || 0.1);
     let spots = '';
     if (k.spots) for (let i = 0; i < 7; i++) spots += `<circle cx="${n(L * (0.3 - i * 0.1))}" cy="${n((i % 2 ? -1 : 1) * h * 0.2)}" r="${n(h * 0.12)}" fill="${k.spots}"/>`;
-    return `${glow}<defs><linearGradient id="bdp-cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${k.body}"/><stop offset="1" stop-color="${k.belly}"/></linearGradient></defs>
+    return `${glow}<defs><linearGradient id="${id}-cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${k.body}"/><stop offset="1" stop-color="${k.belly}"/></linearGradient></defs>
       <path d="M${n(-L * 0.5)} 0Q${n(-L * 0.1)} ${n(-h * 1.1)} ${n(L * 0.3)} ${n(-h * 0.75)}L${n(L * 0.3)} ${n(h * 0.75)}Q${n(-L * 0.1)} ${n(h * 1.1)} ${n(-L * 0.5)} 0Z" fill="${k.fin}"/>
-      <path d="M${n(L * 0.5)} 0Q${n(L * 0.45)} ${n(-h * 0.7)} ${n(L * 0.3)} ${n(-h * 0.6)}Q${n(-L * 0.1)} ${n(-h * 0.7)} ${n(-L * 0.48)} 0Q${n(-L * 0.1)} ${n(h * 0.7)} ${n(L * 0.3)} ${n(h * 0.6)}Q${n(L * 0.45)} ${n(h * 0.7)} ${n(L * 0.5)} 0Z" fill="url(#bdp-cg)"/>
+      <path d="M${n(L * 0.5)} 0Q${n(L * 0.45)} ${n(-h * 0.7)} ${n(L * 0.3)} ${n(-h * 0.6)}Q${n(-L * 0.1)} ${n(-h * 0.7)} ${n(-L * 0.48)} 0Q${n(-L * 0.1)} ${n(h * 0.7)} ${n(L * 0.3)} ${n(h * 0.6)}Q${n(L * 0.45)} ${n(h * 0.7)} ${n(L * 0.5)} 0Z" fill="url(#${id}-cg)"/>
       ${spots}<circle cx="${n(L * 0.4)}" cy="${n(-h * 0.15)}" r="${n(h * 0.14)}" fill="#111"/>`;
   }
   if (k.shape === 'ray') {
-    return `${glow}<defs><radialGradient id="bdp-cg"><stop offset="0" stop-color="${k.belly}"/><stop offset="1" stop-color="${k.body}"/></radialGradient></defs>
+    return `${glow}<defs><radialGradient id="${id}-cg"><stop offset="0" stop-color="${k.belly}"/><stop offset="1" stop-color="${k.body}"/></radialGradient></defs>
       <rect x="${n(-L * 0.55)}" y="${n(-L * 0.012)}" width="${n(L * 0.4)}" height="${n(L * 0.024)}" fill="${k.fin}"/>
-      <path d="M${n(L * 0.32)} 0Q${n(L * 0.05)} ${n(-L * 0.34)} ${n(-L * 0.02)} ${n(-L * 0.32)}Q${n(-L * 0.12)} ${n(-L * 0.05)} ${n(-L * 0.2)} 0Q${n(-L * 0.12)} ${n(L * 0.05)} ${n(-L * 0.02)} ${n(L * 0.32)}Q${n(L * 0.05)} ${n(L * 0.34)} ${n(L * 0.32)} 0Z" fill="url(#bdp-cg)"/>
+      <path d="M${n(L * 0.32)} 0Q${n(L * 0.05)} ${n(-L * 0.34)} ${n(-L * 0.02)} ${n(-L * 0.32)}Q${n(-L * 0.12)} ${n(-L * 0.05)} ${n(-L * 0.2)} 0Q${n(-L * 0.12)} ${n(L * 0.05)} ${n(-L * 0.02)} ${n(L * 0.32)}Q${n(L * 0.05)} ${n(L * 0.34)} ${n(L * 0.32)} 0Z" fill="url(#${id}-cg)"/>
       <circle cx="${n(L * 0.2)}" cy="${n(-L * 0.04)}" r="${n(L * 0.018)}" fill="#111"/><circle cx="${n(L * 0.2)}" cy="${n(L * 0.04)}" r="${n(L * 0.018)}" fill="#111"/>`;
   }
   const H = L * (k.h || 0.32);
@@ -640,33 +640,40 @@ function bdAnglerFish(k, len) {
   if (k.stripes) for (let i = 0; i < 6; i++) marks += `<rect x="${n(L * (0.22 - i * 0.11))}" y="${n(-H)}" width="${n(L * 0.035)}" height="${n(H * 2)}" fill="${k.stripes}" opacity=".7"/>`;
   if (k.spots) for (let i = 0; i < 14; i++) marks += `<circle cx="${n(L * (0.3 - (i % 7) * 0.09))}" cy="${n(-H * (0.05 + (i > 6 ? 0.22 : 0)) + ((i * 37) % 9) * H * 0.015)}" r="${n(H * 0.055)}" fill="${k.spots}" opacity=".85"/>`;
   const dorsal = k.sail ? `M${n(-L * 0.2)} ${n(-H * 0.4)}Q${n(-L * 0.05)} ${n(-H * 1.25)} ${n(L * 0.16)} ${n(-H * 0.42)}Z` : `M${n(-L * 0.14)} ${n(-H * 0.42)}Q0 ${n(-H * 0.9)} ${n(L * 0.1)} ${n(-H * 0.44)}Z`;
-  return `${glow}<defs><linearGradient id="bdp-cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${k.body}"/><stop offset=".55" stop-color="${k.body}"/><stop offset="1" stop-color="${k.belly}"/></linearGradient><clipPath id="bdp-cc"><path d="${body}"/></clipPath></defs>
+  return `${glow}<defs><linearGradient id="${id}-cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${k.body}"/><stop offset=".55" stop-color="${k.body}"/><stop offset="1" stop-color="${k.belly}"/></linearGradient><clipPath id="${id}-cc"><path d="${body}"/></clipPath></defs>
     <path d="M${n(-L * 0.4)} 0L${n(-L * 0.58)} ${n(-H * 0.62)}Q${n(-L * 0.5)} 0 ${n(-L * 0.58)} ${n(H * 0.62)}Z${dorsal}M${n(-L * 0.08)} ${n(H * 0.42)}Q${n(-L * 0.02)} ${n(H * 0.78)} ${n(L * 0.06)} ${n(H * 0.42)}Z" fill="${k.fin}"/>
-    <path d="${body}" fill="url(#bdp-cg)"/><g clip-path="url(#bdp-cc)">${marks}</g>
+    <path d="${body}" fill="url(#${id}-cg)"/><g clip-path="url(#${id}-cc)">${marks}</g>
     <path d="M${n(L * 0.3)} ${n(-H * 0.32)}Q${n(L * 0.24)} 0 ${n(L * 0.3)} ${n(H * 0.32)}" stroke="rgba(0,0,0,.2)" stroke-width="${n(Math.max(1, L * 0.01))}" fill="none"/>
     <circle cx="${n(L * 0.38)}" cy="${n(-H * 0.1)}" r="${n(H * 0.11)}" fill="#fffaf3"/><circle cx="${n(L * 0.39)}" cy="${n(-H * 0.1)}" r="${n(H * 0.065)}" fill="#111"/>
     ${k.whiskers ? `<path d="M${n(L * 0.48)} ${n(H * 0.05)}Q${n(L * 0.56)} ${n(H * 0.4)} ${n(L * 0.5)} ${n(H * 0.7)}M${n(L * 0.47)} ${n(H * 0.02)}Q${n(L * 0.6)} ${n(H * 0.1)} ${n(L * 0.62)} ${n(H * 0.35)}" stroke="${k.fin}" stroke-width="${n(Math.max(1, L * 0.012))}" fill="none"/>` : ''}`;
 }
-/** Your catch of the day swimming slowly across, bigger the better it was, with its name under it. */
-function bdCatchPart(t, fish) {
-  const L = (150 + fish.score * 0.9) * (fish.giant ? 1.3 : 1);
+/**
+ * One of the hearth's best catches of the day swimming slowly across, bigger the better it was, with whose
+ * it is under it. The six swim at different depths and speeds, every other one the other way; a narrow
+ * screen shows the top three.
+ */
+function bdCatchPart(t, fish, i) {
+  const L = (70 + fish.score * 0.5) * (fish.giant ? 1.2 : 1) * (i === 0 ? 1.1 : 1);
   const w = L * 1.4;
   const h = L * 0.62 + 30;
   const x = 200;
-  const name = `Today's catch: ${escapeHtml(fish.name)}`;
-  return bdPart(x, 470, w, h, `<g transform="translate(${(w / 2).toFixed(0)} ${(L * 0.36).toFixed(0)})"${t.night > 0.5 ? ' opacity=".9"' : ''}>${bdAnglerFish(fish.look, L)}</g>
+  const left = i % 2 === 1;
+  const y = [250, 215, 300, 235, 320, 270][i] ?? 260; // in the open water above the sand the circle sits on
+  const name = `${escapeHtml(fish.by)}'s ${escapeHtml(fish.name)}`;
+  const flip = left ? ` transform="translate(${w.toFixed(0)} 0) scale(-1 1)"` : '';
+  return bdPart(x, y, w, h, `<g${flip}><g transform="translate(${(w / 2).toFixed(0)} ${(L * 0.36).toFixed(0)})"${t.night > 0.5 ? ' opacity=".9"' : ''}>${bdAnglerFish(fish.look, L, `bdc${i}`)}</g></g>
     <text x="${(w / 2).toFixed(0)}" y="${(h - 8).toFixed(0)}" text-anchor="middle" font-size="18" font-weight="700" fill="#effcff" opacity=".75">${name}</text>`,
-  { anim: 'bd-swim', vars: bdCross(x, w, 80, -25) });
+  { anim: 'bd-swim', vars: bdCross(x, w, 70 + i * 9, -(i * 17 + 5), left), more: i >= 3 });
 }
-/** Looks up your catch of the day in this hearth for Under the sea: when it's shown, hourly, and after a new best. */
+/** Looks up the hearth's best catches of the day for Under the sea: when it's shown, every ten minutes, and after your own new best. */
 async function backdropCatch(hearth) {
   if (hearth) bdLive.hearth = hearth;
   if (bdLive.id !== 'ocean' || !bdLive.hearth) return;
-  const key = `${bdLive.hearth}|${new Date().getHours()}`;
+  const key = `${bdLive.hearth}|${Math.floor(Date.now() / 600000)}`; // every ten minutes
   if (bdLive.catchKey === key) return;
   bdLive.catchKey = key;
-  let fish = null;
-  try { fish = (await api(`/api/servers/${encodeURIComponent(bdLive.hearth)}/fishing/today`)).fish ?? null; } catch { return; }
+  let fish = [];
+  try { fish = (await api(`/api/servers/${encodeURIComponent(bdLive.hearth)}/fishing/today`)).fish ?? []; } catch { return; }
   if (bdLive.id !== 'ocean' || JSON.stringify(fish) === JSON.stringify(bdLive.catch)) return;
   bdLive.catch = fish;
   bdLive.partsKey = '';

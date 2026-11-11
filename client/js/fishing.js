@@ -99,7 +99,7 @@ window.addEventListener('message', async (e) => {
     if (state.voice && state.ws?.readyState === WebSocket.OPEN) state.ws.send(JSON.stringify({ type: 'fishing', status: m.status }));
   } else if (m.kind === 'catch' && m.c && typeof m.c === 'object') {
     // A new best of the day for you, for the hearth's leaderboard.
-    // It also swims in the Under the sea backdrop, so that looks again next time.
+    // The hearth's best of the day swim in the Under the sea backdrop, so that looks again next time.
     api(`${fishingApi(play.hearthId)}/catch`, { method: 'POST', body: m.c })
       .then((r) => { if (r?.best) bdLive.catchKey = ''; })
       .catch((err) => console.warn('Fireside Angler catch not sent:', err.message));

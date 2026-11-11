@@ -101,7 +101,7 @@ test("today's best keeps each person's most valuable catch", async () => {
   const send = (token: string, c: object) => call(`${path}/catch`, { token, body: c });
 
   assert.deepEqual((await call(`${path}/board`, { token: a.token })).data.rows, []);
-  assert.equal((await call(`${path}/today`, { token: b.token })).data.fish, null);
+  assert.deepEqual((await call(`${path}/today`, { token: b.token })).data.fish, []);
 
   // A roach (worth 4 at its smallest) at 90/100 and 2 stars, then a cheaper one that doesn't replace it.
   assert.equal((await send(b.token, { f: 'roach', s: 32.5, t: 90, q: 2 })).data.best, true);
@@ -116,9 +116,10 @@ test("today's best keeps each person's most valuable catch", async () => {
   assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3, idle: true })).data.best, true);
   assert.equal((await send(a.token, { f: 'leviathan', s: 360, t: 10, q: 1 })).data.best, false);
 
-  // Each person's own best of the day, to swim in the ocean backdrop.
+  // The hearth's best of the day, most valuable first, with whose each is, to swim in the ocean backdrop.
   const today = (await call(`${path}/today`, { token: b.token })).data.fish;
-  assert.deepEqual([today.id, today.name, today.stars, today.giant, today.look.body], ['roach', 'Roach', 5, true, loadSpecies().get('roach')!.look!.body]);
+  assert.deepEqual(today.map((f: any) => [f.id, f.by]), [['leviathan', 'pike_queen'], ['roach', 'roach_king']]);
+  assert.deepEqual([today[1].name, today[1].stars, today[1].giant, today[1].look.body], ['Roach', 5, true, loadSpecies().get('roach')!.look!.body]);
   assert.equal((await call(`${path}/today`, { token: c.token })).status, 404);
 
   const rows = (await call(`${path}/board`, { token: b.token })).data.rows;

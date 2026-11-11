@@ -220,15 +220,26 @@ export function fishing(ctx: FishingContext) {
     return { day, timeZone: BOARD_TIME_ZONE, rows: ranked.slice(0, 25) };
   });
 
-  // Your best catch of the day in this hearth, with how to draw it (it swims in the Under the sea backdrop).
+  // The hearth's six best catches of the day, with how to draw each and who caught it: they swim in the
+  // Under the sea backdrop. Ranked like the board.
   route('GET', '/api/servers/:id/fishing/today', ({ user, params }) => {
     const h = hearth(params[0], user.id);
     const day = boardDay();
-    const best = db.prepare('SELECT fish, size, score, stars, giant FROM fishing_best WHERE server_id = ? AND day = ? AND user_id = ?').get(h, day, user.id) as
-      { fish: string; size: number; score: number; stars: number; giant: number } | undefined;
-    const sp = best && species.get(best.fish);
-    if (!best || !sp?.look) return { day, fish: null };
-    return { day, fish: { id: best.fish, name: sp.name, look: sp.look, size: best.size, score: best.score, stars: best.stars, giant: best.giant === 1 } };
+    const rows = db.prepare(
+      `SELECT b.user_id AS userId, COALESCE(m.nickname, u.display_name, u.username) AS name, b.fish, b.size, b.score, b.stars, b.giant, b.caught_at AS caughtAt
+       FROM fishing_best b JOIN users u ON u.id = b.user_id JOIN members m ON m.server_id = b.server_id AND m.user_id = b.user_id
+       WHERE b.server_id = ? AND b.day = ?`,
+    ).all(h, day) as { userId: number; name: string; fish: string; size: number; score: number; stars: number; giant: number; caughtAt: number }[];
+    const fish = rows
+      .filter((r) => species.get(r.fish)?.look)
+      .map((r) => ({ r, worth: worthOf(r) }))
+      .sort((a, b) => b.worth - a.worth || a.r.caughtAt - b.r.caughtAt)
+      .slice(0, 6)
+      .map(({ r }) => {
+        const sp = species.get(r.fish)!;
+        return { id: r.fish, name: sp.name, look: sp.look, size: r.size, score: r.score, stars: r.stars, giant: r.giant === 1, userId: r.userId, by: r.name };
+      });
+    return { day, fish };
   });
 
   route('POST', '/api/servers/:id/fishing/catch', ({ user, params, body }) => {
