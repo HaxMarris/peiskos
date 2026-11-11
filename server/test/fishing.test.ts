@@ -4,7 +4,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
-import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, loadPonds, loadSpecies, pickDerby } from '../src/fishing.ts';
+import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, loadPonds, loadSpecies, parseLook, pickDerby } from '../src/fishing.ts';
 
 const db = openDb(':memory:');
 const app = createApp({ db, publicDir: '/nonexistent' });
@@ -77,7 +77,14 @@ test('the fishing save is per person per hearth, and an older device cannot over
 test('the game\'s fish are all read from its file', () => {
   const species = loadSpecies();
   assert.equal(species.size, 264);
-  assert.deepEqual(species.get('leviathan'), { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5, pond: 'aurora' });
+  const { look, ...leviathan } = species.get('leviathan')!;
+  assert.deepEqual(leviathan, { name: 'Ember Leviathan', min: 300, max: 900, base: 46000, rarity: 5, pond: 'aurora' });
+  // How each one looks comes along too, so the ocean backdrop can draw today's catch.
+  assert.ok(look && /^#/.test(look.body));
+  assert.ok([...species.values()].every((sp) => sp.look));
+  assert.deepEqual(species.get('cinderwyrm')?.look, { body: '#2a1410', belly: '#ff8a4a', fin: '#c4561c', h: 0.08, shape: 'eel', glow: '#ff6a2a', spots: '#ffc46b' });
+  assert.equal(species.get('icefish')?.look?.body, 'rgba(220,235,245,.7)');
+  assert.equal(parseLook("L('#000000', '#ffffff', '#ff0000', .3, { glow: 'red\" onload=\"x', shape: 'blob' })")?.glow, undefined);
   assert.equal(species.get('roach')?.pond, 'mill');
   // A timed legendary belongs to the water it's listed with.
   assert.equal(species.get('morningcarp')?.pond, 'mill');
@@ -94,6 +101,7 @@ test("today's best keeps each person's most valuable catch", async () => {
   const send = (token: string, c: object) => call(`${path}/catch`, { token, body: c });
 
   assert.deepEqual((await call(`${path}/board`, { token: a.token })).data.rows, []);
+  assert.equal((await call(`${path}/today`, { token: b.token })).data.fish, null);
 
   // A roach (worth 4 at its smallest) at 90/100 and 2 stars, then a cheaper one that doesn't replace it.
   assert.equal((await send(b.token, { f: 'roach', s: 32.5, t: 90, q: 2 })).data.best, true);
@@ -107,6 +115,11 @@ test("today's best keeps each person's most valuable catch", async () => {
   await call(path, { token: a.token, body: { save: { v: 2, ponds: ['mill', 'birch', 'aurora'] }, rev: 1 } });
   assert.equal((await send(a.token, { f: 'leviathan', s: 660, t: 60, q: 3, idle: true })).data.best, true);
   assert.equal((await send(a.token, { f: 'leviathan', s: 360, t: 10, q: 1 })).data.best, false);
+
+  // Each person's own best of the day, to swim in the ocean backdrop.
+  const today = (await call(`${path}/today`, { token: b.token })).data.fish;
+  assert.deepEqual([today.id, today.name, today.stars, today.giant, today.look.body], ['roach', 'Roach', 5, true, loadSpecies().get('roach')!.look!.body]);
+  assert.equal((await call(`${path}/today`, { token: c.token })).status, 404);
 
   const rows = (await call(`${path}/board`, { token: b.token })).data.rows;
   // 46000 x 1.1 x 1.5, and 4 x 1.5 x 5 x 3 for the giant.

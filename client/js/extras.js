@@ -227,25 +227,26 @@ function decorateFire(s) {
   sparksLayer(look === 'sparks');
   // A backdrop someone chose for themselves wins over one put up for the whole hearth; either hides the sky.
   const backdrop = hearth ? (BACKDROP_SCENES[s.myBackdrop] && s.myBackdrop) || (BACKDROP_SCENES[s.backdrop] && s.backdrop) || null : null;
-  backdropLayer(backdrop);
+  backdropLayer(backdrop, hearth ? s.id : null);
   if (!backdrop) skyLayer(hearth ? s.skyLook || 'evening' : 'evening');
   seasonLayer();
 }
 
 /** A bought scene behind the fire, or none. Night colors around it, like any sky but the evening. */
-function backdropLayer(id) {
+function backdropLayer(id, hearthId = null) {
   const wrap = $('.fire-ring-wrap');
   if (!id) {
     if (wrap.dataset.backdrop) { delete wrap.dataset.backdrop; wrap.style.background = ''; delete wrap.dataset.sky; backdropLive(null); $('#sky-layer').replaceChildren(); }
     return;
   }
-  if (wrap.dataset.backdrop === id) return;
+  // The same scene in another hearth: only your catch of the day (in Under the sea) changes.
+  if (wrap.dataset.backdrop === id) return BACKDROP_LIVE[id] && backdropCatch(hearthId);
   wrap.dataset.backdrop = id;
   wrap.dataset.sky = 'backdrop';
   // The live ones move and follow the time of day, in the sky layer; the rest are one still picture.
   if (BACKDROP_LIVE[id]) {
     wrap.style.background = '';
-    backdropLive($('#sky-layer'), id);
+    backdropLive($('#sky-layer'), id, hearthId);
   } else {
     backdropLive(null);
     $('#sky-layer').replaceChildren();

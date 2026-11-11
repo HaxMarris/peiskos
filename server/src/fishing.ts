@@ -24,7 +24,23 @@ export const MAX_SAVE_BYTES = 256 * 1024;
 export const BOARD_TIME_ZONE = 'America/New_York';
 export const boardDay = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { timeZone: BOARD_TIME_ZONE }).format(t);
 
-type Species = { name: string; min: number; max: number; base: number; rarity: number; pond: string };
+/** How a fish is drawn: its colours, its depth as a share of its length, and any markings or odd shape. */
+export type FishLook = { body: string; belly: string; fin: string; h: number; glow?: string; spots?: string; stripes?: string; shape?: 'eel' | 'ray'; sail?: boolean; whiskers?: boolean };
+type Species = { name: string; min: number; max: number; base: number; rarity: number; pond: string; look?: FishLook };
+const COLOR = String.raw`#[0-9a-fA-F]{6}|rgba\(\d{1,3},\d{1,3},\d{1,3},[\d.]+\)`;
+const isColor = (c: unknown): c is string => typeof c === 'string' && new RegExp(`^(?:${COLOR})$`).test(c);
+/** A fish's L('#body', '#belly', '#fin', h, { ... }) from the game, read as data; anything unexpected is left out. */
+export function parseLook(text: string): FishLook | undefined {
+  const m = text.match(new RegExp(String.raw`^L\('(${COLOR})', '(${COLOR})', '(${COLOR})', ([\d.]+)(?:, \{([^}]*)\})?\)`));
+  if (!m) return undefined;
+  const look: FishLook = { body: m[1], belly: m[2], fin: m[3], h: Math.min(1, Math.max(0.05, Number(m[4]) || 0.32)) };
+  for (const [, key, str, num] of (m[5] ?? '').matchAll(/(\w+): (?:'([^']*)'|([\d.]+))/g)) {
+    if ((key === 'glow' || key === 'spots' || key === 'stripes') && isColor(str)) look[key] = str;
+    else if (key === 'shape' && (str === 'eel' || str === 'ray')) look.shape = str;
+    else if ((key === 'sail' || key === 'whiskers') && num) look[key] = Number(num) > 0;
+  }
+  return look;
+}
 /** The fish, read from the game itself so the two never drift apart: F('id', 'Name', min, max, base, rarity, ...). */
 /** What a catch is worth on the leaderboard: the fish's own value, without anyone's upgrades or bonuses. */
 export const boardWorth = (sp: Species, score: number, stars: number, giant: boolean, starMul: number[]) =>
@@ -47,7 +63,12 @@ export function loadSpecies(file = new URL('../../client/games/fishing/game.js',
   // The timed legendaries come after, each as ['mill', 9, F(...)], with its water in front.
   for (const m of src.matchAll(/\{ id: '([a-z0-9]+)', name: '[^']*', cost:|\['([a-z0-9]+)', \d+, (?=F\()|\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
     if (m[1] || m[2]) pond = m[1] ?? m[2];
-    else species.set(m[3], { name: m[4], min: Number(m[5]), max: Number(m[6]), base: Number(m[7]), rarity: Number(m[8]), pond });
+    else {
+      // Its look is the L(...) at the end of the same F(...).
+      const rest = src.slice(m.index! + m[0].length, src.indexOf('\n', m.index));
+      const at = rest.indexOf('L(');
+      species.set(m[3], { name: m[4], min: Number(m[5]), max: Number(m[6]), base: Number(m[7]), rarity: Number(m[8]), pond, look: at >= 0 ? parseLook(rest.slice(at)) : undefined });
+    }
   }
   return species;
 }
@@ -197,6 +218,17 @@ export function fishing(ctx: FishingContext) {
     // Most valuable first; a tie goes to whoever caught it first.
     const ranked = rows.map((r) => ({ ...r, worth: worthOf(r) })).sort((a, b) => b.worth - a.worth || a.caughtAt - b.caughtAt);
     return { day, timeZone: BOARD_TIME_ZONE, rows: ranked.slice(0, 25) };
+  });
+
+  // Your best catch of the day in this hearth, with how to draw it (it swims in the Under the sea backdrop).
+  route('GET', '/api/servers/:id/fishing/today', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    const day = boardDay();
+    const best = db.prepare('SELECT fish, size, score, stars, giant FROM fishing_best WHERE server_id = ? AND day = ? AND user_id = ?').get(h, day, user.id) as
+      { fish: string; size: number; score: number; stars: number; giant: number } | undefined;
+    const sp = best && species.get(best.fish);
+    if (!best || !sp?.look) return { day, fish: null };
+    return { day, fish: { id: best.fish, name: sp.name, look: sp.look, size: best.size, score: best.score, stars: best.stars, giant: best.giant === 1 } };
   });
 
   route('POST', '/api/servers/:id/fishing/catch', ({ user, params, body }) => {
