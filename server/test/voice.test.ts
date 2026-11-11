@@ -360,5 +360,29 @@ test('LiveKit webhooks: only signed ones count, and the fire then shows who Live
   inLiveKit.delete(`room-${second.id}`);
   await app.sweepFires();
   assert.deepEqual(await at(second.id), []);
+
+  // However many webhooks arrive at once, one look at the fire is waiting, not one each.
+  liveKitCalls.length = 0;
+  await Promise.all([app.checkFire(fire.id), app.checkFire(fire.id), app.checkFire(fire.id)]);
+  assert.equal(liveKitCalls.filter((c) => c.method === 'ListParticipants').length, 1);
+
+  // A full fire stays full: a pass taken while there was room doesn't seat someone through LiveKit.
+  const limit = await fetch(`${base}/api/channels/${fire.id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', authorization: `Bearer ${host.token}` }, body: JSON.stringify({ userLimit: 1 }) });
+  assert.equal(limit.status, 200);
+  inLiveKit.set(name, [String(ana.user.id)]);
+  await app.checkFire(fire.id);
+  assert.deepEqual(await seen(), [ana.user.id]);
+  liveKitCalls.length = 0;
+  inLiveKit.set(name, [String(ana.user.id), String(bo.user.id)]);
+  await app.checkFire(fire.id);
+  for (let i = 0; i < 100 && !liveKitCalls.some((c) => c.method === 'RemoveParticipant'); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(liveKitCalls.filter((c) => c.method === 'RemoveParticipant').map((c) => [c.body.room, c.body.identity]), [[name, String(bo.user.id)]]);
+  assert.deepEqual(await seen(), [ana.user.id]);
+  // The host manages voice, so there's a seat for them all the same.
+  inLiveKit.set(name, [String(ana.user.id), String(host.user.id)]);
+  await app.checkFire(fire.id);
+  assert.deepEqual((await seen()).sort(), [ana.user.id, host.user.id].sort());
+  inLiveKit.delete(name);
+  await app.sweepFires();
   hostWs.ws.close();
 });
