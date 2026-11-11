@@ -116,11 +116,14 @@ test('Sketch & Guess: the word stays with the drawer, the drawing reaches everyo
   await guess(theo, 'that was a hard one');
   await sees(feed(maya), 'Theo: that was a hard one');
   await guess(theo, `it is ${secret}`);
+  // Theo's lines arrive in order, so once this one shows the one before it has been dealt with.
+  await guess(theo, 'never mind');
+  await sees(feed(maya), 'Theo: never mind');
   await maya.wait(10);
   await guess(ines, secret);
   // Everyone has it, so the turn ends and the word is shown.
   for (const s of seats) await sees(feed(s), `The word was "${secret}".`);
-  assert.doesNotMatch(await feed(ines).innerText(), /hard one|it is/);
+  assert.doesNotMatch(await feed(ines).innerText(), /hard one|it is|never mind/);
   assert.doesNotMatch(await feed(maya).innerText(), /it is/);
   const after1 = await points(ines);
   assert.equal(after1.Maya, 80, '40 to the drawer for each right guess');
