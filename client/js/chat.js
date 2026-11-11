@@ -905,6 +905,7 @@ function openHearthSettings(serverId, first) {
     s.rules && { id: 'rules', group: 'You', label: 'Rules', run: () => openRules(s) },
     { id: 'notify', group: 'You', label: 'Notifications', keywords: 'mute mentions alerts', value: notifyLabel.charAt(0).toUpperCase() + notifyLabel.slice(1), action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
     serverUnread(s) && { id: 'read', group: 'You', label: 'Mark as read', action: 'do', run: () => { markServerRead(s); closeModal(); } },
+    { id: 'events', group: 'Together', label: 'Events', keywords: 'plan calendar game night', count: s.events?.length, run: () => openEventList(s.id) },
     { id: 'best', group: 'Together', label: 'Best of', keywords: 'fire reactions favourite top messages', run: () => openBestOf(s.id) },
     { id: 'album', group: 'Together', label: 'Photo album', keywords: 'pictures photos videos gallery media', run: () => openAlbum(s.id) },
     { id: 'review', group: 'Together', label: 'Year in review', keywords: 'stats recap', run: () => openYearReview(s.id) },

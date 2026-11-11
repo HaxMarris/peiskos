@@ -734,6 +734,12 @@ function renderEvents(s) {
     more.onclick = () => openEventList(s.id);
     rows.push(more);
   }
+  if (!rows.length) {
+    const none = document.createElement('li');
+    none.className = 'event-none';
+    none.textContent = 'Nothing planned';
+    rows.push(none);
+  }
   $('#event-list').replaceChildren(...rows);
 }
 $('#add-event').onclick = () => openEventEditor(state.serverId, null);
@@ -741,6 +747,7 @@ $('#add-event').onclick = () => openEventEditor(state.serverId, null);
 function openEventList(serverId) {
   const s = state.servers.get(serverId);
   modal(`<h2>Events in ${escapeHtml(s.name)}</h2>
+    ${s.events.length ? '' : emptyNote('Nothing planned yet', "Plan a game night, a call or a trip, and everyone here can say if they're coming.")}
     <ul class="event-list big">${s.events.map((e) => `<li class="event-row focus-row" data-ev="${e.id}">${CALENDAR_ICON}<span class="event-text row-main" role="button" tabindex="0" aria-label="${escapeHtml(rowLabel(e.title, `${eventWhen(e.startsAt)} · ${going(e)} going`))}"><b>${escapeHtml(e.title)}</b><span class="small muted">${escapeHtml(eventWhen(e.startsAt))} · ${going(e)} going</span></span></li>`).join('')}</ul>
     <div class="modal-row"><button class="btn secondary" id="ev-feed">Add to your calendar</button><span class="spacer"></span><button class="btn" id="ev-new">Plan an event</button></div>`);
   $('#ev-feed').onclick = openCalendarFeed;

@@ -8,7 +8,7 @@ import { addModeratorRole, inTransaction, tokenHash, withStatementCache, type Db
 import { APP_CSP, HttpError, MIME, allowance, bearer, clientIp, readBody, readLimited, sameText, send, type Json } from './http.ts';
 import { AVATAR_TYPES, INLINE_TYPES, MAX_AVATAR_BYTES, MAX_SOUND_BYTES, SOUND_TYPES } from './media.ts';
 import { hashPassword, verifyPassword, newToken, newInviteCode } from './auth.ts';
-import { closeRoom, removeFromRoom, setCanSpeak, voiceToken, type VoiceOptions } from './voice.ts';
+import { closeRoom, openRooms, readWebhook, removeFromRoom, roomIdentities, setCanSpeak, voiceToken, type VoiceOptions } from './voice.ts';
 import { staticFiles } from './static.ts';
 import { gifSearch, download, type GifOptions } from './gifs.ts';
 import { fetchEmbed, fetchImage, linksIn, type Embed, type EmbedOptions } from './embeds.ts';
@@ -630,6 +630,98 @@ export function createApp(opts: AppOptions): Server {
   };
   const voiceRoomIds = (serverId: number) =>
     (db.prepare("SELECT id FROM channels WHERE server_id = ? AND kind = 'voice'").all(serverId) as { id: number }[]).map((r) => r.id);
+
+  // ---- what LiveKit itself says -------------------------------------------
+  // The app says when it sits down and gets up, but LiveKit is where people really are: an app
+  // can join there without saying so, or drop its connection here and stay. So LiveKit tells
+  // Peiskos when someone comes or goes (a signed webhook, below), and Peiskos then matches the
+  // fire against LiveKit's own list. The webhook is only ever a nudge to look; what's acted on is
+  // the list, so one that's late, repeated or replayed does no harm.
+  const seatedByApp = (userId: number) => voiceSockets.get(userId)?.readyState === WebSocket.OPEN;
+  const FIRE_SECOND_LOOK_MS = 10_000;
+  const fireChecks = new Map<number, Promise<void>>(); // one look at a fire at a time, in order
+  const fireTimers = new Set<NodeJS.Timeout>();
+  let liveKitQuiet = false; // said once that LiveKit can't be reached, until it can again
+  const matchFire = async (channelId: number, secondLook = false) => {
+    const channel = channelById(channelId);
+    if (!opts.voice || channel?.kind !== 'voice') return;
+    const identities = await roomIdentities(opts.voice, `room-${channelId}`);
+    const there = new Set(identities.map(Number));
+    liveKitQuiet = false;
+    // The room may have been deleted while LiveKit answered (deleting it closes it there too).
+    if (!channelById(channelId)) return;
+    for (const identity of identities) {
+      const userId = Number(identity);
+      if (inVoice.get(userId) === channelId) continue;
+      // Lost their place in the hearth after getting a pass: out of LiveKit too.
+      if (!Number.isInteger(userId) || !userById(userId) || !canSee(channel, userId)) {
+        tellLiveKit(`take ${identity.replace(/[^\w-]/g, "").slice(0, 40)} out of room-${channelId}`, (v) => removeFromRoom(v, `room-${channelId}`, identity));
+        continue;
+      }
+      const other = inVoice.get(userId);
+      if (other !== undefined) {
+        // They're down as being at another fire. Changing fires or devices looks like this for a
+        // moment, so look once more shortly. Still in both by then, the newer fire is theirs: one
+        // person sits at one fire, so they're taken out of the other.
+        if (!secondLook) { matchFireSoon(channelId, FIRE_SECOND_LOOK_MS, true); continue; }
+        if (seatedByApp(userId)) voiceSockets.get(userId)!.send(JSON.stringify({ type: 'voice_elsewhere', channelId }));
+        voiceSockets.delete(userId);
+        tellLiveKit(`take user ${userId} out of room-${other}`, (v) => removeFromRoom(v, `room-${other}`, String(userId)));
+      }
+      setVoice(userId, channelId);
+    }
+    // Only people Peiskos seated from LiveKit's word are taken away on it; an app that said it
+    // sat down says when it gets up (and may be reconnecting to LiveKit right now).
+    for (const userId of usersInVoice(channelId)) if (!there.has(userId) && !seatedByApp(userId)) setVoice(userId, null);
+  };
+  const checkFire = (channelId: number, secondLook = false) => {
+    const check = (fireChecks.get(channelId) ?? Promise.resolve())
+      .then(() => matchFire(channelId, secondLook))
+      .catch((err) => {
+        if (!liveKitQuiet) console.warn(`Couldn't ask LiveKit who is in room-${channelId}: ${err.message}`);
+        liveKitQuiet = true;
+      })
+      .finally(() => { if (fireChecks.get(channelId) === check) fireChecks.delete(channelId); });
+    fireChecks.set(channelId, check);
+    return check;
+  };
+  function matchFireSoon(channelId: number, ms: number, secondLook = false) {
+    const timer = setTimeout(() => {
+      fireTimers.delete(timer);
+      checkFire(channelId, secondLook);
+    }, ms);
+    timer.unref();
+    fireTimers.add(timer);
+  }
+  // A webhook can be lost (Peiskos was restarting when LiveKit sent it), so every minute the fires
+  // LiveKit has open, and the ones with someone seated on LiveKit's word, are matched again.
+  const sweepFires = async () => {
+    if (!opts.voice) return;
+    const ids = new Set<number>();
+    for (const [userId, channelId] of inVoice) if (!seatedByApp(userId)) ids.add(channelId);
+    try {
+      for (const name of await openRooms(opts.voice)) if (/^room-\d+$/.test(name)) ids.add(Number(name.slice(5)));
+      liveKitQuiet = false;
+    } catch (err) {
+      if (!liveKitQuiet) console.warn(`Couldn't ask LiveKit which rooms are open: ${(err as Error).message}`);
+      liveKitQuiet = true;
+      return;
+    }
+    await Promise.all([...ids].map((id) => checkFire(id)));
+  };
+  const fireSweepTimer = setInterval(sweepFires, 60_000);
+  fireSweepTimer.unref();
+  const LIVEKIT_EVENTS = new Set(['room_started', 'room_finished', 'participant_joined', 'participant_left', 'participant_connection_aborted']);
+  const handleLiveKitWebhook = async (req: IncomingMessage, res: ServerResponse) => {
+    if (!opts.voice) throw new HttpError(404, 'Not found');
+    const raw = await readLimited(req, 256 * 1024, new HttpError(413, "That's too much to send at once"));
+    const event = readWebhook(opts.voice, req.headers.authorization, raw);
+    if (!event) throw new HttpError(401, "That didn't come from this server's LiveKit");
+    const room = typeof event.room?.name === 'string' ? event.room.name.match(/^room-(\d+)$/) : null;
+    // Answered straight away: LiveKit sends the next one only once this one is taken.
+    if (room && LIVEKIT_EVENTS.has(event.event)) checkFire(Number(room[1]));
+    send(res, 200, { ok: true });
+  };
 
   const usersSharingServerWith = (userId: number) =>
     (
@@ -5582,6 +5674,7 @@ export function createApp(opts: AppOptions): Server {
       if (thumb && (req.method === 'GET' || req.method === 'HEAD')) return await serveThumb(req, res, thumb[1]);
       const file = (req.method === 'GET' || req.method === 'HEAD') && url.pathname.match(/^\/api\/attachments\/([\w-]+)(\/|$)/);
       if (file) return await serveAttachment(req, res, file[1]);
+      if (req.method === 'POST' && url.pathname === '/api/livekit/webhook') return await handleLiveKitWebhook(req, res);
       if (req.method === 'POST' && url.pathname === '/api/me/avatar') return await handleAvatarUpload(req, res);
       if (req.method === 'POST' && url.pathname === '/api/me/banner') return await handleBannerUpload(req, res);
       if (req.method === 'GET' && url.pathname === '/api/me/export') return await handleExport(req, res);
@@ -5801,7 +5894,11 @@ export function createApp(opts: AppOptions): Server {
       dock.closed(user.id, ws);
       casinoTables.closed(ws);
       // The device they were at the fire on is gone, even if another one is still connected.
+      const fire = inVoice.get(user.id);
       if (voiceSockets.get(user.id) === ws) setVoice(user.id, null);
+      // Gone from here, but maybe not from LiveKit (a phone between networks, say). Still there in
+      // a little while without their app having come back to say so, they're shown at the fire again.
+      if (fire !== undefined && !inVoice.has(user.id)) matchFireSoon(fire, 20_000);
       if (set!.size === 0) {
         sockets.delete(user.id);
         online.delete(user.id);
@@ -5814,10 +5911,12 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // Tests set a due time in the past and then check the clock, rather than waiting for it.
-  Object.assign(server, { checkClock: tick, checkAfk });
+  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire });
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
+    clearInterval(fireSweepTimer);
+    for (const t of fireTimers) clearTimeout(t);
     casinoTables.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);

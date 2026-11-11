@@ -32,7 +32,7 @@ undoBtn.onclick = () => {
 const clearBtn = el('button', 'tool', 'Clear');
 clearBtn.type = 'button';
 clearBtn.onclick = () => { sc.clear(); mine.length = 0; toHost({ type: 'clear' }); };
-toolbar($('tools'), sc, [undoBtn, clearBtn]);
+drawingTools($('tools'), sc, [undoBtn, clearBtn]);
 
 /** A move from this copy: the host's own go straight to its game, everyone else's through Peiskos. */
 function toHost(d) {

@@ -849,20 +849,47 @@ function renderHome() {
 
   // Friends who are around.
   const friends = (state.friends?.friends ?? []).filter((f) => f.online)
-    .map((f) => row(`data-dm="${f.id}"`, escapeHtml(nameOfPerson(f)), presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
+    .map((f) => row(`data-dm="${f.id}"`, `<span class="avatar home-av" data-av="${f.id}"></span><span class="home-name">${escapeHtml(nameOfPerson(f))}</span>`, presenceLine(f) || escapeHtml(STATUS_LABELS[statusOf(f)])));
 
-  const parts = [
+  // Every hearth at a glance: who's on, and whether anything is waiting there.
+  const cards = hearths.map((s) => {
+    const online = s.members.filter((m) => m.online && !m.deleted).length;
+    const mentions = [...s.channels, ...(s.threads ?? [])].reduce((n, c) => n + (c.mentions || 0), 0);
+    const lit = s.channels.some((c) => c.kind === 'voice' && c.voiceUsers?.length);
+    const badge = mentions ? `<span class="home-badge">${mentions > 99 ? '99+' : mentions}</span>` : serverUnread(s) ? '<span class="home-dot" aria-label="New messages"></span>' : '';
+    return `<li><button type="button" class="home-hearth" data-hearth="${s.id}"><span data-tile="${s.id}"></span>
+      <span class="home-hearth-text"><b>${escapeHtml(s.name)}</b><span class="small muted">${online} online${lit ? ' · fire lit' : ''}</span></span>${badge}</button></li>`;
+  });
+
+  const main = [
     firstWeekHtml(),
     section('At a fire now', fires),
     section('For you', forYou),
     section('New messages', unread.slice(0, 12)),
+  ].join('');
+  const side = [
     section('Today', today),
     section('Coming up', comingUp.slice(0, 6)),
-    section('Friends online', friends),
+    friends.length ? section('Friends online', friends)
+      : `<section class="home-section"><h3>Friends online</h3><div class="empty-note home-quiet"><span>${(state.friends?.friends ?? []).length ? 'None of your friends are online right now.' : 'Add friends to see when they\'re around.'}</span>
+        <button type="button" class="btn secondary tiny-btn" id="home-friends">Friends</button></div></section>`,
   ].join('');
+  const hour = new Date().getHours();
+  const greeting = hour < 5 ? 'Good evening' : hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const view = $('#home-view');
-  view.innerHTML = `<header class="home-head"><h2>Home</h2>${unread.length || forYou.length ? '<button type="button" class="btn secondary tiny-btn" id="home-read-all">Mark everything as read</button>' : ''}</header>
-    ${parts || '<div class="empty-note"><b>Nothing new</b><span>No unread messages, mentions or fires right now.</span></div>'}`;
+  view.innerHTML = `<header class="home-head"><div><h2>${greeting}, ${escapeHtml(state.me.displayName || state.me.username)}</h2>
+      <p class="muted home-date">${escapeHtml(new Date().toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' }))}</p></div>
+      ${unread.length || forYou.length ? '<button type="button" class="btn secondary tiny-btn" id="home-read-all">Mark everything as read</button>' : ''}</header>
+    ${cards.length ? `<section class="home-section"><h3>Your hearths</h3><ul class="home-hearths">${cards.join('')}</ul></section>` : ''}
+    <div class="home-cols${side ? '' : ' single'}">
+      <div class="home-col">${main || '<div class="empty-note home-quiet"><b>Nothing new</b><span>No unread messages, mentions or fires right now.</span></div>'}</div>
+      ${side ? `<div class="home-col">${side}</div>` : ''}
+    </div>`;
+  view.querySelectorAll('[data-tile]').forEach((el) => { const h = state.servers.get(Number(el.dataset.tile)); if (h) el.replaceWith(burrowTile(h)); });
+  view.querySelectorAll('[data-av]').forEach((el) => {
+    const f = (state.friends?.friends ?? []).find((x) => x.id === Number(el.dataset.av));
+    if (f) setAvatar(el, f.username, avatarOf(f.id, f.avatar));
+  });
   view.querySelectorAll('[data-room]').forEach((b) => (b.onclick = () => { const w = roomById(Number(b.dataset.room)); if (w) selectServer(w.s.id, false, { channelId: w.c.id }).then(() => showView('chat')); }));
   view.querySelectorAll('[data-hearth]').forEach((b) => (b.onclick = () => selectServer(Number(b.dataset.hearth))));
   view.querySelectorAll('[data-join]').forEach((b) => (b.onclick = () => joinVoice(Number(b.dataset.join))));
@@ -870,6 +897,7 @@ function renderHome() {
   view.querySelectorAll('[data-person]').forEach((b) => (b.onclick = () => openPersonById(Number(b.dataset.person))));
   view.querySelectorAll('[data-dm]').forEach((b) => (b.onclick = () => openDm(Number(b.dataset.dm))));
   wireFirstWeek(view);
+  view.querySelector('#home-friends')?.addEventListener('click', () => openFriends());
   const all = $('#home-read-all');
   if (all) all.onclick = () => { for (const s of state.servers.values()) if (serverUnread(s) || [...s.channels, ...(s.threads ?? [])].some((c) => c.mentions)) markServerRead(s); };
 }

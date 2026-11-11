@@ -116,12 +116,19 @@ async function openEmojiPanel(anchor, onPick) {
     .map((id) => state.servers.get(id))
     .filter((s) => s && !isDm(s) && s.emoji?.some((e) => e.kind === 'emoji'))
     .map((s) => [s.name, s.emoji.filter((e) => e.kind === 'emoji').map((e) => [`<:${e.name}:${e.id}>`, e.name, e])]);
+  // Only the pictures in view (and a little past) load; the rest wait until they're scrolled to.
+  const seen = new IntersectionObserver((entries) => {
+    for (const en of entries) if (en.isIntersecting) { en.target.src = en.target.dataset.src; seen.unobserve(en.target); }
+  }, { root: scroll, rootMargin: '160px 0px' });
+  panel.seen = seen;
   const recent = recentEmoji().filter((t) => !t.startsWith('<:') || customEmojiById(Number(/:(\d+)>$/.exec(t)?.[1]))).map((t) => [t, '']);
   const button = ([text, name, custom]) => {
     const b = document.createElement('button');
     b.type = 'button';
     b.title = name ? `:${name.replace(/ /g, '_')}:` : '';
     b.innerHTML = emojiHtml(text);
+    const img = b.querySelector('img.emoji');
+    if (img) { img.dataset.src = img.getAttribute('src'); img.removeAttribute('src'); seen.observe(img); }
     b.onclick = (e) => {
       rememberEmoji(text);
       onPick(text);
@@ -177,6 +184,7 @@ function outsideEmojiPanel(e) {
 function closeEmojiPanel() {
   const panel = $('#emoji-panel');
   panel?.anchor?.setAttribute?.('aria-expanded', 'false');
+  panel?.seen?.disconnect();
   panel?.remove();
   document.removeEventListener('mousedown', outsideEmojiPanel);
 }
@@ -838,8 +846,14 @@ function openSearch() {
           <option value="">Any kind</option><option value="image">Pictures</option><option value="video">Videos</option>
           <option value="audio">Audio and voice</option><option value="file">Files</option><option value="link">Links</option><option value="poll">Polls</option>
         </select>
-        <label class="search-date">After<input type="date" id="search-after" /></label>
-        <label class="search-date">Before<input type="date" id="search-before" /></label>
+        <select id="search-when" aria-label="When">
+          <option value="">Any time</option><option value="1">Past day</option><option value="7">Past week</option>
+          <option value="31">Past month</option><option value="365">Past year</option><option value="pick">Pick dates…</option>
+        </select>
+      </div>
+      <div class="search-dates hidden" id="search-dates">
+        <label>From<input type="date" id="search-after" /></label>
+        <label>To<input type="date" id="search-before" /></label>
       </div>
     </form>
     <div id="search-status" class="muted small">Type a word, or pick a person or a kind of message.</div>
@@ -866,8 +880,12 @@ function openSearch() {
     const params = new URLSearchParams({ q });
     if (scope()) params.set('in', scope());
     for (const [key, sel] of [['room', '#search-room'], ['from', '#search-from'], ['has', '#search-has']]) if ($(sel).value) params.set(key, $(sel).value);
-    if ($('#search-after').value) params.set('after', new Date($('#search-after').value + 'T00:00').getTime());
-    if ($('#search-before').value) params.set('before', new Date($('#search-before').value + 'T00:00').getTime());
+    const when = $('#search-when').value;
+    if (when === 'pick') {
+      if ($('#search-after').value) params.set('after', new Date($('#search-after').value + 'T00:00').getTime());
+      // "To" includes that whole day.
+      if ($('#search-before').value) params.set('before', new Date($('#search-before').value + 'T00:00').getTime() + 864e5);
+    } else if (when) params.set('after', Date.now() - Number(when) * 864e5);
     if (offset) params.set('offset', offset);
     const list = $('#search-results');
     if (!q && !params.has('from') && !params.has('has')) {
@@ -901,6 +919,12 @@ function openSearch() {
   $('#search-form').onsubmit = (e) => { e.preventDefault(); clearTimeout(timer); run(); };
   $('#search-in').onchange = () => { fillFilters(); run(); };
   for (const sel of ['#search-room', '#search-from', '#search-has', '#search-after', '#search-before']) $(sel).onchange = () => run();
+  $('#search-when').onchange = () => {
+    const pick = $('#search-when').value === 'pick';
+    $('#search-dates').classList.toggle('hidden', !pick);
+    if (pick && !$('#search-after').value) $('#search-after').focus();
+    run();
+  };
   $('#search-more').onclick = () => run(true);
   $('#search-q').focus();
 }
