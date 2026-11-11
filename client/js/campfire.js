@@ -703,41 +703,51 @@ function clearSeats() {
 }
 
 /**
- * Lays the circle out in the space it has. Each face sits on the ring, with its name, status and
- * any "Watch screen" button hanging below it. Nobody sits straight above the fire, where their
- * name would hang over it: seats start half a step round from the top, so six make two at the
- * top, one each side and two at the bottom. The ring leaves room for half a face above the top
- * seats and for the labels under the bottom ones; in a short window the faces shrink and the ring
- * gets wider rather than taller, and the fire is drawn to fit inside it.
- * Returns a function that puts a seat at its place.
+ * Lays the circle out in the space it has. The fire sits on the ground with everyone on an oval around
+ * it, seen from a little above: the far seats are smaller and behind the fire, the near ones bigger and
+ * in front. Nobody sits straight behind the fire: seats start half a step round from the top, so six make
+ * two at the back, one each side and two at the front. The oval leaves room under the front seats for
+ * their names and any "Watch screen" button. Returns a function that puts a seat at its place.
  */
+const SEAT_BACK = 0.78, SEAT_FRONT = 1.08; // how big the farthest and nearest seats are drawn
 function sizeRing(ring, total, anyoneSharing) {
   const phone = matchMedia('(max-width: 760px)').matches;
   const W = ring.clientWidth, H = ring.clientHeight;
-  const face = Math.round(Math.min(phone ? 64 : 84, Math.max(40, H * (phone ? 0.11 : 0.15))) * (total > 8 ? 0.72 : 1));
+  const backdrop = ring.parentElement.dataset.backdrop || '';
+  const face = Math.round(Math.min(phone ? 60 : 84, Math.max(40, H * (phone ? 0.1 : 0.13))) * (total > 8 ? 0.72 : 1));
   const below = (phone ? 50 : 56) + (anyoneSharing ? 38 : 0); // name, status and the watch button
   const labelW = phone ? 120 : 170;
   const angle = (i) => (-90 + (180 + i * 360) / total) * (Math.PI / 180);
   const sines = Array.from({ length: total }, (_, i) => Math.sin(angle(i)));
-  const up = -Math.min(...sines), down = Math.max(...sines); // how far above and below the fire the seats reach
-  // About as big as the old fixed layout on a computer; taller on a phone, which has the height.
-  const ry = Math.max(40, Math.min(phone ? 320 : 208, (H - face - below) / (up + down || 1)));
-  const rx = Math.max(60, Math.min(phone ? 160 : 262, (W - labelW) / 2, Math.max(ry * (phone ? 1 : 1.8), phone ? 0 : 230)));
-  // Whatever height is left over is shared above and below.
-  const cy = Math.max(0, (H - face - below - (up + down) * ry) / 2) + face / 2 + up * ry;
+  const down = Math.max(...sines); // how far in front of the fire the nearest seats are
+  // A bigger circle spreads out wider and deeper, so neighbours' names don't run into each other.
+  const more = total > 8 ? 2 : total > 6 ? 1 : 0;
+  const rx = Math.max(60, Math.min(W * ((phone ? 0.34 : 0.37) + more * 0.03), (W - labelW * SEAT_FRONT) / 2));
+  const ry = Math.max(30, H * (0.16 + more * 0.025));
+  // Where the fire stands: two thirds of the way down, or higher when the front seats' labels need the room.
+  const g = Math.max(ry + face, Math.min(H * (phone ? 0.7 : 0.68), H - down * ry - (face / 2 + below) * SEAT_FRONT - 4));
+  const fire = Math.min(W * (phone ? 0.68 : 0.55), H * (phone ? 0.42 : 0.62));
   ring.style.setProperty('--face', `${face}px`);
-  ring.style.setProperty('--cy', `${cy}px`);
-  // The fire's size: the width the circle would have had in the old layout. On a phone the top
-  // seats' names hang close to the middle, so the flame also stays below them.
-  const fire = Math.min(rx / (phone ? 0.34 : 0.41), ry / (phone ? 0.433 : 0.325));
-  const underNames = (up * ry - face / 2 - below - 4) / 0.2;
-  ring.style.setProperty('--fire', `${phone ? Math.max(160, Math.min(fire, underNames)) : fire}px`);
+  ring.style.setProperty('--fire', `${fire}px`);
+  // The flame's picture is drawn so its foot is this far above its middle.
+  ring.style.setProperty('--cy', `${g - fire * (phone ? 0.144 : 0.12)}px`);
   ring.classList.toggle('crowded', total > 8);
+  ring.classList.toggle('at-table', backdrop === 'lounge');
+  fireGroundLayout(ring, { W, H, g, rx, ry, fire, phone, total, backdrop });
   return (el, i) => {
     el.dataset.i = i;
+    el.dataset.row = sines[i] < -0.05 ? 'back' : 'front';
     el.style.left = `${W / 2 + rx * Math.cos(angle(i))}px`;
-    el.style.top = `${cy + ry * sines[i]}px`;
+    el.style.top = `${g + ry * sines[i]}px`;
+    el.style.setProperty('--s', (SEAT_BACK + ((SEAT_FRONT - SEAT_BACK) * (sines[i] + 1)) / 2).toFixed(3));
   };
+}
+/** At the card table the far side's names go above their faces; each seat is moved so its face stays on its spot. */
+function anchorSeats(ring) {
+  ring.querySelectorAll('.seat').forEach((el) => {
+    const face = el.querySelector('.seat-face-wrap, .seat-face');
+    el.style.setProperty('--above', `${face ? face.offsetTop : 0}px`);
+  });
 }
 
 // The window or the chat beside the fire changed size: the circle is sized again and everyone moves with it.
@@ -747,6 +757,7 @@ new ResizeObserver(() => {
   if (!all.length) return;
   const place = sizeRing(ring, all.length, !!ring.querySelector('.seat-watch'));
   all.forEach((el) => place(el, Number(el.dataset.i)));
+  anchorSeats(ring);
 }).observe($('.fire-ring-wrap'));
 
 function renderFire() {
@@ -828,6 +839,7 @@ function renderFire() {
     }
     const wrap = seat.el.querySelector('.seat-face-wrap');
     decorateSeat(wrap, id);
+    fireSeatArt(wrap, seatKindOf(id));
     wrap.querySelector('.seat-live')?.remove();
     if (sharing?.screen) wrap.insertAdjacentHTML('beforeend', '<span class="seat-live">LIVE</span>');
     seat.el.className = 'seat' + (me ? ' me' : '') + (speaking ? ' speaking' : '') + (camTrack ? ' has-video' : '');
@@ -860,8 +872,10 @@ function renderFire() {
     el.className = 'seat open';
     el.innerHTML = '<span class="seat-face"></span><span class="seat-status">Open seat</span>';
     place(el, i);
+    fireSeatArt(el.querySelector('.seat-face'), ring.classList.contains('at-table') ? 'velvet' : 'stump');
     ring.append(el);
   }
+  anchorSeats(ring);
 }
 
 // The fireside chat is in view: docked beside the fire on a wide screen, or opened over it.

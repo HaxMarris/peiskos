@@ -697,7 +697,7 @@ function backdropLiveTick() {
   if (document.hidden && bdLive.css) return;
   const sky = daylight();
   const css = backdropCss(bdLive.id, sky);
-  if (css !== bdLive.css) { stage.style.background = css; bdLive.css = css; }
+  if (css !== bdLive.css) { stage.style.background = css; bdLive.css = css; fireGroundRefresh(); }
   const partsKey = [Math.round(sky.light * 8), Math.round(sky.warm * 4), sky.moon.up, sky.sun.up, Math.floor(sky.hour)].join();
   if (partsKey !== bdLive.partsKey) { stage.innerHTML = BACKDROP_LIVE[bdLive.id](sky); bdLive.partsKey = partsKey; }
   backdropCatch();

@@ -211,6 +211,14 @@ function fireItemOf(userId) {
   return null;
 }
 
+/** What someone sits on at this fire: the seat they picked in its hearth, else a stump (a cushion at the card table). */
+function seatKindOf(userId) {
+  const here = state.voice && roomById(state.voice.channelId)?.s;
+  const seat = here?.members?.find((x) => x.id === userId)?.seat;
+  if (seat && FIRE_ART.SEATS[seat]) return seat;
+  return $('#fire-ring').classList.contains('at-table') ? 'velvet' : 'stump';
+}
+
 /** Called by renderFire for each seat: the thing by it, and the look of the whole fire. */
 function decorateSeat(wrap, userId) {
   const id = fireItemOf(userId);
@@ -228,6 +236,7 @@ function decorateFire(s) {
   // A backdrop someone chose for themselves wins over one put up for the whole hearth; either hides the sky.
   const backdrop = hearth ? (BACKDROP_SCENES[s.myBackdrop] && s.myBackdrop) || (BACKDROP_SCENES[s.backdrop] && s.backdrop) || null : null;
   backdropLayer(backdrop, hearth ? s.id : null);
+  fireLogs(backdrop === 'lounge' ? 'money' : look === 'birch' ? 'birch' : 'crossed');
   if (!backdrop) skyLayer(hearth ? s.skyLook || 'evening' : 'evening');
   seasonLayer();
 }
@@ -318,6 +327,16 @@ async function openFireDecor() {
     return `<button type="button" class="decor-pick backdrop-pick" data-bd-buy="${b.id}" ${pets.chips >= b.price ? '' : 'disabled'}>
       ${art}<span>${escapeHtml(b.name)}</span><span class="small decor-price"><span class="chip-icon sm" aria-hidden="true"></span>${b.price.toLocaleString()}</span></button>`;
   };
+  // Seats: click one you have to sit on it at this hearth's fires.
+  const seatPick = (x) => {
+    const owned = pets.mySeats.includes(x.id);
+    const on = (pets.seat ?? 'stump') === x.id;
+    const art = `<span class="decor-art seat-pick-art"><svg viewBox="-4 -14 138 76" aria-hidden="true">${FIRE_ART.SEATS[x.id] ?? ''}</svg></span>`;
+    if (owned) return `<button type="button" class="decor-pick${on ? ' chosen' : ''}" data-seat="${x.id}" aria-pressed="${on}">
+      ${art}<span>${escapeHtml(x.name)}</span><span class="small muted">${on ? 'Sitting on it' : x.price ? 'Yours' : 'Free'}</span></button>`;
+    return `<button type="button" class="decor-pick" data-seat-buy="${x.id}" ${pets.chips >= x.price ? '' : 'disabled'}>
+      ${art}<span>${escapeHtml(x.name)}</span><span class="small decor-price"><span class="chip-icon sm" aria-hidden="true"></span>${x.price.toLocaleString()}</span></button>`;
+  };
   const look = (l) => {
     const open = fire.hours >= l.hours;
     return `<button type="button" class="decor-pick${fire.look === l.id ? ' chosen' : ''}" data-look="${l.id}" ${open && fire.canChange ? '' : 'disabled'} aria-pressed="${fire.look === l.id}">
@@ -340,6 +359,9 @@ async function openFireDecor() {
     ${pets ? `<h3>Premium pets</h3>
       <p class="small muted">Bought with chips from ${escapeHtml(hearth.name)}'s casino (you have <b>${pets.chips.toLocaleString()}</b> there). They're yours in ${escapeHtml(hearth.name)} only, and sit by your seat at its fires.</p>
       <div class="decor-grid" id="decor-pets">${pets.pets.map(pet).join('')}</div>
+      <h3>Seats</h3>
+      <p class="small muted">What you sit on at ${escapeHtml(hearth.name)}'s fires. Two are free; the rest are bought with its chips.</p>
+      <div class="decor-grid" id="decor-seats">${pets.seats.map(seatPick).join('')}</div>
       <h3>Backgrounds</h3>
       <p class="small muted">Scenes behind ${escapeHtml(hearth.name)}'s fires, bought with its chips. The one you pick shows for you.</p>
       <div class="decor-grid backdrop-grid" id="decor-backdrops">${pets.backdrops.map(backdrop).join('')}</div>
@@ -381,6 +403,30 @@ async function openFireDecor() {
     try {
       const r = await api(`/api/servers/${hearth.id}/casino/pets/${p.id}`, { method: 'POST', body: {} });
       setPet(r.pet);
+      if (typeof setWallet === 'function') setWallet(r.wallet, hearth.id);
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  /** Sits you on a seat in this hearth. */
+  const setSeat = (id) => {
+    const me = hearth.members?.find((m) => m.id === state.me.id);
+    if (me) me.seat = id;
+  };
+  for (const b of document.querySelectorAll('#decor-seats [data-seat]')) b.onclick = async () => {
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/seat`, { method: 'PUT', body: { seat: b.dataset.seat } });
+      setSeat(r.seat);
+      renderFire();
+      openFireDecor();
+    } catch (err) { alertError(err); }
+  };
+  for (const b of document.querySelectorAll('#decor-seats [data-seat-buy]')) b.onclick = async () => {
+    const x = pets.seats.find((y) => y.id === b.dataset.seatBuy);
+    if (!(await askConfirm(`Buy the ${x.name.toLowerCase()} for ${x.price.toLocaleString()} chips from ${hearth.name}'s casino?`))) return;
+    try {
+      const r = await api(`/api/servers/${hearth.id}/casino/seats/${x.id}`, { method: 'POST', body: {} });
+      setSeat(r.seat);
       if (typeof setWallet === 'function') setWallet(r.wallet, hearth.id);
       renderFire();
       openFireDecor();
@@ -746,6 +792,11 @@ function onCasinoBackdrop(ev) {
 function onCasinoPet(ev) {
   const m = state.servers.get(ev.serverId)?.members?.find((x) => x.id === ev.userId);
   if (m) m.pet = ev.pet;
+  if (state.voice) renderFire();
+}
+function onCasinoSeat(ev) {
+  const m = state.servers.get(ev.serverId)?.members?.find((x) => x.id === ev.userId);
+  if (m) m.seat = ev.seat;
   if (state.voice) renderFire();
 }
 

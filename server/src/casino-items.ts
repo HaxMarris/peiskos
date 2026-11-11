@@ -458,6 +458,22 @@ export const PETS = [
 // Cheapest first, in the picker.
 PETS.sort((a, b) => a.price - b.price);
 
+/** Seats around the fire, under your face (drawn in client/js/fire-ground.js). The free ones are everyone's. */
+export const SEATS = [
+  { id: 'stump', name: 'Tree stump', price: 0 },
+  { id: 'shadow', name: 'Just a shadow', price: 0 },
+  { id: 'rock', name: 'Mossy rock', price: 1_000 },
+  { id: 'bench', name: 'Log bench', price: 2_500 },
+  { id: 'cushion', name: 'Floor cushion', price: 5_000 },
+  { id: 'blankets', name: 'Folded blankets', price: 10_000 },
+  { id: 'hay', name: 'Hay bale', price: 15_000 },
+  { id: 'barrel', name: 'Barrel', price: 25_000 },
+  { id: 'knit', name: 'Knitted pouf', price: 50_000 },
+  { id: 'beanbag', name: 'Bean bag', price: 100_000 },
+  { id: 'velvet', name: 'Velvet cushion', price: 250_000 },
+  { id: 'royal', name: 'Royal cushion', price: 1_000_000 },
+];
+
 /** Backdrops: whole scenes behind the fire, bought with chips (drawn in client/js/backdrops.js). */
 export const BACKDROPS = [
   { id: 'fjord', name: 'Fjord night', price: 25_000 },

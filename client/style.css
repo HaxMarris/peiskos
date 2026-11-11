@@ -824,7 +824,7 @@ html.tile-full, html.tile-full body { overflow: hidden; }
 .fire-ring-wrap { flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; container-type: size; overflow-x: clip; }
 /* renderFire sets --face, where the fire sits (--cy) and how big it's drawn (--fire) to fit the space. */
 .fire-ring { position: relative; width: 100%; height: 100%; --face: 84px; --fire: 640px; }
-.fire-glow, .fire-core { position: absolute; left: 50%; top: var(--cy, 50%); translate: -50% -50%; border-radius: 50%; aspect-ratio: 1; }
+.fire-glow, .fire-core { z-index: 5; position: absolute; left: 50%; top: var(--cy, 50%); translate: -50% -50%; border-radius: 50%; aspect-ratio: 1; }
 .fire-glow { background: radial-gradient(circle, color-mix(in srgb, var(--glow) 34%, transparent), color-mix(in srgb, var(--ember) 10%, transparent) 60%, transparent 72%); }
 .fire-glow.outer { width: calc(var(--fire) * .47); }
 .fire-glow.inner { width: calc(var(--fire) * .28); animation: fire-breathe 3.2s ease-in-out infinite; }
@@ -837,7 +837,7 @@ html.tile-full, html.tile-full body { overflow: hidden; }
 @media (prefers-reduced-motion: reduce) { .fire-glow.inner, .fire-flame { animation: none; } }
 
 /* A seat is pinned by the middle of its face, so every face sits on the ring and the name hangs below. */
-.seat { --face-h: var(--face); position: absolute; translate: -50% calc(var(--face-h) / -2); width: 170px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; transition: left .3s, top .3s; }
+.seat { --face-h: var(--face); position: absolute; translate: -50% calc((var(--face-h) / 2 + var(--above, 0px)) * var(--s, 1) * -1); scale: var(--s, 1); transform-origin: 50% 0; z-index: 8; width: 170px; display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center; transition: left .3s, top .3s; }
 .seat-face-wrap { position: relative; display: grid; place-items: center; }
 .seat-face { display: grid; place-items: center; padding: 0; border: 0; background: none; border-radius: 50%; transition: box-shadow .12s; }
 button.seat-face { cursor: pointer; }
@@ -848,7 +848,7 @@ button.seat-face { cursor: pointer; }
 .seat-face.video video { width: 100%; height: 100%; object-fit: cover; }
 .seat.me .seat-face.video video { transform: scaleX(-1); }
 .seat-live { position: absolute; left: 50%; bottom: -8px; translate: -50% 0; background: #c4473e; color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .05em; border-radius: var(--radius-sm); padding: 2px 6px; }
-.seat-name { margin-top: 4px; max-width: 100%; font-weight: 800; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat-name { margin-top: calc(var(--face) * .42); max-width: 100%; font-weight: 800; color: var(--text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat-status { font-size: 12px; font-weight: 700; color: var(--muted); min-height: 1em; }
 .seat-status:empty { display: none; }
 .seat-status.talking { color: var(--moss); font-weight: 800; }
@@ -1787,7 +1787,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { [data-motion="system"] .season-layer, [data-motion="system"] .fire-sparks { display: none; } }
 
 /* Snow on the logs in winter, and a holiday guest or two by the fire. */
-.fire-snow, .birch-marks { display: none; }
+.fire-snow { display: none; }
 [data-season="winter"] .fire-snow { display: inline; }
 .fire-holiday { position: absolute; left: 50%; top: 66%; translate: -50% 0; display: flex; gap: 70px; font-size: 24px; pointer-events: none; }
 [data-holiday="halloween"] .fire-holiday::before { content: '🎃'; } [data-holiday="halloween"] .fire-holiday::after { content: '🦇'; }
@@ -1796,9 +1796,6 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 [data-holiday="midsummer"] .fire-holiday::before { content: '🌼'; } [data-holiday="midsummer"] .fire-holiday::after { content: '🌿'; }
 
 /* How a hearth's fire burns, unlocked by time around it. */
-.fire-ring[data-look="birch"] .birch-marks { display: inline; }
-.fire-ring[data-look="birch"] #fire-log stop:first-child { stop-color: #f4f1ea; }
-.fire-ring[data-look="birch"] #fire-log stop:last-child { stop-color: #cfc6b6; }
 .fire-ring[data-look="blue"] { --glow: #6fb3ff; --ember: #3a6fd8; }
 .fire-ring[data-look="blue"] #fire-outer stop:nth-child(1) { stop-color: #2b5fd9; }
 .fire-ring[data-look="blue"] #fire-outer stop:nth-child(2) { stop-color: #4f9cf5; }
@@ -2248,3 +2245,24 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .achievement { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); font-size: 18px; cursor: default; }
 .achievement img { width: 20px; height: 20px; }
 .achievement.locked { filter: grayscale(1); opacity: .4; }
+
+/* The fire on the ground (campfire.js sizeRing, fire-ground.js): the firelight on the ground, the stone ring
+   split around the logs, the seats under people's faces, a patch of ground for some backdrops, and the
+   casino lounge's card table. Far seats sit behind the fire, near ones in front. */
+.fire-ring .seat[data-row="back"] { z-index: 2; }
+.fire-ground { position: absolute; z-index: 0; pointer-events: none; }
+.fire-pool { position: absolute; left: 50%; translate: -50% -50%; border-radius: 50%; z-index: 1; pointer-events: none;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--glow) 40%, transparent), color-mix(in srgb, var(--ember) 13%, transparent) 55%, transparent); }
+.fire-pit { position: absolute; left: 50%; translate: -50% -50%; pointer-events: none; z-index: 4; }
+.fire-pit.front { z-index: 6; }
+.fire-table { position: absolute; z-index: 3; pointer-events: none; }
+.seat-art { position: absolute; left: 50%; top: calc(var(--face-h) * .66); translate: -50% 0; width: calc(var(--face-h) * 1.6); aspect-ratio: 130 / 60; z-index: -1; pointer-events: none; }
+.seat-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.seat.open .seat-art { opacity: .55; }
+.seat-face-wrap, .seat.open .seat-face { position: relative; }
+.fire-ring.at-table .seat[data-row="back"] :is(.seat-name, .seat-status) { order: -1; position: relative; z-index: 3; }
+.fire-ring.at-table .seat[data-row="back"] .seat-name { margin-top: 0; }
+.fire-ring.at-table .seat[data-row="back"] .seat-art { display: none; }
+.fire-ring-wrap .bd-stage { scale: 1.3; transform-origin: 50% 100%; }
+.seat-pick-art svg { width: 100%; height: 100%; overflow: visible; }
+.seat-pick-art { display: block; width: 72px; height: 40px; margin: 0 auto; }

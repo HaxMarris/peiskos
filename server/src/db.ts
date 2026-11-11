@@ -803,6 +803,7 @@ function addCasino(db: Db) {
   addColumn(db, 'casino_items', 'locked', 'INTEGER NOT NULL DEFAULT 0'); // locked skins can't be sold, traded up or upgraded
   addColumn(db, 'casino_wallets', 'pet', 'TEXT'); // the premium pet they have by their seat at this hearth's fires
   addColumn(db, 'casino_wallets', 'backdrop', 'TEXT'); // the backdrop they see behind this hearth's fires
+  addColumn(db, 'casino_wallets', 'seat', 'TEXT'); // what they sit on at this hearth's fires (null: a tree stump)
   addColumn(db, 'servers', 'backdrop', 'TEXT'); // a backdrop someone who can edit the hearth put up for everyone
   db.exec(`
     -- Premium pets someone bought with a hearth's chips.
@@ -812,6 +813,14 @@ function addCasino(db: Db) {
       pet_id    TEXT NOT NULL,
       bought_at INTEGER NOT NULL,
       PRIMARY KEY (user_id, server_id, pet_id)
+    );
+    -- Seats someone bought with a hearth's chips.
+    CREATE TABLE IF NOT EXISTS casino_seats (
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      seat_id   TEXT NOT NULL,
+      bought_at INTEGER NOT NULL,
+      PRIMARY KEY (user_id, server_id, seat_id)
     );
     -- Backdrops someone bought with a hearth's chips.
     CREATE TABLE IF NOT EXISTS casino_backdrops (

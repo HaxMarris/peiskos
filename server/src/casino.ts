@@ -9,7 +9,7 @@ import { inTransaction, type Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 import { PokerTable, MAX_SEATS, shuffledDeck, type Action, type Card } from './poker.ts';
 import {
-  BACKDROPS, CASES, PETS, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
+  BACKDROPS, CASES, PETS, SEATS, RARITY_ODDS, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, STATTRAK_CHANCE, STATTRAK_VALUE, WEARS,
   linePays, type Rarity, type Skin,
 } from './casino-items.ts';
 
@@ -475,10 +475,54 @@ export function casino(ctx: CasinoContext) {
     return backdropsView(user.id, h);
   });
 
+  // ---- seats: what you sit on at this hearth's fires. The free ones are everyone's; the rest are bought with chips.
+  const ownsSeat = (userId: number, h: number, id: string) =>
+    SEATS.some((x) => x.id === id && x.price === 0) || !!db.prepare('SELECT 1 FROM casino_seats WHERE user_id = ? AND server_id = ? AND seat_id = ?').get(userId, h, id);
+  const seatsView = (userId: number, h: number) => ({
+    seats: SEATS,
+    mySeats: [
+      ...SEATS.filter((x) => x.price === 0).map((x) => x.id),
+      ...(db.prepare('SELECT seat_id AS id FROM casino_seats WHERE user_id = ? AND server_id = ?').all(userId, h) as { id: string }[]).map((r) => r.id),
+    ],
+    seat: (db.prepare('SELECT seat FROM casino_wallets WHERE user_id = ? AND server_id = ?').get(userId, h) as { seat: string | null } | undefined)?.seat ?? null,
+  });
+  /** Everyone in the hearth sees what someone sits on change. */
+  const seatChanged = (userId: number, h: number, seat: string | null) =>
+    ctx.sendTo(ctx.serverMemberIds(h), { type: 'casino_seat', serverId: h, userId, seat });
+
+  route('POST', '/api/servers/:id/casino/seats/:code', ({ user, params }) => {
+    const h = hearth(params[0], user.id);
+    play(user);
+    const seat = SEATS.find((x) => x.id === params[1]);
+    if (!seat) throw fail(404, 'No such seat');
+    inTransaction(db, () => {
+      if (ownsSeat(user.id, h, seat.id)) throw fail(400, 'You already have that one');
+      take(user.id, h, seat.price);
+      db.prepare('INSERT INTO casino_seats (user_id, server_id, seat_id, bought_at) VALUES (?, ?, ?, ?)').run(user.id, h, seat.id, Date.now());
+      db.prepare('UPDATE casino_wallets SET seat = ? WHERE user_id = ? AND server_id = ?').run(seat.id, user.id, h);
+    });
+    walletChanged(user.id, h);
+    seatChanged(user.id, h, seat.id);
+    return { wallet: walletView(user.id, h), ...seatsView(user.id, h) };
+  });
+
+  /** Which of your seats you sit on here. */
+  route('PUT', '/api/servers/:id/casino/seat', ({ user, params, body }) => {
+    const h = hearth(params[0], user.id);
+    play(user);
+    const id = typeof body.seat === 'string' ? body.seat : null;
+    if (id !== null && !ownsSeat(user.id, h, id)) throw fail(400, "That seat isn't yours");
+    wallet(user.id, h);
+    const stored = id === 'stump' ? null : id; // the stump is what everyone has to start with
+    db.prepare('UPDATE casino_wallets SET seat = ? WHERE user_id = ? AND server_id = ?').run(stored, user.id, h);
+    seatChanged(user.id, h, stored);
+    return seatsView(user.id, h);
+  });
+
   /** For the fire settings picker: the pets, which you have here, the one out, and your chips here. */
   route('GET', '/api/servers/:id/casino/pets', ({ user, params }) => {
     const h = hearth(params[0], user.id);
-    return { ...petsView(user.id, h), ...backdropsView(user.id, h), chips: wallet(user.id, h).chips };
+    return { ...petsView(user.id, h), ...backdropsView(user.id, h), ...seatsView(user.id, h), chips: wallet(user.id, h).chips };
   });
 
   route('POST', '/api/servers/:id/casino/pets/:code', ({ user, params }) => {

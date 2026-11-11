@@ -525,6 +525,22 @@ test('locks, trade ups, the upgrader and pets', async () => {
   assert.equal((await call(`${C}/backdrops/cabin`, { body: {}, token: sam.token })).status, 200);
   assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: 'cabin', hearth: true }, token: sam.token })).status, 403);
   assert.equal((await call(`${C}/backdrop`, { method: 'PUT', body: { backdrop: null }, token: t })).data.backdrop, null);
+
+  // Seats: the stump and the shadow are everyone's; the rest are bought with this hearth's chips.
+  const seats = (await call(`${C}/pets`, { token: t })).data;
+  assert.deepEqual([seats.mySeats, seats.seat], [['stump', 'shadow'], null]);
+  assert.equal((await call(`${C}/seat`, { method: 'PUT', body: { seat: 'shadow' }, token: t })).data.seat, 'shadow');
+  assert.equal((await call(`${C}/seat`, { method: 'PUT', body: { seat: 'royal' }, token: t })).status, 400); // not bought
+  assert.equal((await call(`${C}/seats/stump`, { body: {}, token: t })).status, 400); // already everyone's
+  assert.equal((await call(`${C}/seats/nope`, { body: {}, token: t })).status, 404);
+  db.prepare('UPDATE casino_wallets SET chips = 10000 WHERE user_id = ? AND server_id = ?').run(max.user.id, home.id);
+  assert.equal((await call(`${C}/seats/royal`, { body: {}, token: t })).status, 400); // too dear
+  const blankets = (await call(`${C}/seats/blankets`, { body: {}, token: t })).data;
+  assert.deepEqual([blankets.wallet.chips, blankets.mySeats, blankets.seat], [0, ['stump', 'shadow', 'blankets'], 'blankets']);
+  const sitting = (await call('/api/servers', { token: sam.token })).data.find((x: any) => x.id === home.id);
+  assert.equal(sitting.members.find((m: any) => m.id === max.user.id).seat, 'blankets');
+  // Back on the stump, which is stored as nothing picked.
+  assert.equal((await call(`${C}/seat`, { method: 'PUT', body: { seat: 'stump' }, token: t })).data.seat, null);
 });
 
 test('case battles at the fire', async (t) => {
