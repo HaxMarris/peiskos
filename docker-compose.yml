@@ -82,6 +82,12 @@ services:
           tcp_port: 7881
           udp_port: 7882
           use_external_ip: true
+        # LiveKit tells Peiskos when someone joins or leaves a voice room, so the room's list is
+        # right even if an app never says so. Signed with the same key, and checked by Peiskos.
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:-}
+          urls:
+            - ${LIVEKIT_WEBHOOK_URL:-http://127.0.0.1:3000/api/livekit/webhook}
         logging:
           level: info
 

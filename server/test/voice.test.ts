@@ -1,6 +1,6 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import { createServer, type Server } from 'node:http';
 import { WebSocket } from 'ws';
@@ -20,9 +20,16 @@ const fakeLiveKit = createServer((req, res) => {
       claims: JSON.parse(Buffer.from(p, 'base64url').toString()),
       valid: createHmac('sha256', voice.apiSecret).update(`${h}.${p}`).digest('base64url') === sig,
     });
-    res.writeHead(200, { 'content-type': 'application/json' }).end('{}');
+    const method = req.url!.split('/').pop()!;
+    const answer =
+      method === 'ListParticipants' ? { participants: (inLiveKit.get(JSON.parse(raw).room) ?? []).map((identity) => ({ identity, state: 'ACTIVE' })) }
+      : method === 'ListRooms' ? { rooms: [...inLiveKit.keys()].map((name) => ({ name })) }
+      : {};
+    res.writeHead(200, { 'content-type': 'application/json' }).end(JSON.stringify(answer));
   });
 });
+// Who the stand-in LiveKit says is in each room (room name -> identities).
+const inLiveKit = new Map<string, string[]>();
 const voice = { apiKey: 'devkey', apiSecret: 'a-secret-that-is-at-least-32-characters-long', apiUrl: '' };
 const apps: Server[] = [];
 const bases: string[] = [];
@@ -239,4 +246,119 @@ test('voice is off without LiveKit settings', async () => {
   const withVoice = (await call(base, `/api/servers/${server.id}/channels`, { body: { name: 'Talk', kind: 'voice' }, token: max.token })).data;
   const room = withVoice.channels.find((c: any) => c.kind === 'voice');
   assert.equal((await call(base, `/api/channels/${room.id}/voice`, { body: {}, token: max.token })).status, 503);
+});
+
+// A webhook the way LiveKit sends one: the body, and a JWT in Authorization that carries the body's hash.
+function webhook(base: string, event: unknown, change: { secret?: string; claims?: Record<string, unknown>; header?: Record<string, unknown>; body?: string } = {}) {
+  const body = JSON.stringify(event);
+  const b64 = (v: unknown) => Buffer.from(JSON.stringify(v)).toString('base64url');
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64({ alg: 'HS256', typ: 'JWT', ...change.header });
+  const payload = b64({ iss: voice.apiKey, nbf: now - 5, exp: now + 300, sha256: createHash('sha256').update(body).digest('base64'), ...change.claims });
+  const sig = createHmac('sha256', change.secret ?? voice.apiSecret).update(`${head}.${payload}`).digest('base64url');
+  return fetch(`${base}/api/livekit/webhook`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/webhook+json', authorization: `${head}.${payload}.${sig}` },
+    body: change.body ?? body,
+  });
+}
+
+test('LiveKit webhooks: only signed ones count, and the fire then shows who LiveKit says is there', async () => {
+  const base = bases[0];
+  const app = apps[0] as Server & { sweepFires(): Promise<void>; checkFire(channelId: number, secondLook?: boolean): Promise<void> };
+  const reg = async (username: string) => (await call(base, '/api/register', { body: { username, password: 'password1' } })).data;
+  const host = await reg('hook-host');
+  const ana = await reg('hook-ana');
+  const bo = await reg('hook-birk');
+  const stranger = await reg('hook-stranger');
+  const server = (await call(base, '/api/servers', { body: { name: 'Hooks' }, token: host.token })).data;
+  for (const u of [ana, bo]) await call(base, '/api/join', { body: { inviteCode: server.inviteCode }, token: u.token });
+  const fires = (await call(base, `/api/servers/${server.id}/channels`, { body: { name: 'Second', kind: 'voice' }, token: host.token })).data.channels.filter((c: any) => c.kind === 'voice');
+  const [fire, second] = fires;
+  const name = `room-${fire.id}`;
+  const hostWs = socket(base, host.token);
+  await hostWs.next((e) => e.type === 'ready');
+  const seen = async () => (await call(base, '/api/servers', { token: host.token })).data.find((s: any) => s.id === server.id).channels.find((c: any) => c.id === fire.id).voiceUsers;
+  const joined = (identity: number) => ({ event: 'participant_joined', room: { name }, participant: { identity: String(identity) }, id: 'EV_1', createdAt: Math.floor(Date.now() / 1000) });
+
+  // Anything not signed by our LiveKit is turned away, and changes nothing.
+  inLiveKit.set(name, [String(ana.user.id)]);
+  assert.equal((await webhook(base, joined(ana.user.id), { secret: 'someone-elses-secret-that-is-long-enough' })).status, 401);
+  assert.equal((await webhook(base, joined(ana.user.id), { body: JSON.stringify(joined(bo.user.id)) })).status, 401); // body changed on the way
+  assert.equal((await webhook(base, joined(ana.user.id), { claims: { exp: Math.floor(Date.now() / 1000) - 10 } })).status, 401);
+  assert.equal((await webhook(base, joined(ana.user.id), { claims: { iss: 'another-key' } })).status, 401);
+  assert.equal((await webhook(base, joined(ana.user.id), { header: { alg: 'none' } })).status, 401);
+  assert.equal((await fetch(`${base}/api/livekit/webhook`, { method: 'POST', body: '{}' })).status, 401);
+  assert.equal((await webhook(bases[1], joined(ana.user.id))).status, 404); // voice is off there
+  assert.deepEqual(await seen(), []);
+
+  // Ana's app joined LiveKit without ever saying so: the webhook gets her announced to the hearth.
+  assert.equal((await webhook(base, joined(ana.user.id))).status, 200);
+  assert.deepEqual((await hostWs.next((e) => e.type === 'voice_state' && e.channelId === fire.id)).userIds, [ana.user.id]);
+  // The same webhook again (LiveKit retries, or someone replays it) changes nothing.
+  assert.equal((await webhook(base, joined(ana.user.id))).status, 200);
+  await app.checkFire(fire.id);
+  assert.deepEqual(await seen(), [ana.user.id]);
+
+  // What counts is LiveKit's own list, not what the webhook claims: Bo is named but isn't there.
+  await webhook(base, joined(bo.user.id));
+  await app.checkFire(fire.id);
+  assert.deepEqual(await seen(), [ana.user.id]);
+
+  // She leaves LiveKit: off the list for everyone.
+  inLiveKit.set(name, []);
+  await webhook(base, { ...joined(ana.user.id), event: 'participant_left' });
+  assert.deepEqual((await hostWs.next((e) => e.type === 'voice_state' && e.channelId === fire.id)).userIds, []);
+
+  // Someone whose app said it sat down stays, even while LiveKit doesn't have them (reconnecting).
+  const boWs = socket(base, bo.token);
+  await boWs.next((e) => e.type === 'ready');
+  boWs.ws.send(JSON.stringify({ type: 'voice_join', channelId: fire.id }));
+  await hostWs.next((e) => e.type === 'voice_state' && e.userIds.includes(bo.user.id));
+  await webhook(base, { ...joined(bo.user.id), event: 'participant_left' });
+  await app.checkFire(fire.id);
+  assert.deepEqual(await seen(), [bo.user.id]);
+
+  // A webhook that never arrived is caught by the sweep, which asks LiveKit which rooms are open.
+  inLiveKit.set(name, [String(bo.user.id), String(ana.user.id)]);
+  await app.sweepFires();
+  assert.deepEqual((await seen()).sort(), [ana.user.id, bo.user.id].sort());
+  inLiveKit.set(name, [String(bo.user.id)]);
+  await app.sweepFires();
+  assert.deepEqual(await seen(), [bo.user.id]);
+
+  // Someone in LiveKit who isn't in the hearth is taken out of LiveKit, not shown.
+  liveKitCalls.length = 0;
+  inLiveKit.set(name, [String(bo.user.id), String(stranger.user.id), 'not-a-number']);
+  await webhook(base, joined(stranger.user.id));
+  await app.checkFire(fire.id);
+  for (let i = 0; i < 100 && liveKitCalls.filter((c) => c.method === 'RemoveParticipant').length < 2; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(liveKitCalls.filter((c) => c.method === 'RemoveParticipant').map((c) => c.body.identity).sort(), ['not-a-number', String(stranger.user.id)].sort());
+  assert.deepEqual(await seen(), [bo.user.id]);
+
+  // Bo turns up in a second fire in LiveKit while his app sits at the first. The first look waits
+  // (he may be changing fires); still in both at the second, he's moved, his app is told, and
+  // LiveKit takes him out of the first.
+  inLiveKit.set(name, [String(bo.user.id)]);
+  inLiveKit.set(`room-${second.id}`, [String(bo.user.id)]);
+  liveKitCalls.length = 0;
+  await app.checkFire(second.id);
+  assert.deepEqual(await seen(), [bo.user.id]);
+  await app.checkFire(second.id, true);
+  assert.equal((await boWs.next((e) => e.type === 'voice_elsewhere')).channelId, second.id);
+  assert.deepEqual(await seen(), []);
+  for (let i = 0; i < 100 && !liveKitCalls.some((c) => c.method === 'RemoveParticipant'); i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(liveKitCalls.filter((c) => c.method === 'RemoveParticipant').map((c) => [c.body.room, c.body.identity]), [[name, String(bo.user.id)]]);
+
+  // His app closes without LiveKit letting go: the sweep keeps him shown until LiveKit says he left.
+  inLiveKit.delete(name);
+  boWs.ws.close();
+  await hostWs.next((e) => e.type === 'presence' && e.userId === bo.user.id && !e.online).catch(() => {});
+  await app.sweepFires();
+  const at = async (id: number) => (await call(base, '/api/servers', { token: host.token })).data.find((s: any) => s.id === server.id).channels.find((c: any) => c.id === id).voiceUsers;
+  assert.deepEqual(await at(second.id), [bo.user.id]);
+  inLiveKit.delete(`room-${second.id}`);
+  await app.sweepFires();
+  assert.deepEqual(await at(second.id), []);
+  hostWs.ws.close();
 });

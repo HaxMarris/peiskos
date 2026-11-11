@@ -110,6 +110,7 @@ Data goes to `server/data/chat.db`.
 | `MIN_FREE_DISK_MB`  | `2048`                 | Uploads pause while the disk has less than this free.               |
 | `LIVEKIT_URL`       | same address as Peiskos | Where apps reach LiveKit, if not routed through Peiskos's address.   |
 | `LIVEKIT_API_URL`   | `http://localhost:7880` | Where Peiskos reaches LiveKit to disconnect removed people (Docker Compose points it at the host). |
+| `LIVEKIT_WEBHOOK_URL` | `http://127.0.0.1:3000/api/livekit/webhook` | Docker Compose only: where LiveKit tells Peiskos that someone joined or left a voice room. Change it only if Peiskos isn't on port 3000 of the same machine. |
 | `KLIPY_API_KEY`     | unset (GIFs off)       | Turns on the GIF picker. See *GIFs* below.                          |
 | `GIF_RATING`        | `pg-13`                | Which GIFs search shows: `g`, `pg`, `pg-13` or `r`.                 |
 | `SMTP_URL`          | unset (email off)      | Mail server for password reset emails. See *Email* below.           |
@@ -156,6 +157,20 @@ the voice bar shows the room is encrypted. Everyone needs an up-to-date app for 
 
 Removing someone from a hearth, or leaving it, disconnects them from its voice rooms straight away.
 Peiskos asks LiveKit to do this directly (`LIVEKIT_API_URL`; Docker Compose sets it up).
+
+Who's in a voice room comes from LiveKit itself as well as from the apps. LiveKit tells Peiskos when
+someone joins or leaves (a webhook to `/api/livekit/webhook`, signed with the voice secret; anything
+else sent there is turned away), and Peiskos then checks the room against LiveKit's own list. So
+someone listening is always shown, even if their app never said it joined or lost its connection to
+Peiskos. Once a minute Peiskos checks every open room again, in case a webhook was missed. Docker
+Compose sets this up; running LiveKit yourself, add to its config:
+
+```yaml
+webhook:
+  api_key: <your LIVEKIT_API_KEY>
+  urls:
+    - http://127.0.0.1:3000/api/livekit/webhook
+```
 
 1. Copy `.env.example` to `.env` in the same folder as `docker-compose.yml`, and replace the secret
    with the output of `openssl rand -base64 32`.
