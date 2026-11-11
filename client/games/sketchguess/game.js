@@ -396,7 +396,8 @@ function hostGuess(from, text) {
 
 function hostStroke(by, part) {
   if (G?.phase !== 'draw' || by !== G.drawer || !part || typeof part.id !== 'string' || !Array.isArray(part.points)) return;
-  part = { id: part.id.slice(0, 24), color: String(part.color).slice(0, 9), size: Math.min(60, Math.max(1, Number(part.size) || 10)), erase: !!part.erase, points: part.points.slice(0, 400) };
+  if (part.fill && by !== Peiskos.me.id && fillTooFast(by)) return;
+  part = { id: part.id.slice(0, 24), color: String(part.color).slice(0, 9), size: Math.min(60, Math.max(1, Number(part.size) || 10)), erase: !!part.erase && !part.fill, fill: !!part.fill, points: part.points.slice(0, part.fill ? 1 : 400) };
   if (by !== Peiskos.me.id) sc.add(part, by);
   Peiskos.send('all', { type: 'stroke', by, part });
 }
