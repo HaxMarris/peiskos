@@ -328,6 +328,9 @@ async function selectServer(id, initial = false, open = null) {
 }
 
 function renderChannels() {
+  keepFocus($('.sidebar'), drawChannels);
+}
+function drawChannels() {
   // The card's heading and buttons follow the burrow and your role in it, which can change at any time.
   const s = state.servers.get(state.serverId);
   $('#server-name').textContent = state.inDms ? 'Direct messages' : s?.name ?? 'No hearth yet';
@@ -357,7 +360,13 @@ function renderChannels() {
     if (c.id === state.channelId) li.classList.add('active');
     if (isUnread(c) && (roomLoud(s, c) || c.mentions)) li.classList.add('unread');
     li.prepend(roomIcon());
-    if (!readingNow(c.id) && c.mentions && n.level !== 'none') li.append(pingCount(c.mentions));
+    const pings = !readingNow(c.id) && c.mentions && n.level !== 'none' ? c.mentions : 0;
+    if (pings) li.append(pingCount(pings));
+    li.dataset.key = `room-${c.id}`;
+    rowMain(li, name, {
+      role: 'link', current: c.id === state.channelId,
+      label: rowLabel(c.name, c.private && 'private', pings && (pings === 1 ? '1 mention' : `${pings} mentions`), !pings && li.classList.contains('unread') && 'unread', li.classList.contains('muted-room') && 'muted'),
+    });
     li.onclick = () => { selectChannel(c.id); showView('chat'); };
     onHold(li, () => openNotifyMenu(li, s, c, manager ? [{ label: 'Room settings', run: () => openRoomSettings(c) }] : []));
     if (manager) li.append(roomSettingsButton(c));
@@ -400,6 +409,8 @@ function renderChannels() {
       onHold(li, () => openRoomSettings(c));
     }
     li.title = joined ? 'Open the fire' : 'Join voice';
+    li.dataset.key = `room-${c.id}`;
+    rowMain(li, li.querySelector('.room-name'), { label: rowLabel(c.name, sub, c.private && 'private', joined ? 'open the fire' : 'join voice') });
     li.onclick = () => (joined ? goToVoice() : joinVoice(c.id));
     const people = ids.map((id) => {
       const name = nameOfPerson(s.members.find((m) => m.id === id)) ?? '?';
@@ -693,6 +704,8 @@ function renderMembers() {
         li.classList.add('can-dm');
         li.onclick = () => openPerson(s, m);
         li.dataset.hoverUser = m.id;
+        li.dataset.key = `member-${m.id}`;
+        rowMain(li, name, { label: rowLabel(nameOfPerson(m), m.bot && 'bot', STATUS_LABELS[statusOf(m)], role ? role.name : host && 'Host', isBirthdayToday(m.birthday) && 'birthday today') });
         if (canActOn(s, m)) {
           const more = iconButton('⋯', `Manage ${nameOfPerson(m)}`, (e) => { e.stopPropagation(); openMemberMenu(s, m); });
           more.classList.add('member-more');
@@ -703,10 +716,10 @@ function renderMembers() {
     );
     return [h, ul];
   };
-  $('#member-list').replaceChildren(
+  keepFocus($('#member-list'), () => $('#member-list').replaceChildren(
     ...section('Online', members.filter((m) => m.online)),
     ...section('Offline', members.filter((m) => !m.online)),
-  );
+  ));
   renderChannelSub();
 }
 

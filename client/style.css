@@ -1658,6 +1658,12 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 /* Where the keyboard is, always visible when using one. */
 :where(button, a, [tabindex], select, summary, [role="button"], [role="link"], [role="option"]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 #channel-list li:focus-visible, #dm-list li:focus-visible { outline-offset: -2px; }
+/* A row that's clicked as a whole: the keyboard lands on its name, and the ring goes round the row. */
+.row-main:focus-visible { outline: none; }
+.focus-row:has(.row-main:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.member-pane .focus-row:has(.row-main:focus-visible) .member-more { opacity: 1; }
+/* Dimmed rows (offline, muted) come up to full strength, so the ring is as clear as anywhere else. */
+.member-pane li.offline.focus-row:has(.row-main:focus-visible), #channel-list li.muted-room.focus-row:has(.row-main:focus-visible) { opacity: 1; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .skip-link { position: absolute; left: 8px; top: -60px; z-index: 1000; padding: 8px 14px; border-radius: var(--radius-md); background: var(--accent-text); color: var(--accent-ink); font-weight: 800; }
 .skip-link:focus { top: 8px; }
@@ -1995,7 +2001,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (hover: hover) {
   #channel-list li.dm { position: relative; }
   #channel-list li.dm .dm-close { position: absolute; right: 8px; top: 50%; translate: 0 -50%; margin: 0; border-radius: 50%; }
-  #channel-list li.dm:hover .dm-side, #channel-list li.dm:has(.dm-close:focus-visible) .dm-side { visibility: hidden; }
+  #channel-list li.dm:hover .dm-side, #channel-list li.dm:focus-within .dm-side { visibility: hidden; }
 }
 #channel-list li.friends-row { min-height: 54px; border: 1px solid var(--line); margin-bottom: 6px; }
 #channel-list li.friends-row .group-avatar { width: 40px; height: 40px; border-radius: 50%; }

@@ -174,9 +174,9 @@ function groupHeading(s, g, rooms) {
   const name = document.createElement('span');
   name.textContent = g.name;
   li.append(name);
-  li.setAttribute('role', 'button');
-  li.setAttribute('aria-expanded', String(!folded));
   if (folded && rooms.some((c) => isUnread(c) && roomLoud(s, c))) li.classList.add('unread');
+  li.dataset.key = `heading-${g.id}`;
+  rowMain(li, name, { label: rowLabel(g.name, li.classList.contains('unread') && 'unread') }).setAttribute('aria-expanded', String(!folded));
   li.onclick = () => { store.set(foldKey(g.id), folded ? null : '1'); renderChannels(); };
   if (can(s, 'rooms') && !isPhone()) dropTarget(li, () => moveRoom(s, draggingRoom, { groupId: g.id }));
   return li;
@@ -719,13 +719,18 @@ function renderEvents(s) {
     li.querySelector('b').textContent = e.title;
     const mine = e.rsvps.find((r) => r.userId === state.me.id)?.status;
     li.querySelector('.muted').textContent = `${eventWhen(e.startsAt)} · ${going(e)} going${mine === 'going' ? ', you too' : ''}`;
+    li.dataset.key = `event-${e.id}`;
+    rowMain(li, li.querySelector('.event-text'), { label: rowLabel(e.title, li.querySelector('.muted').textContent) });
     li.onclick = () => openEvent(s.id, e.id);
     return li;
   });
   if (events.length > 4) {
     const more = document.createElement('li');
     more.className = 'event-more';
-    more.textContent = `${events.length - 4} more`;
+    const text = document.createElement('span');
+    text.textContent = `${events.length - 4} more`;
+    more.append(rowMain(more, text, { label: `${events.length - 4} more events` }));
+    more.dataset.key = 'event-more';
     more.onclick = () => openEventList(s.id);
     rows.push(more);
   }
@@ -743,7 +748,7 @@ function openEventList(serverId) {
   const s = state.servers.get(serverId);
   modal(`<h2>Events in ${escapeHtml(s.name)}</h2>
     ${s.events.length ? '' : emptyNote('Nothing planned yet', "Plan a game night, a call or a trip, and everyone here can say if they're coming.")}
-    <ul class="event-list big">${s.events.map((e) => `<li class="event-row" data-ev="${e.id}">${CALENDAR_ICON}<span class="event-text"><b>${escapeHtml(e.title)}</b><span class="small muted">${escapeHtml(eventWhen(e.startsAt))} · ${going(e)} going</span></span></li>`).join('')}</ul>
+    <ul class="event-list big">${s.events.map((e) => `<li class="event-row focus-row" data-ev="${e.id}">${CALENDAR_ICON}<span class="event-text row-main" role="button" tabindex="0" aria-label="${escapeHtml(rowLabel(e.title, `${eventWhen(e.startsAt)} · ${going(e)} going`))}"><b>${escapeHtml(e.title)}</b><span class="small muted">${escapeHtml(eventWhen(e.startsAt))} · ${going(e)} going</span></span></li>`).join('')}</ul>
     <div class="modal-row"><button class="btn secondary" id="ev-feed">Add to your calendar</button><span class="spacer"></span><button class="btn" id="ev-new">Plan an event</button></div>`);
   $('#ev-feed').onclick = openCalendarFeed;
   $('#modal-card').querySelectorAll('[data-ev]').forEach((li) => (li.onclick = () => openEvent(serverId, Number(li.dataset.ev))));
