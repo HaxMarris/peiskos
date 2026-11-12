@@ -114,3 +114,40 @@ function composer(id, label, max, action, send) {
   row.append(input, go);
   return row;
 }
+
+// ---------- the host's side: one copy of the game runs in the host's page and tells the rest
+
+/**
+ * What the host's copy does the same way in every party game: sends each player their own view,
+ * answers a page that has just loaded, and picks the scores back up when the page loads again
+ * (popping out, say). `state()` is the host's game, with its `scores`; the rest are the game's own.
+ */
+function partyHost({ state, viewFor, onView, hostMsg, hostLobby, render }) {
+  const broadcast = () => {
+    for (const p of Peiskos.players) {
+      const d = { type: 'state', view: viewFor(p.id) };
+      if (p.id === Peiskos.me.id) onView(d); else Peiskos.send(p.id, d);
+    }
+    Peiskos.snapshot({ scores: [...state().scores] });
+  };
+  /** A page that has just loaded asks where the game is. True when that's what this message was. */
+  const hello = (from, d) => {
+    if (d.type !== 'hello') return false;
+    if (!state().scores.has(from)) state().scores.set(from, 0);
+    Peiskos.send(from, { type: 'state', view: viewFor(from) });
+    return true;
+  };
+  Peiskos.on('msg', (from, d) => {
+    if (Peiskos.isHost) return hostMsg(from, d);
+    if (from === Peiskos.hostId) onView(d);
+  });
+  Peiskos.on('init', (resume) => {
+    if (Peiskos.isHost) {
+      hostLobby();
+      const scores = state().scores;
+      if (resume && Array.isArray(resume.scores)) { for (const [id, pts] of resume.scores) if (scores.has(id)) scores.set(id, Number(pts) || 0); broadcast(); }
+    } else Peiskos.send(Peiskos.hostId, { type: 'hello' });
+    render();
+  });
+  return { broadcast, hello };
+}
