@@ -3,3 +3,5 @@ server/data/
 desktop/app/
 desktop/dist/
 .env
+e2e/failures/
+/node_modules

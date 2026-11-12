@@ -160,6 +160,14 @@ function renderLobby() {
 
 // ---------- the hearth's own questions (anyone playing can add them)
 
+/** The host's list of categories counts the hearth's own, so it's fetched again when anyone changes them. */
+let ownTimer = 0;
+function ownChanged() {
+  if (!Peiskos.isHost) return Peiskos.send(Peiskos.hostId, { type: 'own' });
+  clearTimeout(ownTimer);
+  ownTimer = setTimeout(loadCategories, 300);
+}
+
 async function openOwn() {
   page = 'own';
   panel.replaceChildren(el('h2', '', 'Our questions'), el('p', 'muted small', 'Questions about your own group. They come up under "Our hearth".'));
@@ -175,8 +183,7 @@ async function openOwn() {
       for (const x of [q, a, ...w]) x.value = '';
       fill(r);
       showToast('Question added');
-      categories = null;
-      if (Peiskos.isHost) loadCategories();
+      ownChanged();
     } catch (err) { showToast(err.message); }
   });
   form.append(q, a, ...w, add);
@@ -188,7 +195,7 @@ async function openOwn() {
       const li = el('li');
       li.append(el('span', '', `${item.question} (${item.answer})`));
       if (item.mine) li.append(btn('Remove', 'link', async () => {
-        try { fill(await Peiskos.api(`/api/servers/${Peiskos.serverId}/trivia/${item.id}`, 'DELETE')); } catch (err) { showToast(err.message); }
+        try { fill(await Peiskos.api(`/api/servers/${Peiskos.serverId}/trivia/${item.id}`, 'DELETE')); ownChanged(); } catch (err) { showToast(err.message); }
       }));
       list.append(li);
     }
@@ -310,6 +317,8 @@ function hostMsg(from, d) {
   if (d.type === 'hello') {
     if (!G.scores.has(from)) G.scores.set(from, 0);
     Peiskos.send(from, { type: 'state', view: viewFor(from) });
+  } else if (d.type === 'own') {
+    ownChanged();
   } else if (d.type === 'answer' && G.phase === 'question' && d.index === G.index && !G.picks.has(from)) {
     const choice = Number(d.choice);
     if (!Number.isInteger(choice) || choice < 0 || choice >= G.questions[G.index].answers.length) return;

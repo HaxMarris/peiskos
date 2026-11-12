@@ -428,8 +428,10 @@ function hostMsg(from, d) {
     if (from !== Peiskos.me.id) sc.clear();
     Peiskos.send('all', { type: 'clear' });
   } else if (from === G.drawer && G.phase === 'draw' && d.type === 'undo') {
-    const s = sc.strokes.get(String(d.id));
-    if (s && (s.by === from || (from === Peiskos.me.id && s.by == null))) { sc.remove(s.id); Peiskos.send('all', { type: 'remove', id: s.id }); }
+    const id = String(d.id).slice(0, 24);
+    const s = sc.strokes.get(id);
+    // The host's own copy has already taken its stroke off the page by the time this runs.
+    if (from === Peiskos.me.id ? !s || s.by == null : s?.by === from) { sc.remove(id); Peiskos.send('all', { type: 'remove', id }); }
   }
 }
 

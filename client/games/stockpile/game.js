@@ -427,7 +427,9 @@ function peekable(f, uid, i){
   if(!canHover) return;
   f.addEventListener('mouseenter', ()=>{
     clearTimeout(peekTimer);
-    peekTimer = setTimeout(()=> openPeek(uid, i, f), 250);
+    // Only if the mouse is still on this pile: the table may have been drawn again meanwhile, and a pile
+    // that's been thrown away can't say the mouse has left it.
+    peekTimer = setTimeout(()=>{ if(f.isConnected && f.matches(':hover')) openPeek(uid, i, f, true); }, 250);
   });
   f.addEventListener('mouseleave', ()=>{
     clearTimeout(peekTimer);
@@ -440,11 +442,11 @@ function togglePeek(uid, i, anchor){
   else openPeek(uid, i, anchor);
 }
 
-function openPeek(uid, i, anchor){
+function openPeek(uid, i, anchor, hover){
   const seat = view && view.seats.find(s=>s.uid===uid);
   const cards = seat && seat.discards[i];
   if(!cards || cards.length < 2) return closePeek();
-  peekAt = {uid, i, anchor};
+  peekAt = {uid, i, anchor, hover: !!hover};
   const box = $('peek');
   box.replaceChildren();
   box.appendChild(el('div', 'peek-title', (uid === me.id ? 'Your' : seat.name + "'s") + ' discard pile ' + (i + 1) + ' · ' + cards.length + ' cards'));
@@ -475,7 +477,7 @@ function closePeek(){
 function refreshPeek(){
   if(!peekAt) return;
   const anchor = document.querySelector('[data-peek="' + peekAt.uid + ':' + peekAt.i + '"]');
-  if(anchor) openPeek(peekAt.uid, peekAt.i, anchor);
+  if(anchor) openPeek(peekAt.uid, peekAt.i, anchor, peekAt.hover);
   else closePeek();
 }
 
@@ -581,6 +583,12 @@ let resizeTimer = 0;
 window.addEventListener('resize', ()=>{
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(()=>{ if(view && view.phase !== 'lobby') renderTable(); }, 120);
+});
+// A pile opened by resting the mouse on it closes once the mouse is somewhere else. The piles are
+// drawn again with every move, so the one the mouse was on may be gone and never say the mouse left,
+// which left its cards open over the table.
+$('table').addEventListener('mousemove', (e)=>{
+  if(peekAt && peekAt.hover && !e.target.closest('[data-peek="' + peekAt.uid + ':' + peekAt.i + '"]')) closePeek();
 });
 // Tapping the table (not a card) puts the card back down.
 $('table').addEventListener('click', (e)=>{
