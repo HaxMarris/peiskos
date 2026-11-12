@@ -423,6 +423,20 @@ test('sharing a screen posts "is live" in the go-live room, and stopping marks i
   assert.equal(lives.length, 1);
   b.ws.close();
 
+  // A fire that someone in the go-live room can't see isn't announced there.
+  const [cy] = await people('cy');
+  await call('/api/join', { body: { inviteCode: server.inviteCode }, token: cy.token });
+  const hidden = (await call(`/api/servers/${server.id}/channels`, { body: { name: 'Back room', kind: 'voice', private: true, memberIds: [bob.user.id] }, token: host.token }))
+    .data.channels.find((c: any) => c.name === 'Back room').id;
+  const b3 = await socket(bob.token);
+  b3.send({ type: 'voice_join', channelId: hidden });
+  await b3.next((e) => e.type === 'voice_state' && e.userIds.includes(bob.user.id));
+  b3.send({ type: 'voice_live', live: true });
+  await new Promise((r) => setTimeout(r, 200));
+  assert.ok(!b3.events.some((e) => e.type === 'message'));
+  assert.equal((await call(`/api/channels/${general}/messages`, { token: cy.token })).data.filter((m: any) => m.live).length, 1);
+  b3.ws.close();
+
   // Without a go-live room, nothing is posted.
   await call(`/api/servers/${server.id}`, { method: 'PATCH', body: { liveChannelId: null }, token: host.token });
   const b2 = await socket(bob.token);
