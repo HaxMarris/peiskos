@@ -5550,7 +5550,7 @@ export function createApp(opts: AppOptions): Server {
     }
     const files = db.prepare('SELECT avatar, banner FROM users WHERE id = ?').get(user.id) as { avatar: string | null; banner: string | null };
     for (const f of [files.avatar, files.banner]) if (f && opts.uploadDir) unlink(avatarPath(f)).catch(() => {});
-    for (const table of ['friends_a', 'friends_b', 'blocks', 'blocks_by', 'passkeys', 'push_subs', 'scheduled_messages', 'saved_messages']) {
+    for (const table of ['friends_a', 'friends_b', 'blocks', 'blocks_by', 'passkeys', 'push_subs', 'scheduled_messages', 'saved_messages', 'drafts', 'calendar_feeds']) {
       const [t, col] =
         table === 'friends_a' ? ['friends', 'user_a'] : table === 'friends_b' ? ['friends', 'user_b'] : table === 'blocks_by' ? ['blocks', 'blocked_id'] : [table, 'user_id'];
       try { db.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).run(user.id); } catch { /* a table this server doesn't have */ }

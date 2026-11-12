@@ -328,7 +328,12 @@ test('deleting your account', async () => {
   const ned = await register('ned');
   await call('/api/join', { body: { inviteCode: other.inviteCode }, token: ned.token });
   await call(`/api/channels/${other.channels[0].id}/messages`, { body: { content: 'gone soon' }, token: ned.token });
+  // An unsent message and a calendar feed go with the account too.
+  assert.equal((await call(`/api/channels/${other.channels[0].id}/draft`, { body: { content: 'half typed' }, token: ned.token })).status, 200);
+  assert.equal((await call('/api/me/calendar', { body: {}, token: ned.token })).status, 200);
   assert.equal((await call('/api/me', { method: 'DELETE', body: { password: 'password1', deleteMessages: true }, token: ned.token })).status, 200);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM drafts WHERE user_id = ?').get(ned.user.id).n, 0);
+  assert.equal(db.prepare('SELECT COUNT(*) AS n FROM calendar_feeds WHERE user_id = ?').get(ned.user.id).n, 0);
   const after = (await call(`/api/channels/${other.channels[0].id}/messages`, { token: mo.token })).data;
   assert.ok(!after.some((m: any) => m.content === 'gone soon'));
 });
