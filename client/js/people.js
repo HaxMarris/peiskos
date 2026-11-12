@@ -58,7 +58,15 @@ function scheduleRejoin(again) {
   const tries = (state.rejoin?.tries ?? 0) + 1;
   clearTimeout(state.rejoin?.timer);
   // Ten minutes of trying is plenty; by then you've probably moved on.
-  if (tries > 14) { cancelRejoin(); return renderVoiceBar(); }
+  if (tries > 14) {
+    cancelRejoin();
+    renderVoiceBar();
+    if (roomById(again.channelId)) {
+      toast(`Couldn't get back to ${fireName(roomById(again.channelId).c)}.`, { kind: 'error', timeout: 60000, action: 'Rejoin',
+        onAction: () => joinVoice(again.channelId, { muted: again.muted, deafened: again.deafened }) });
+    }
+    return;
+  }
   const delay = Math.min(60000, 1000 * 2 ** Math.min(tries - 1, 6));
   state.rejoin = { ...again, tries, timer: setTimeout(rejoinNow, navigator.onLine === false ? 60000 : delay) };
   if (!state.voice) voicePhase.to('rejoining');
@@ -82,6 +90,8 @@ function cancelRejoin() {
 }
 // The network's back: don't wait out the backoff.
 window.addEventListener('online', () => { if (state.rejoin) rejoinNow(); });
+// Back on screen: a phone holds timers back while Peiskos is hidden, so the next try may be long overdue.
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.rejoin && navigator.onLine !== false) rejoinNow(); });
 
 function leaveVoiceIfGone() {
   if (!state.voice) return;

@@ -127,7 +127,7 @@ function prefetch(paths) {
   }
 }
 
-async function api(path, { method = 'GET', body } = {}, retried = false) {
+async function api(path, { method = 'GET', body, timeout } = {}, retried = false) {
   const ask = () => fetch(state.serverUrl + path, {
     method,
     headers: {
@@ -135,15 +135,17 @@ async function api(path, { method = 'GET', body } = {}, retried = false) {
       ...(state.token ? { authorization: 'Bearer ' + state.token } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    // A request on a dead network can hang for minutes; with a timeout it fails like any other.
+    ...(timeout ? { signal: AbortSignal.timeout(timeout) } : {}),
   });
   const early = method === 'GET' && !retried ? prefetched.get(path) : null;
   if (early) prefetched.delete(path);
   const res = await (early ? early.catch(ask) : ask());
   if (res.redirected) adoptOrigin(res.url);
-  if (res.redirected && res.status === 401 && !retried) return api(path, { method, body }, true);
+  if (res.redirected && res.status === 401 && !retried) return api(path, { method, body, timeout }, true);
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && state.token && path !== '/api/login') logout(false);
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status });
   return data;
 }
 
