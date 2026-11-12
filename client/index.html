@@ -331,27 +331,17 @@
                 <div class="fire-glow inner"></div>
                 <svg class="fire-core" viewBox="0 0 200 220" aria-hidden="true">
                   <defs>
-                    <linearGradient id="fire-log" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9a7462"/><stop offset="1" stop-color="#6a4c3c"/></linearGradient>
                     <linearGradient id="fire-outer" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2501d"/><stop offset=".45" stop-color="#f28a35"/><stop offset="1" stop-color="#ffc768"/></linearGradient>
                     <radialGradient id="fire-inner" cx=".5" cy=".85" r=".75"><stop offset="0" stop-color="#fffbea"/><stop offset=".45" stop-color="#ffe29a"/><stop offset="1" stop-color="#ffb04f"/></radialGradient>
                     <radialGradient id="fire-base" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#fff3c4" stop-opacity=".95"/><stop offset="1" stop-color="#ffc46b" stop-opacity="0"/></radialGradient>
                   </defs>
-                  <g class="fire-logs">
-                    <rect x="12" y="180" width="176" height="20" rx="10" fill="url(#fire-log)" transform="rotate(-9 100 190)"/>
-                    <rect x="12" y="180" width="176" height="20" rx="10" fill="url(#fire-log)" transform="rotate(9 100 190)"/>
+                  <g class="fire-logs"></g>
+                  <g class="fire-flames" transform="translate(100 196) scale(.8) translate(-100 -196)">
+                    <path class="fire-flame outer" fill="url(#fire-outer)" d="M100 14c4 30 14 48 22 64 3-10 3-20 0-30 20 18 32 46 32 84 0 38-24 66-54 66s-54-28-54-64c0-30 16-50 30-66 2 14 7 24 14 30-4-34 0-62 10-84Z"/>
+                    <path class="fire-flame inner" fill="url(#fire-inner)" d="M104 102c10 16 26 30 26 58 0 22-13 36-30 36s-30-14-30-34c0-16 8-26 16-34 1 8 4 13 8 16-2-16 2-30 10-42Z"/>
+                    <ellipse cx="100" cy="186" rx="34" ry="14" fill="url(#fire-base)"/>
                   </g>
-                  <g class="birch-marks" fill="#3b3430">
-                    <rect x="30" y="185" width="12" height="3" rx="1.5" transform="rotate(-9 100 190)"/><rect x="62" y="193" width="8" height="3" rx="1.5" transform="rotate(-9 100 190)"/>
-                    <rect x="150" y="186" width="14" height="3" rx="1.5" transform="rotate(-9 100 190)"/><rect x="40" y="194" width="9" height="3" rx="1.5" transform="rotate(9 100 190)"/>
-                    <rect x="128" y="185" width="12" height="3" rx="1.5" transform="rotate(9 100 190)"/><rect x="165" y="192" width="8" height="3" rx="1.5" transform="rotate(9 100 190)"/>
-                  </g>
-                  <g class="fire-snow" fill="#fbfdff">
-                    <rect x="14" y="176" width="44" height="8" rx="4" transform="rotate(-9 100 190)"/><rect x="150" y="176" width="36" height="8" rx="4" transform="rotate(9 100 190)"/>
-                    <rect x="20" y="177" width="30" height="7" rx="3.5" transform="rotate(9 100 190)"/><rect x="146" y="177" width="40" height="7" rx="3.5" transform="rotate(-9 100 190)"/>
-                  </g>
-                  <path class="fire-flame outer" fill="url(#fire-outer)" d="M100 14c4 30 14 48 22 64 3-10 3-20 0-30 20 18 32 46 32 84 0 38-24 66-54 66s-54-28-54-64c0-30 16-50 30-66 2 14 7 24 14 30-4-34 0-62 10-84Z"/>
-                  <path class="fire-flame inner" fill="url(#fire-inner)" d="M104 102c10 16 26 30 26 58 0 22-13 36-30 36s-30-14-30-34c0-16 8-26 16-34 1 8 4 13 8 16-2-16 2-30 10-42Z"/>
-                  <ellipse cx="100" cy="186" rx="34" ry="14" fill="url(#fire-base)"/>
+                  <g class="fire-logs-front"></g>
                 </svg>
                 <div class="fire-sparks" id="fire-sparks" aria-hidden="true"></div>
                 <div class="fire-holiday" aria-hidden="true"></div>
@@ -568,7 +558,10 @@
   <script src="js/organization.js"></script>
   <script src="js/apps.js"></script>
   <script src="js/hosting.js"></script>
+  <script src="js/daylight.js"></script>
   <script src="js/backdrops.js"></script>
+  <script src="js/backdrops-live.js"></script>
+  <script src="js/fire-ground.js"></script>
   <script src="js/extras.js"></script>
   <script src="js/shell.js"></script>
 </body>

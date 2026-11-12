@@ -995,6 +995,9 @@ function handleEvent(ev) {
     case 'casino_backdrop':
       onCasinoBackdrop(ev);
       break;
+    case 'casino_seat':
+      onCasinoSeat(ev);
+      break;
     case 'slot_spin':
       onSlotSpin(ev);
       break;

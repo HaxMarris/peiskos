@@ -393,7 +393,8 @@ export function createApp(opts: AppOptions): Server {
         `SELECT u.id, u.username, u.display_name AS displayName, m.nickname, m.shown_role_id AS shownRoleId, u.accent, ${avatarUrl('u.avatar')} AS avatar,
                 u.deleted_at IS NOT NULL AS deleted, m.voice_muted AS voiceMuted, m.timeout_until AS timeoutUntil, u.bot,
                 u.birthday, u.fire_item AS fireItem,
-                (SELECT pet FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS pet
+                (SELECT pet FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS pet,
+                (SELECT seat FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS seat
          FROM members m JOIN users u ON u.id = m.user_id
          WHERE m.server_id = ? ORDER BY u.username`,
       )
