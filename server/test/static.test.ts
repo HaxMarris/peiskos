@@ -163,3 +163,39 @@ test("the page's own <meta> security policy is left out when served (the header 
   assert.ok(!res.body.toString().includes('http-equiv'), 'a <meta> policy stops browsers fetching the scripts in parallel');
   assert.match(String(res.headers['content-security-policy']), /script-src 'self'/);
 });
+
+test('JSON answers are compressed when they are big enough to be worth it', async () => {
+  const { token } = await fetch(`http://localhost:${port}/api/register`, {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'packer', password: 'correct horse battery' }),
+  }).then((r) => r.json()) as { token: string };
+  const auth = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  const hearth = await fetch(`http://localhost:${port}/api/servers`, { method: 'POST', headers: auth, body: JSON.stringify({ name: 'Packed' }) }).then((r) => r.json()) as { channels: { id: number; kind: string }[] };
+  const room = hearth.channels.find((c) => c.kind === 'text')!.id;
+  for (let i = 0; i < 12; i++)
+    await fetch(`http://localhost:${port}/api/channels/${room}/messages`, { method: 'POST', headers: auth, body: JSON.stringify({ content: `message number ${i}` }) });
+
+  const path = `/api/channels/${room}/messages?limit=50`;
+  const plain = await get(path, { authorization: auth.authorization });
+  assert.equal(plain.headers['content-encoding'], undefined);
+  assert.equal(plain.headers.vary, 'accept-encoding');
+  assert.equal(JSON.parse(plain.body.toString()).length, 12);
+
+  const br = await get(path, { authorization: auth.authorization, 'accept-encoding': 'gzip, deflate, br' });
+  assert.equal(br.headers['content-encoding'], 'br');
+  assert.equal(Number(br.headers['content-length']), br.body.length);
+  assert.ok(br.body.length < plain.body.length / 2);
+  assert.deepEqual(JSON.parse(brotliDecompressSync(br.body).toString()), JSON.parse(plain.body.toString()));
+
+  const gz = await get(path, { authorization: auth.authorization, 'accept-encoding': 'gzip' });
+  assert.equal(gz.headers['content-encoding'], 'gzip');
+  assert.deepEqual(JSON.parse(gunzipSync(gz.body).toString()), JSON.parse(plain.body.toString()));
+
+  // Turned down outright (q=0), it isn't used.
+  const no = await get(path, { authorization: auth.authorization, 'accept-encoding': 'br;q=0, gzip;q=0' });
+  assert.equal(no.headers['content-encoding'], undefined);
+
+  // A short answer goes as it is.
+  const small = await get('/api/config', { 'accept-encoding': 'gzip, deflate, br' });
+  assert.equal(small.headers['content-encoding'], undefined);
+  assert.ok(JSON.parse(small.body.toString()));
+});

@@ -61,6 +61,9 @@ const app = createApp({
 });
 
 app.listen(port, () => {
+  // The app's files are compressed the first time someone asks for them, which takes a second or
+  // two. Asking once now means the first person to open Peiskos after a restart doesn't wait for it.
+  fetch(`http://localhost:${port}/`, { headers: { 'accept-encoding': 'br' } }).then((r) => r.arrayBuffer()).catch(() => {});
   console.log(`Chat server listening on http://localhost:${port}`);
   console.log(`Database: ${dbFile}`);
   console.log(backupKeep > 0 ? `Daily backups: ${backupDir} (keeping ${backupKeep})` : 'Daily backups are off.');
