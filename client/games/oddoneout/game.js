@@ -215,13 +215,6 @@ function viewFor(id) {
   if (G.phase === 'reveal') Object.assign(v, { caught: G.caught, gone: G.gone, words: G.words, guess: G.guess, guessRight: G.guessRight, gains: [...G.gains] });
   return v;
 }
-function broadcast() {
-  for (const p of Peiskos.players) {
-    const d = { type: 'state', view: viewFor(p.id) };
-    if (p.id === Peiskos.me.id) onView(d); else Peiskos.send(p.id, d);
-  }
-  Peiskos.snapshot({ scores: [...G.scores] });
-}
 
 function hostStart() {
   if (G.phase !== 'lobby' || Peiskos.players.length < MIN_PLAYERS) return;
@@ -305,10 +298,7 @@ function hostTick() {
 
 function hostMsg(from, d) {
   if (!G) return;
-  if (d.type === 'hello') {
-    if (!G.scores.has(from)) G.scores.set(from, 0);
-    return Peiskos.send(from, { type: 'state', view: viewFor(from) });
-  }
+  if (hello(from, d)) return;
   if (d.round !== G.round) return;
   if (d.type === 'clue' && G.phase === 'clue' && from === giver()) {
     const clue = tidy(d.clue, CLUE_MAX);
@@ -331,11 +321,6 @@ function hostMsg(from, d) {
   }
 }
 
-Peiskos.on('msg', (from, d) => {
-  if (Peiskos.isHost) return hostMsg(from, d);
-  if (from === Peiskos.hostId) onView(d);
-});
-
 Peiskos.on('players', (players) => {
   if (!Peiskos.isHost) { if (view.phase === 'lobby') render(); return; }
   for (const p of players) if (!G.scores.has(p.id)) G.scores.set(p.id, 0);
@@ -351,12 +336,8 @@ Peiskos.on('players', (players) => {
   broadcast();
 });
 
-Peiskos.on('init', (resume) => {
-  if (Peiskos.isHost) {
-    hostLobby();
-    if (resume && Array.isArray(resume.scores)) { for (const [id, pts] of resume.scores) if (G.scores.has(id)) G.scores.set(id, Number(pts) || 0); broadcast(); }
-  } else Peiskos.send(Peiskos.hostId, { type: 'hello' });
-  render();
-});
+// Sending each player their view, late joiners, and picking the scores back up are the same in
+// every party game (shared/party.js).
+const { broadcast, hello } = partyHost({ state: () => G, viewFor, onView, hostMsg, hostLobby, render });
 
 // Leaving is in Peiskos's game bar; the host ending the game ends it for everyone.
