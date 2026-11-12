@@ -136,13 +136,6 @@ function viewFor(id) {
   else Object.assign(v, { groups: G.groups, quiet: G.quiet });
   return v;
 }
-function broadcast() {
-  for (const p of Peiskos.players) {
-    const d = { type: 'state', view: viewFor(p.id) };
-    if (p.id === Peiskos.me.id) onView(d); else Peiskos.send(p.id, d);
-  }
-  Peiskos.snapshot({ scores: [...G.scores] });
-}
 
 function hostStart() {
   if (G.phase !== 'lobby' || Peiskos.players.length < 2) return;
@@ -194,21 +187,14 @@ function hostTick() {
 
 function hostMsg(from, d) {
   if (!G) return;
-  if (d.type === 'hello') {
-    if (!G.scores.has(from)) G.scores.set(from, 0);
-    Peiskos.send(from, { type: 'state', view: viewFor(from) });
-  } else if (d.type === 'answer' && G.phase === 'answer' && d.index === G.index && !G.answers.has(from)) {
+  if (hello(from, d)) return;
+  if (d.type === 'answer' && G.phase === 'answer' && d.index === G.index && !G.answers.has(from)) {
     const answer = tidy(d.answer, ANSWER_MAX);
     if (!plain(answer)) return;
     G.answers.set(from, answer);
     if (Peiskos.players.every((p) => G.answers.has(p.id))) reveal(); else broadcast();
   }
 }
-
-Peiskos.on('msg', (from, d) => {
-  if (Peiskos.isHost) return hostMsg(from, d);
-  if (from === Peiskos.hostId) onView(d);
-});
 
 Peiskos.on('players', (players) => {
   if (!Peiskos.isHost) { if (view.phase === 'lobby') render(); return; }
@@ -217,12 +203,8 @@ Peiskos.on('players', (players) => {
   broadcast();
 });
 
-Peiskos.on('init', (resume) => {
-  if (Peiskos.isHost) {
-    hostLobby();
-    if (resume && Array.isArray(resume.scores)) { for (const [id, pts] of resume.scores) if (G.scores.has(id)) G.scores.set(id, Number(pts) || 0); broadcast(); }
-  } else Peiskos.send(Peiskos.hostId, { type: 'hello' });
-  render();
-});
+// Sending each player their view, late joiners, and picking the scores back up are the same in
+// every party game (shared/party.js).
+const { broadcast, hello } = partyHost({ state: () => G, viewFor, onView, hostMsg, hostLobby, render });
 
 // Leaving is in Peiskos's game bar; the host ending the game ends it for everyone.
