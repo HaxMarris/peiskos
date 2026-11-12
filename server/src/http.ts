@@ -3,6 +3,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { BlockList, isIP } from 'node:net';
+import { brotliCompressSync, constants, gzipSync } from 'node:zlib';
 
 export type Json = Record<string, unknown>;
 
@@ -95,9 +96,29 @@ export const readBody = (req: IncomingMessage) =>
     req.on('error', reject);
   });
 
+/**
+ * Answers with JSON. Anything bigger than a line or two goes compressed when the browser takes it:
+ * a hearth's list of people and rooms, or a page of messages, is mostly repeated field names and
+ * shrinks to a fifth or less, which is most of what opening Peiskos downloads besides the app itself.
+ * (Quick settings: this runs for every answer, so it has to cost well under a millisecond.)
+ */
 export const send = (res: ServerResponse, status: number, data: unknown) => {
-  res.writeHead(status, { 'content-type': 'application/json' });
-  res.end(JSON.stringify(data));
+  const headers: Record<string, string | number> = { 'content-type': 'application/json' };
+  let body = Buffer.from(JSON.stringify(data) ?? '');
+  if (body.length > 1024) {
+    const accepts = String(res.req?.headers['accept-encoding'] ?? '');
+    headers.vary = 'accept-encoding';
+    if (/\bbr\b(?!\s*;\s*q=0(\.0*)?\s*(,|$))/.test(accepts)) {
+      body = brotliCompressSync(body, { params: { [constants.BROTLI_PARAM_QUALITY]: 4, [constants.BROTLI_PARAM_SIZE_HINT]: body.length } });
+      headers['content-encoding'] = 'br';
+    } else if (/\bgzip\b(?!\s*;\s*q=0(\.0*)?\s*(,|$))/.test(accepts)) {
+      body = gzipSync(body, { level: 5 });
+      headers['content-encoding'] = 'gzip';
+    }
+  }
+  headers['content-length'] = body.length;
+  res.writeHead(status, headers);
+  res.end(body);
 };
 
 /** Reads a raw request body (an upload) into memory, failing with `tooBig` past `max` bytes. */

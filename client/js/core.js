@@ -126,8 +126,22 @@ function prefetch(paths) {
     prefetched.set(path, res);
   }
 }
+// What opening Peiskos needs first: who you are, your hearths and conversations, and the room you were last in.
+function startPaths() {
+  const room = state.lastChannel[state.serverId];
+  return ['/api/me', '/api/config', '/api/servers', '/api/dms', '/api/me/favorites', '/api/drafts', '/api/me/saved', '/api/me/scheduled', '/api/friends',
+    ...(room ? [`/api/channels/${room}/messages?limit=50`] : [])];
+}
+// In a browser they're asked for right here, while the rest of the app's scripts are still
+// downloading, so the answers are usually waiting by the time the app starts. (The apps carry
+// their scripts with them, and check the server's address first.)
+let prefetchedAs = null; // the login those early answers are for
+if (!isApp && state.token && !new URLSearchParams(location.search).has('reset')) {
+  prefetchedAs = state.token;
+  prefetch(startPaths());
+}
 
-async function api(path, { method = 'GET', body } = {}, retried = false) {
+async function api(path, { method = 'GET', body, timeout } = {}, retried = false) {
   const ask = () => fetch(state.serverUrl + path, {
     method,
     headers: {
@@ -135,15 +149,17 @@ async function api(path, { method = 'GET', body } = {}, retried = false) {
       ...(state.token ? { authorization: 'Bearer ' + state.token } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+    // A request on a dead network can hang for minutes; with a timeout it fails like any other.
+    ...(timeout ? { signal: AbortSignal.timeout(timeout) } : {}),
   });
   const early = method === 'GET' && !retried ? prefetched.get(path) : null;
   if (early) prefetched.delete(path);
   const res = await (early ? early.catch(ask) : ask());
   if (res.redirected) adoptOrigin(res.url);
-  if (res.redirected && res.status === 401 && !retried) return api(path, { method, body }, true);
+  if (res.redirected && res.status === 401 && !retried) return api(path, { method, body, timeout }, true);
   const data = await res.json().catch(() => ({}));
   if (res.status === 401 && state.token && path !== '/api/login') logout(false);
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!res.ok) throw Object.assign(new Error(data.error || `Request failed (${res.status})`), { status: res.status });
   return data;
 }
 
@@ -536,9 +552,10 @@ $('#logout').addEventListener('click', () => logout());
 // ---------------------------------------------------------------- app bootstrap
 
 async function enterApp() {
-  const room = state.lastChannel[state.serverId];
-  prefetch(['/api/me', '/api/config', '/api/servers', '/api/dms', '/api/me/favorites', '/api/drafts', '/api/me/saved', '/api/me/scheduled', '/api/friends',
-    ...(room ? [`/api/channels/${room}/messages?limit=50`] : [])]);
+  // Early answers asked for as someone else (you logged in as another account since) aren't yours.
+  if (prefetchedAs !== state.token) prefetched.clear();
+  prefetchedAs = null;
+  prefetch(startPaths().filter((path) => !prefetched.has(path)));
   try { await enterAppNow(); } finally { prefetched.clear(); }
 }
 async function enterAppNow() {

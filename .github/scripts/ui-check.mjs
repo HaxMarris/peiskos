@@ -12,7 +12,7 @@ import { chromium } from 'playwright';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
-const SPEED_BUDGET_MS = 3500; // about 2.2s today
+const SPEED_BUDGET_MS = 3500; // about 1.8s today
 const BYTES_BUDGET = 600_000; // compressed bytes for a cold open; about 415 kB today
 
 const base = process.env.BASE_URL ?? 'http://localhost:3000';

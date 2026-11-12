@@ -229,9 +229,9 @@ async function loadNewer() {
   try {
     const newer = await api(`/api/channels/${channelId}/messages?limit=50&after=${state.messages.at(-1).id}`);
     if (channelId !== state.channelId) return;
-    state.messages.push(...newer);
     state.reachedEnd = newer.length < 50;
-    renderMessages();
+    showNewer(newer);
+    dropOldest(MOST_MESSAGES);
     renderPresentBar();
     if (state.reachedEnd) markReadSoon();
   } catch {} finally {
