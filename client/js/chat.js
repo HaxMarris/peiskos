@@ -493,15 +493,20 @@ let mention = null; // { start, matches, index } while the list is open
 function updateMentions() {
   const s = state.servers.get(state.serverId);
   const before = input.value.slice(0, input.selectionStart);
-  const hit = input.selectionStart === input.selectionEnd && /(^|\s)@([\w.-]*)$/.exec(before);
+  const caret = input.selectionStart === input.selectionEnd;
+  const pingable = s && !isDm(s) && can(s, 'everyone');
+  // Role names can have spaces: "@Real G" keeps the list open while it's the start of a role's name.
+  const roleHit = caret && pingable && /(^|\s)@([^@\n]{1,32})$/.exec(before);
+  const spaced = roleHit && /\s/.test(roleHit[2]) && (s.roles ?? []).some((r) => r.name.toLowerCase().startsWith(roleHit[2].toLowerCase()));
+  const hit = spaced ? roleHit : caret && /(^|\s)@([\w.-]*)$/.exec(before);
   if (!s || !hit) return closeMentions();
   const q = hit[2].toLowerCase();
-  const people = s.members
+  const people = spaced ? [] : s.members
     .filter((m) => m.id !== state.me.id && !m.deleted && (m.username.toLowerCase().includes(q) || nameOfPerson(m).toLowerCase().includes(q)))
     .sort((a, b) => b.username.toLowerCase().startsWith(q) - a.username.toLowerCase().startsWith(q)
       || !!b.online - !!a.online || nameOfPerson(a).localeCompare(nameOfPerson(b)));
   // People allowed to can ping everyone, everyone online, or a role.
-  const groups = !isDm(s) && can(s, 'everyone') ? [
+  const groups = pingable ? [
     { username: 'everyone', ping: 'Everyone who can see this room' },
     { username: 'here', ping: "Everyone who's online now" },
     ...(s.roles ?? []).map((r) => ({ username: r.name, ping: 'Everyone with this role', color: r.color })),

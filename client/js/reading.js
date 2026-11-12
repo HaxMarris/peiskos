@@ -923,12 +923,26 @@ function highlight(code, lang) {
       : CODE_KEYWORDS.has(t) ? `<span class="tok-k">${t}</span>` : t);
 }
 
+// @Role for this hearth's roles, longest first so "@Real Gamers" wins over "@Real". Role names can
+// have spaces, so the plain @word rule below would only catch the first word.
+const roleMentionCache = { key: null, re: null };
+function roleMentionRe() {
+  const names = (state.servers.get(state.serverId)?.roles ?? [])
+    .map((r) => escapeHtml(r.name)).filter((n) => /[^\w.-]/.test(n)).sort((a, b) => b.length - a.length);
+  const key = names.join('\n');
+  if (key === roleMentionCache.key) return roleMentionCache.re;
+  roleMentionCache.key = key;
+  roleMentionCache.re = names.length ? new RegExp(`(^|\\s)@(${names.map(escapeRegex).join('|')})(?![\\w-])`, 'gi') : null;
+  return roleMentionCache.re;
+}
+
 function formatContent(text) {
   if (!text) return '';
   const keep = [];
   const stash = (html) => `\u0000${keep.push(html) - 1}\u0001`;
   const link = (u) => stash(`<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
-  const inline = (t) => t
+  const roleRe = roleMentionRe();
+  const inline = (t) => (roleRe ? t.replace(roleRe, (_, pre, name) => pre + stash(`<span class="mention">@${name}</span>`)) : t)
     .replace(/&lt;:(\w{2,32}):(\d+)&gt;/g, (_, name, id) => stash(customEmojiImg(name, Number(id))))
     .replace(EMOJI_RE, (e) => stash(emojiImg(e)))
     .replace(/&lt;(https?:\/\/[^\s<]+?)&gt;/g, (_, u) => link(u))
