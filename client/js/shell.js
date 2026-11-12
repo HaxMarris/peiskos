@@ -25,15 +25,34 @@ function placeholder(kind = 'lines', n = 3) {
 }
 function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
+// Dates and times are written through formatters made once each: making one costs far more than
+// using it, and a room draws a time for every message. They're made again when you come back to
+// Peiskos, in case the computer's time zone or language changed meanwhile.
+const dateFormats = new Map();
+function dateFormat(name, options) {
+  let f = dateFormats.get(name);
+  if (!f) dateFormats.set(name, f = new Intl.DateTimeFormat(undefined, options));
+  return f;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) dateFormats.clear(); });
+/** "9:41 PM" */
+const clockTime = (d) => dateFormat('clock', { hour: 'numeric', minute: '2-digit' }).format(d);
+/** The date and time in full, as toLocaleString() writes them: "11/11/2026, 9:41:07 PM" */
+const fullDateTime = (d) => dateFormat('full', { year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', second: 'numeric' }).format(d);
+/** "Wednesday, November 11", with the year when it isn't this one. */
+const longDay = (d) => (d.getFullYear() === new Date().getFullYear()
+  ? dateFormat('day', { weekday: 'long', month: 'long', day: 'numeric' })
+  : dateFormat('day-year', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })).format(d);
+
 /** "Today at 9:41 PM", or just "9:41 PM" with `short`, under a date line that already says the day. */
 function formatTime(d, { short = false } = {}) {
+  const t = clockTime(d);
+  if (short) return t;
   const today = new Date();
   const yesterday = new Date(Date.now() - 864e5);
-  const t = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (short) return t;
   if (d.toDateString() === today.toDateString()) return `Today at ${t}`;
   if (d.toDateString() === yesterday.toDateString()) return `Yesterday at ${t}`;
-  return d.toLocaleDateString() + ' ' + t;
+  return dateFormat('date', {}).format(d) + ' ' + t;
 }
 
 // The first whole character of each word: an emoji (even one made of several, like a flag or a
@@ -87,6 +106,19 @@ function applyUser(u) {
   renderMembers();
   renderChannels();
   renderMessages();
+}
+
+// An icon's drawing as page nodes: read from its text once, then copied, which is much quicker
+// than reading the text again for every message's buttons.
+const iconNodes = new Map();
+function iconNode(svg) {
+  let t = iconNodes.get(svg);
+  if (!t) {
+    t = document.createElement('template');
+    t.innerHTML = svg;
+    iconNodes.set(svg, t);
+  }
+  return t.content.cloneNode(true);
 }
 
 function iconButton(label, title, onclick) {

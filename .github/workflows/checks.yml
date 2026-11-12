@@ -73,9 +73,11 @@ jobs:
       - name: Playwright and axe-core
         run: |
           npm install --no-save --no-package-lock playwright@1.56.1 axe-core@4.10.2
-          # Without --with-deps: GitHub's runners already have Chromium's libraries, and the extra
-          # fonts it fetches with apt aren't used here (and fail the job when Ubuntu's mirror is down).
+          # Just the browser. The runner already has the system libraries it needs, and fetching them
+          # again (with extra fonts) from Ubuntu's package servers fails the whole check when those
+          # are unreachable. They're only installed if the browser won't start without them.
           npx playwright install chromium
+          node -e "require('playwright').chromium.launch().then((b) => b.close())" || npx playwright install-deps chromium
       - run: node .github/scripts/ui-check.mjs
         env:
           OUT_DIR: screens
@@ -107,9 +109,9 @@ jobs:
         working-directory: e2e
         run: |
           npm install --no-package-lock
-          # Without --with-deps: GitHub's runners already have Chromium's libraries, and the extra
-          # fonts it fetches with apt aren't used here (and fail the job when Ubuntu's mirror is down).
+          # Just the browser, as in the screens check above: system libraries only if it won't start.
           npx playwright install chromium
+          node -e "require('playwright').chromium.launch().then((b) => b.close())" || npx playwright install-deps chromium
       - run: npm test
         working-directory: e2e
       - if: failure()

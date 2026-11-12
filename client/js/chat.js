@@ -7,32 +7,37 @@
 const messagesEl = $('#messages');
 const GROUP_WINDOW = 7 * 60 * 1000;
 
+// The top of a room's history, once it's all loaded: what the room is, and for a thread the message it came from.
+function historyStart() {
+  const where = roomById(state.channelId);
+  const server = where?.s;
+  const ch = where?.c;
+  if (!ch || !state.reachedStart) return null;
+  const start = document.createElement('div');
+  start.className = 'history-start';
+  if (where.thread) {
+    start.innerHTML = `<h2>${escapeHtml(ch.name)}</h2><div class="muted">A thread in #${escapeHtml(roomById(ch.parentId)?.c.name ?? 'a room')}</div>`;
+    const p = state.threadParent;
+    if (p?.deleted) start.insertAdjacentHTML('beforeend', '<p class="muted small">The message this thread started from was deleted.</p>');
+    else if (p) start.append(messageCard(p, null, { onOpen: () => jumpTo(ch.parentId, p.id) }));
+  } else start.innerHTML = isDm(server)
+    ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
+    : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
+  // Nobody else here yet: the next step is getting friends in.
+  if (!isDm(server) && !where.thread && (server.members?.length ?? 0) < 2) {
+    start.insertAdjacentHTML('beforeend', '<div class="history-start-actions"><button type="button" class="btn" data-invite>Invite friends</button><span class="muted small">It\'s just you here so far.</span></div>');
+    start.querySelector('[data-invite]').addEventListener('click', () => openInvites(server.id));
+  }
+  start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
+  return start;
+}
+
 function renderMessages({ stick = false } = {}) {
   const nearBottom = messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
   const scrollTop = messagesEl.scrollTop;
   const frag = document.createDocumentFragment();
-  const where = roomById(state.channelId);
-  const server = where?.s;
-  const ch = where?.c;
-  if (ch && state.reachedStart) {
-    const start = document.createElement('div');
-    start.className = 'history-start';
-    if (where.thread) {
-      start.innerHTML = `<h2>${escapeHtml(ch.name)}</h2><div class="muted">A thread in #${escapeHtml(roomById(ch.parentId)?.c.name ?? 'a room')}</div>`;
-      const p = state.threadParent;
-      if (p?.deleted) start.insertAdjacentHTML('beforeend', '<p class="muted small">The message this thread started from was deleted.</p>');
-      else if (p) start.append(messageCard(p, null, { onOpen: () => jumpTo(ch.parentId, p.id) }));
-    } else start.innerHTML = isDm(server)
-      ? `<h2>This is the beginning of ${server.group ? escapeHtml(dmTitle(server)) : `your conversation with ${escapeHtml(nameOfPerson(partner(server)))}`}</h2>`
-      : `<h2>This is the beginning of ${escapeHtml(ch.name)}</h2>${ch.topic ? `<div class="muted">${escapeHtml(ch.topic)}</div>` : can(server, 'rooms') ? '<button type="button" class="link-btn" data-add-topic>Add a topic</button>' : ''}`;
-    // Nobody else here yet: the next step is getting friends in.
-    if (!isDm(server) && !where.thread && (server.members?.length ?? 0) < 2) {
-      start.insertAdjacentHTML('beforeend', '<div class="history-start-actions"><button type="button" class="btn" data-invite>Invite friends</button><span class="muted small">It\'s just you here so far.</span></div>');
-      start.querySelector('[data-invite]').addEventListener('click', () => openInvites(server.id));
-    }
-    start.querySelector('[data-add-topic]')?.addEventListener('click', () => { openRoomSettings(ch); $('#room-topic')?.focus(); });
-    frag.append(start);
-  }
+  const start = historyStart();
+  if (start) frag.append(start);
   let prev = null;
   let body = null;
   for (const m of state.messages) {
@@ -77,9 +82,7 @@ function addMessageNodes(parent, m, prev, body) {
     const d = document.createElement('div');
     d.className = 'day-divider';
     const label = document.createElement('span');
-    const day = new Date(m.createdAt);
-    const year = day.getFullYear() === new Date().getFullYear() ? undefined : 'numeric';
-    label.textContent = day.toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric', year });
+    label.textContent = longDay(new Date(m.createdAt));
     d.append(label);
     parent.append(d);
     newGroup = true;
@@ -115,7 +118,7 @@ function addMessageNodes(parent, m, prev, body) {
     const time = new Date(m.createdAt);
     const color = roleColor(state.servers.get(state.serverId), m.authorId);
     body.innerHTML = `<div class="head"><span class="author${color ? ` named" style="--name:${escapeHtml(color)}"` : '"'}>${escapeHtml(authorName(m))}</span>${m.authorBot ? '<span class="bot-tag">BOT</span>' : ''}
-        <span class="time" title="${escapeHtml(time.toLocaleString())}">${escapeHtml(formatTime(time, { short: true }))}</span></div>`;
+        <span class="time" title="${escapeHtml(fullDateTime(time))}">${escapeHtml(formatTime(time, { short: true }))}</span></div>`;
     // Their name and picture open their card.
     av.classList.add('opens-card');
     av.onclick = body.querySelector('.author').onclick = () => openPersonById(m.authorId);
@@ -130,6 +133,90 @@ function addMessageNodes(parent, m, prev, body) {
 // How many messages a room keeps in memory while you follow along at the bottom;
 // older ones load again when you scroll up.
 const KEEP_MESSAGES = 300;
+// The most a room keeps on the page while you read back (or forward again). Past this, the far
+// end is let go and loads again when you scroll that way, so a long read back through a busy
+// room stays as quick, and as light on memory, as the first page.
+const MOST_MESSAGES = KEEP_MESSAGES + 100;
+
+/** A message's line on the page (or its folded line, from someone you blocked). */
+const messageEl = (id) => messagesEl.querySelector(`:scope > .group > div > .line[data-id="${id}"], :scope > .blocked-line[data-id="${id}"]`);
+
+/**
+ * Shows a page of older messages above the ones on the page, without drawing those again.
+ * Only the first group is redrawn along with them: its first message may now belong under
+ * an older one, or under a date line of its own.
+ */
+function showOlder(older) {
+  const had = state.messages.length;
+  const first = messagesEl.querySelector(':scope > .group, :scope > .blocked-line');
+  const redo = first?.classList.contains('group') ? first.querySelectorAll(':scope > div > .line').length : first ? 1 : 0;
+  state.messages = [...older, ...state.messages];
+  if (!redo || redo > had) return renderMessages();
+  // The keyboard may be on a button in that group: it goes back to the same button afterwards.
+  const held = first.contains(document.activeElement) ? document.activeElement : null;
+  const heldLine = held?.closest('.line, .blocked-line');
+  const heldAt = heldLine ? [heldLine.dataset.id, [...heldLine.querySelectorAll('button, a')].indexOf(held)] : null;
+  while (first.previousSibling) first.previousSibling.remove();
+  first.remove();
+  const frag = document.createDocumentFragment();
+  const start = historyStart();
+  if (start) frag.append(start);
+  let prev = null;
+  let body = null;
+  for (let i = 0; i < older.length + redo; i++) {
+    body = addMessageNodes(frag, state.messages[i], prev, body);
+    prev = state.messages[i];
+  }
+  messagesEl.prepend(frag);
+  if (redo === had) tailBody = body; // that group was the last one too
+  if (heldAt) messageEl(heldAt[0])?.querySelectorAll('button, a')[heldAt[1]]?.focus({ preventScroll: true });
+  reopenEdit();
+  renderSeen();
+  hideDeleting();
+}
+
+/** Shows a page of newer messages below the ones on the page, without drawing those again. */
+function showNewer(newer) {
+  let prev = state.messages.at(-1);
+  state.messages.push(...newer);
+  if (!prev || (tailBody ? !tailBody.isConnected : !messageEl(prev.id))) return renderMessages();
+  messagesEl.querySelector(':scope > .waiting-lines')?.remove();
+  for (const m of newer) {
+    tailBody = addMessageNodes(messagesEl, m, prev, tailBody);
+    prev = m;
+  }
+  renderSeen();
+  hideDeleting();
+  renderOutbox();
+}
+
+/** Lets go of the newest messages past `keep`; they load again on the way back down. */
+function dropNewest(keep) {
+  if (state.messages.length <= keep) return;
+  state.messages = state.messages.slice(0, keep);
+  state.reachedEnd = false;
+  const last = messageEl(state.messages.at(-1).id);
+  if (!last) return renderMessages();
+  const top = last.closest('.group') ?? last;
+  while (top.nextSibling) top.nextSibling.remove();
+  while (last.nextSibling) last.nextSibling.remove();
+  tailBody = last.classList.contains('line') ? last.parentNode : null;
+}
+
+/** Lets go of the oldest messages past `keep`, staying where you are; they load again when you scroll up. */
+function dropOldest(keep) {
+  if (state.messages.length <= keep) return;
+  state.messages = state.messages.slice(-keep);
+  state.reachedStart = false;
+  const first = messageEl(state.messages[0].id);
+  if (!first) return renderMessages();
+  const height = messagesEl.scrollHeight;
+  const at = messagesEl.scrollTop;
+  const top = first.closest('.group') ?? first;
+  while (top.previousSibling) top.previousSibling.remove();
+  while (first.previousElementSibling && !first.previousElementSibling.classList.contains('head')) first.previousElementSibling.remove();
+  messagesEl.scrollTop = at - (height - messagesEl.scrollHeight);
+}
 
 // Shows a message that just arrived (already pushed to state.messages) without redrawing the others.
 function appendMessage(m, { stick = false } = {}) {
@@ -180,7 +267,7 @@ function renderLine(m) {
   const el = document.createElement('div');
   el.className = 'line' + (m.pinnedAt ? ' pinned' : '');
   el.dataset.id = m.id;
-  el.title = new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+  el.title = clockTime(new Date(m.createdAt));
   if (m.authorId !== state.me.id && mentionsMe(m)) el.classList.add('mentions-me');
   if (m.pinnedAt) el.insertAdjacentHTML('beforeend', `<span class="pin-mark" title="Pinned">${PIN_ICON}</span>`);
   if (m.forwarded) el.append(renderForwarded(m.forwarded));
@@ -193,7 +280,7 @@ function renderLine(m) {
     edited.type = 'button';
     edited.className = 'edited';
     edited.textContent = '(edited)';
-    edited.title = `Edited ${new Date(m.editedAt).toLocaleString()}. See earlier versions.`;
+    edited.title = `Edited ${fullDateTime(new Date(m.editedAt))}. See earlier versions.`;
     edited.onclick = () => openEditHistory(m);
     content.append(' ', edited);
   }
@@ -211,13 +298,13 @@ function renderLine(m) {
   const actions = document.createElement('div');
   actions.className = 'actions';
   const reactBtn = iconButton('', 'Add reaction', (e) => openEmojiPicker(e.currentTarget, m));
-  reactBtn.innerHTML = SMILE_ICON;
+  reactBtn.append(iconNode(SMILE_ICON));
   const replyBtn = iconButton('', 'Reply', () => setReply(m));
-  replyBtn.innerHTML = REPLY_ICON;
+  replyBtn.append(iconNode(REPLY_ICON));
   actions.append(reactBtn, replyBtn);
   if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
   const more = iconButton('', 'More', (e) => openMessageMenu(e.currentTarget, m));
-  more.innerHTML = MORE_ICON;
+  more.append(iconNode(MORE_ICON));
   more.setAttribute('aria-haspopup', 'menu');
   actions.append(more);
   el.append(actions);
@@ -332,11 +419,19 @@ messagesEl.addEventListener('scroll', async () => {
     const older = await api(`/api/channels/${channelId}/messages?limit=50&before=${state.messages[0].id}`);
     if (channelId !== state.channelId) return;
     spinner.remove();
+    // What you were reading stays where it is: the first message that was here marks the spot
+    // (it can lose its date line or its author's name to the older ones, so heights alone would be off).
+    const markId = state.messages[0].id;
+    const markTop = messageEl(markId)?.getBoundingClientRect().top;
     const prevHeight = messagesEl.scrollHeight;
-    state.messages = [...older, ...state.messages];
+    const at = messagesEl.scrollTop;
     state.reachedStart = older.length < 50;
-    renderMessages();
-    messagesEl.scrollTop = messagesEl.scrollHeight - prevHeight + messagesEl.scrollTop;
+    showOlder(older);
+    const nowTop = markTop == null ? null : messageEl(markId)?.getBoundingClientRect().top;
+    messagesEl.scrollTop = nowTop == null ? messagesEl.scrollHeight - prevHeight + at : messagesEl.scrollTop + nowTop - markTop;
+    // Far enough back, the newest end is let go: "Jump to present" takes you there again.
+    dropNewest(MOST_MESSAGES);
+    renderPresentBar();
   } finally {
     spinner.remove();
     state.loadingOlder = false;

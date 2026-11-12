@@ -579,6 +579,8 @@ export function createApp(opts: AppOptions): Server {
     const liveId = (db.prepare('SELECT live_channel_id FROM servers WHERE id = ?').get(voice.serverId) as { live_channel_id: number | null }).live_channel_id;
     const target = liveId === null ? undefined : channelById(liveId);
     if (!target || !canSee(target, user.id) || postProblem(target, user.id)) return;
+    // A fire only some can see isn't announced to people who can't: the post would tell them it's going on.
+    if (!channelAudience(target).every((id) => canSee(voice, id))) return;
     const last = db
       .prepare('SELECT id, live FROM messages WHERE channel_id = ? AND author_id = ? AND live IS NOT NULL ORDER BY id DESC LIMIT 1')
       .get(target.id, user.id) as { id: number; live: string } | undefined;
@@ -640,6 +642,7 @@ export function createApp(opts: AppOptions): Server {
   const seatedByApp = (userId: number) => voiceSockets.get(userId)?.readyState === WebSocket.OPEN;
   const FIRE_SECOND_LOOK_MS = 10_000;
   const fireChecks = new Map<number, Promise<void>>(); // one look at a fire at a time, in order
+  const fireWaiting = new Map<string, Promise<void>>(); // the look at a fire that's queued and hasn't started
   const fireTimers = new Set<NodeJS.Timeout>();
   let liveKitQuiet = false; // said once that LiveKit can't be reached, until it can again
   const matchFire = async (channelId: number, secondLook = false) => {
@@ -656,6 +659,14 @@ export function createApp(opts: AppOptions): Server {
       // Lost their place in the hearth after getting a pass: out of LiveKit too.
       if (!Number.isInteger(userId) || !userById(userId) || !canSee(channel, userId)) {
         tellLiveKit(`take ${identity.replace(/[^\w-]/g, "").slice(0, 40)} out of room-${channelId}`, (v) => removeFromRoom(v, `room-${channelId}`, identity));
+        continue;
+      }
+      // A pass taken while there was room doesn't hold a seat: the fire filled up since, so they're
+      // out of LiveKit again, the same as the app is told when it asks to sit down.
+      try {
+        checkSeat(channel, userId);
+      } catch {
+        tellLiveKit(`take user ${userId} out of the full room-${channelId}`, (v) => removeFromRoom(v, `room-${channelId}`, identity));
         continue;
       }
       const other = inVoice.get(userId);
@@ -675,14 +686,23 @@ export function createApp(opts: AppOptions): Server {
     for (const userId of usersInVoice(channelId)) if (!there.has(userId) && !seatedByApp(userId)) setVoice(userId, null);
   };
   const checkFire = (channelId: number, secondLook = false) => {
+    // A look that hasn't started yet will see whatever is true by then, so one waiting is enough
+    // however many webhooks come in meanwhile.
+    const key = `${channelId}:${secondLook}`;
+    const waiting = fireWaiting.get(key);
+    if (waiting) return waiting;
     const check = (fireChecks.get(channelId) ?? Promise.resolve())
-      .then(() => matchFire(channelId, secondLook))
+      .then(() => {
+        fireWaiting.delete(key);
+        return matchFire(channelId, secondLook);
+      })
       .catch((err) => {
         if (!liveKitQuiet) console.warn(`Couldn't ask LiveKit who is in room-${channelId}: ${err.message}`);
         liveKitQuiet = true;
       })
       .finally(() => { if (fireChecks.get(channelId) === check) fireChecks.delete(channelId); });
     fireChecks.set(channelId, check);
+    fireWaiting.set(key, check);
     return check;
   };
   function matchFireSoon(channelId: number, ms: number, secondLook = false) {
@@ -714,7 +734,7 @@ export function createApp(opts: AppOptions): Server {
   const LIVEKIT_EVENTS = new Set(['room_started', 'room_finished', 'participant_joined', 'participant_left', 'participant_connection_aborted']);
   const handleLiveKitWebhook = async (req: IncomingMessage, res: ServerResponse) => {
     if (!opts.voice) throw new HttpError(404, 'Not found');
-    const raw = await readLimited(req, 256 * 1024, new HttpError(413, "That's too much to send at once"));
+    const raw = await readLimited(req, 64 * 1024, new HttpError(413, "That's too much to send at once"));
     const event = readWebhook(opts.voice, req.headers.authorization, raw);
     if (!event) throw new HttpError(401, "That didn't come from this server's LiveKit");
     const room = typeof event.room?.name === 'string' ? event.room.name.match(/^room-(\d+)$/) : null;
