@@ -261,7 +261,7 @@ window.addEventListener('message', (e) => {
   } else if (m.kind === 'api') {
     // A question for the server (Fireside Trivia's questions, a hearth's own words): the answer goes back to the page.
     const frame = gamePlay.frame;
-    const reply = (out) => frame.contentWindow?.postMessage({ kind: 'api-result', id: m.id, ...out }, '*');
+    const reply = (out) => { frame.contentWindow?.postMessage({ kind: 'api-result', id: m.id, ...out }, '*'); };
     const path = String(m.path ?? '');
     const method = ['GET', 'POST', 'PUT', 'DELETE'].includes(m.method) ? m.method : 'GET';
     if (!GAME_API.some((re) => re.test(path))) return reply({ error: "Games can't ask for that" });

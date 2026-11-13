@@ -5,7 +5,10 @@
 
 const Peiskos = (() => {
   const host = () => { try { return window.parent.peiskosHost || window.parent; } catch (e) { return window.parent; } };
-  const post = (msg) => host().postMessage(msg, '*');
+  // A statement, not the arrow's value: Safari's strict mode drops a function's frame when it ends
+  // in a call (a tail call), and postMessage then can't see that this page sent the message.
+  // Peiskos took "ready" for its own message and never started the game.
+  const post = (msg) => { host().postMessage(msg, '*'); };
   const handlers = { init: [], players: [], msg: [] };
   const waiting = new Map();
   let nextId = 1;

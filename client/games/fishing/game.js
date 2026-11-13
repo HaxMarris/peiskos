@@ -473,7 +473,7 @@ function load(d) {
 // fireside chat. This page only talks to it through messages, so it works the same in the desktop app.
 // Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
 const peiskos = () => { try { return window.parent.peiskosHost || window.parent; } catch { return window.parent; } };
-const toPeiskos = msg => peiskos().postMessage(msg, '*');
+const toPeiskos = msg => { peiskos().postMessage(msg, '*'); }; // a statement, not a tail call (see shared/bridge.js)
 let ready = false, saveTimer = 0, lastSent = '';
 /** Saves soon; a burst of changes becomes one save. */
 function save() {
