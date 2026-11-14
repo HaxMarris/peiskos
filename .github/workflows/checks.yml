@@ -55,7 +55,8 @@ jobs:
   # than the budgets in the script. The screens are saved in the "screens" artifact.
   screens:
     name: Screens and speed
-    runs-on: ubuntu-latest
+    # Playwright 1.56 has no Chromium build for Ubuntu 26.04, which ubuntu-latest now is.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
@@ -94,7 +95,8 @@ jobs:
   # (see e2e/README.md). A failed test leaves pictures of every player's screen in "game-failures".
   games:
     name: Games at the fire, end to end
-    runs-on: ubuntu-latest
+    # Playwright 1.56 has no Chromium build for Ubuntu 26.04, which ubuntu-latest now is.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
