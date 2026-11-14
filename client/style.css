@@ -2261,8 +2261,14 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .seat-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .seat.open .seat-art { opacity: .55; }
 .seat-face-wrap, .seat.open .seat-face { position: relative; }
-.fire-ring.at-table .seat[data-row="back"] :is(.seat-name, .seat-status) { order: -1; position: relative; z-index: 3; }
-.fire-ring.at-table .seat[data-row="back"] .seat-name { margin-top: 0; }
+/* Far seats sit behind the fire, so their name, status and watch button go above the face where the
+   flames can't cover them. anchorSeats keeps each face on its spot. */
+.fire-ring .seat[data-row="back"] :is(.seat-name, .seat-status, .seat-watch) { order: -1; position: relative; z-index: 3; }
+.fire-ring .seat[data-row="back"] .seat-name { margin-top: 0; }
+/* A backdrop in daylight can be bright (snow, pale sand), so names there go dark with a pale halo.
+   backdrops-live.js sets data-day from the time of day; at night they stay light. */
+.fire-ring-wrap[data-day] .seat { --text-strong: #1f1813; --muted: #4a3d33; --moss: #9a4517; }
+.fire-ring-wrap[data-day] .seat :is(.seat-name, .seat-status) { text-shadow: 0 0 3px rgba(255, 255, 255, .9), 0 0 8px rgba(255, 255, 255, .7); }
 .fire-ring.at-table .seat[data-row="back"] .seat-art { display: none; }
 .fire-ring-wrap .bd-stage { scale: 1.3; transform-origin: 50% 100%; }
 .seat-pick-art svg { width: 100%; height: 100%; overflow: visible; }
