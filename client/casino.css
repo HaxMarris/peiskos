@@ -114,6 +114,7 @@
 .bj-side { display: flex; flex-direction: column; align-items: center; gap: 8px; }
 .bj-label { font-weight: 800; color: rgba(255, 255, 255, .8); }
 .bj-label b { margin-left: 4px; background: rgba(0, 0, 0, .3); padding: 1px 9px; border-radius: 999px; }
+.bj-label b:empty { display: none; }
 .bj-cards { display: flex; gap: 0; min-height: 84px; }
 .bj-cards .pcard { --w: 60px; }
 .bj-cards .pcard + .pcard { margin-left: -18px; }
@@ -209,6 +210,17 @@
 .spin-btn:active, .spin-btn:disabled { transform: translateY(4px); box-shadow: 0 0 0 5px #c9963e, 0 0 0 7px #6b4413, 0 3px 0 7px #4a2a0a, 0 6px 10px rgba(0, 0, 0, .5); }
 .spin-btn:disabled { filter: saturate(.6) brightness(.85); cursor: default; }
 .slot-tray { height: 26px; margin: 0 18% 0; border-radius: 0 0 14px 14px; background: linear-gradient(#0b0605, #2a1410); box-shadow: inset 0 6px 8px rgba(0, 0, 0, .8), 0 0 0 3px #c9963e; }
+/* On a laptop screen the whole cabinet, Spin button included, fits without scrolling: the reels shrink
+   with the window's height, and the marquee and button get a little smaller. */
+@media (min-width: 761px) and (max-height: 940px) {
+  .slots { --row: clamp(56px, calc((100dvh - 600px) / 3), 84px); gap: 10px; padding-top: 0; }
+  .slot-machine { gap: 8px; }
+  .slot-marquee { padding: 10px 12px 8px; }
+  .slot-title { font-size: 24px; }
+  .slot-title .logo-mark { width: 24px; height: 24px; }
+  .spin-btn { width: 80px; height: 80px; font-size: 16px; }
+  .slot-tray { height: 16px; }
+}
 
 /* The lever, on the right of the cabinet. */
 .slot-lever { position: absolute; right: 0; top: 34%; width: 40px; height: 170px; padding: 0; border: 0; background: none; cursor: pointer; }

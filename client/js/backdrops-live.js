@@ -690,8 +690,11 @@ const BACKDROP_LIVE = { ocean: bdOceanParts, volcano: bdVolcanoParts, space: bdS
  * turns to night, since remaking them starts their motion over.
  */
 const bdLive = { id: null, layer: null, timer: 0, css: '', partsKey: '', hearth: null, catch: null, catchKey: '' };
+// Backdrops whose ground is bright by day (snow, pale sand), so names around the fire need dark text then.
+const BACKDROP_BRIGHT_DAY = ['pines', 'ocean'];
 function backdropLive(layer, id, hearth = null) {
   clearInterval(bdLive.timer);
+  if (!layer) delete $('.fire-ring-wrap')?.dataset.day;
   Object.assign(bdLive, { id: layer ? id : null, layer, timer: 0, css: '', partsKey: '', hearth, catch: null, catchKey: '' });
   if (!layer) return;
   layer.innerHTML = '<div class="bd-stage"></div>';
@@ -705,6 +708,8 @@ function backdropLiveTick() {
   const sky = daylight();
   const css = backdropCss(bdLive.id, sky);
   if (css !== bdLive.css) { stage.style.background = css; bdLive.css = css; fireGroundRefresh(); }
+  const wrap = bdLive.layer.closest('.fire-ring-wrap');
+  if (wrap) wrap.toggleAttribute('data-day', BACKDROP_BRIGHT_DAY.includes(bdLive.id) && sky.light > 0.6);
   const partsKey = [Math.round(sky.light * 8), Math.round(sky.warm * 4), sky.moon.up, sky.sun.up, Math.floor(sky.hour)].join();
   if (partsKey !== bdLive.partsKey) { stage.innerHTML = BACKDROP_LIVE[bdLive.id](sky); bdLive.partsKey = partsKey; }
   backdropCatch();

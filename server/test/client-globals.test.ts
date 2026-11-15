@@ -36,3 +36,17 @@ test('no client script declares a top-level name the window already has', () => 
   }
   assert.deepEqual(clashes, []);
 });
+
+// Safari runs strict code with proper tail calls: a function that ends by calling postMessage leaves
+// the stack first, and the message then says it came from Peiskos's own page instead of the game.
+// Peiskos ignored the games' "ready" that way, so Sketch & Guess, Trivia, Odd One Out and Same Page
+// never started on iPhones. postMessage has to be a statement, never what a function returns.
+test('no client script ends a function with a postMessage call', () => {
+  const tails: string[] = [];
+  for (const file of [...scripts(join(client, 'js')), ...scripts(join(client, 'games'))]) {
+    readFileSync(file, 'utf8').split('\n').forEach((line, i) => {
+      if (/(=>\s*[\w$.?()[\]]*postMessage\(|\breturn\s+[\w$.?()[\]]*postMessage\()/.test(line)) tails.push(`${relative(client, file)}:${i + 1}`);
+    });
+  }
+  assert.deepEqual(tails, []);
+});

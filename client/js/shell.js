@@ -721,3 +721,22 @@ document.addEventListener('mouseover', (e) => {
 });
 document.addEventListener('mousedown', (e) => { if (!e.target.closest('#hover-card')) closeHoverCard(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeHoverCard(); });
+
+// Rows of tabs that scroll sideways on a narrow screen (a hearth's or your account's settings on a phone,
+// the casino's games and its Cases views) fade out at an edge while there's more past it, so the cut-off
+// tab reads as "scroll for more" rather than as a mistake.
+const SCROLL_ROWS = '.tabs, .casino-tabs, .cases-nav';
+function markScrollEdges(row) {
+  const more = row.scrollWidth - row.clientWidth > 2;
+  row.classList.toggle('more-start', more && row.scrollLeft > 2);
+  row.classList.toggle('more-end', more && row.scrollLeft + row.clientWidth < row.scrollWidth - 2);
+}
+let scrollEdgesQueued = false;
+function markAllScrollEdges() {
+  if (scrollEdgesQueued) return;
+  scrollEdgesQueued = true;
+  requestAnimationFrame(() => { scrollEdgesQueued = false; document.querySelectorAll(SCROLL_ROWS).forEach(markScrollEdges); });
+}
+document.addEventListener('scroll', (e) => { if (e.target instanceof Element && e.target.matches(SCROLL_ROWS)) markScrollEdges(e.target); }, true);
+addEventListener('resize', markAllScrollEdges);
+new MutationObserver(markAllScrollEdges).observe(document.body, { childList: true, subtree: true });
