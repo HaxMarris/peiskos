@@ -1485,6 +1485,7 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .inline-form { display: flex; gap: 8px; margin-top: 4px; }
 .inline-form input { flex: 1; min-width: 0; }
 .inline-form .btn { flex: none; }
+.inline-form > span { align-self: center; } /* a unit after the box, like MB */
 @media (max-width: 720px) {
   .status-picks button { padding: 12px; }
   .inline-form { flex-direction: column; }
@@ -1561,6 +1562,10 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .live-card.over .live-text { color: var(--muted); font-weight: 600; }
 /* Tabs inside a window: your account, friends. */
 .tabs { display: flex; gap: 4px; padding: 4px; border-radius: var(--radius-md); background: var(--surface-2); overflow-x: auto; flex: none; }
+/* A row of tabs with more past an edge fades out there (shell.js markScrollEdges). */
+:is(.tabs, .casino-tabs, .cases-nav).more-end { mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+:is(.tabs, .casino-tabs, .cases-nav).more-start { mask-image: linear-gradient(to left, #000 calc(100% - 40px), transparent); }
+:is(.tabs, .casino-tabs, .cases-nav).more-start.more-end { mask-image: linear-gradient(to right, transparent, #000 40px, #000 calc(100% - 40px), transparent); }
 .tabs button { flex: 1 0 auto; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 700; font-size: 14px; padding: 8px 12px; border-radius: var(--radius-sm); cursor: pointer; white-space: nowrap; }
 .tabs button:hover { color: var(--text-strong); }
 .tabs button[aria-selected="true"] { background: var(--surface); color: var(--text-strong); box-shadow: 0 1px 3px rgba(0, 0, 0, .12); }
@@ -1771,6 +1776,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 /* Leaves and snow may drift a little above and below the ring, but never past its sides: the ring
    fills the scene's width, so anything wider made the whole window scroll sideways. */
 .season-layer { position: absolute; inset: -4% 0; overflow: hidden; pointer-events: none; border-radius: 40%; }
+/* A backdrop is a place of its own (under the sea, in space, indoors) with its own weather, so the season's leaves and snow stay out of it. */
+.fire-ring-wrap[data-backdrop] .season-layer { display: none; }
 .season-layer span { position: absolute; left: var(--x); top: -6%; width: calc(7px * var(--s)); height: calc(7px * var(--s)); animation: season-fall var(--d) linear var(--delay) infinite; }
 @keyframes season-fall { from { top: -6%; translate: 0 0; rotate: 0deg; } 50% { translate: 18px 0; } to { top: 104%; translate: -6px 0; rotate: 300deg; } }
 [data-season="winter"] .season-layer span, [data-holiday="yule"] .season-layer span { border-radius: 50%; background: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, .8); opacity: .85; }
@@ -2047,6 +2054,8 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
   #channel-list li.dm { position: relative; }
   #channel-list li.dm .dm-close { position: absolute; right: 8px; top: 50%; translate: 0 -50%; margin: 0; border-radius: 50%; }
   #channel-list li.dm:hover .dm-side, #channel-list li.dm:focus-within .dm-side { visibility: hidden; }
+  /* The conversation you're in keeps its time until you point at it, like the others. */
+  #channel-list li.dm.active:not(:hover, :focus-within) .dm-close { display: none; }
 }
 #channel-list li.friends-row { min-height: 54px; border: 1px solid var(--line); margin-bottom: 6px; }
 #channel-list li.friends-row .group-avatar { width: 40px; height: 40px; border-radius: 50%; }
@@ -2260,6 +2269,9 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .seat-art { position: absolute; left: 50%; top: calc(var(--face-h) * .66); translate: -50% 0; width: calc(var(--face-h) * 1.6); aspect-ratio: 130 / 60; z-index: -1; pointer-events: none; }
 .seat-art svg { display: block; width: 100%; height: 100%; overflow: visible; }
 .seat.open .seat-art { opacity: .55; }
+/* "Open seat" hangs under the stump like a name does, not across its top. (Far seats put their words
+   above the face instead.) */
+.fire-ring .seat.open:not([data-row="back"]) .seat-status { margin-top: calc(var(--face-h) * .45); }
 .seat-face-wrap, .seat.open .seat-face { position: relative; }
 .fire-ring.at-table .seat[data-row="back"] :is(.seat-name, .seat-status) { order: -1; position: relative; z-index: 3; }
 .fire-ring.at-table .seat[data-row="back"] .seat-name { margin-top: 0; }
