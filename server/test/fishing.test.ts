@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
-import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, loadPonds, loadSpecies, parseLook, pickDerby } from '../src/fishing.ts';
+import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, cleanLook, loadPonds, loadSpecies, pickDerby } from '../src/fishing.ts';
 import { caller, listening } from './helpers.ts';
 
 const db = openDb(':memory:');
@@ -60,7 +60,7 @@ test('the fishing save is per person per hearth, and an older device cannot over
   assert.deepEqual((await call(path, { token: a.token })).data.save, { v: 2, coins: 50 });
 });
 
-test('the game\'s fish are all read from its file', () => {
+test('the game\'s fish are all read from its data file', () => {
   const species = loadSpecies();
   assert.equal(species.size, 264);
   const { look, ...leviathan } = species.get('leviathan')!;
@@ -70,7 +70,8 @@ test('the game\'s fish are all read from its file', () => {
   assert.ok([...species.values()].every((sp) => sp.look));
   assert.deepEqual(species.get('cinderwyrm')?.look, { body: '#2a1410', belly: '#ff8a4a', fin: '#c4561c', h: 0.08, shape: 'eel', glow: '#ff6a2a', spots: '#ffc46b' });
   assert.equal(species.get('icefish')?.look?.body, 'rgba(220,235,245,.7)');
-  assert.equal(parseLook("L('#000000', '#ffffff', '#ff0000', .3, { glow: 'red\" onload=\"x', shape: 'blob' })")?.glow, undefined);
+  assert.deepEqual(cleanLook({ body: '#000000', belly: '#ffffff', fin: '#ff0000', h: 0.3, glow: 'red" onload="x', shape: 'blob' }), { body: '#000000', belly: '#ffffff', fin: '#ff0000', h: 0.3 });
+  assert.equal(cleanLook({ body: 'url(x)', belly: '#ffffff', fin: '#ff0000', h: 0.3 }), undefined);
   assert.equal(species.get('roach')?.pond, 'mill');
   // A timed legendary belongs to the water it's listed with.
   assert.equal(species.get('morningcarp')?.pond, 'mill');

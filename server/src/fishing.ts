@@ -14,6 +14,7 @@
 // Eastern. Whoever lands the most perfect ones (5 stars, size 100) by hand wins, and the server settles the
 // places once the week is over. The game pays its own prizes from those places, as it does every other coin.
 import { readFileSync } from 'node:fs';
+import { runInNewContext } from 'node:vm';
 import type { Db } from './db.ts';
 import { allowance, type Json } from './http.ts';
 
@@ -27,64 +28,43 @@ export const boardDay = (t = Date.now()) => new Intl.DateTimeFormat('en-CA', { t
 /** How a fish is drawn: its colours, its depth as a share of its length, and any markings or odd shape. */
 export type FishLook = { body: string; belly: string; fin: string; h: number; glow?: string; spots?: string; stripes?: string; shape?: 'eel' | 'ray'; sail?: boolean; whiskers?: boolean };
 type Species = { name: string; min: number; max: number; base: number; rarity: number; pond: string; look?: FishLook };
-const COLOR = String.raw`#[0-9a-fA-F]{6}|rgba\(\d{1,3},\d{1,3},\d{1,3},[\d.]+\)`;
-const isColor = (c: unknown): c is string => typeof c === 'string' && new RegExp(`^(?:${COLOR})$`).test(c);
-/** A fish's L('#body', '#belly', '#fin', h, { ... }) from the game, read as data; anything unexpected is left out. */
-export function parseLook(text: string): FishLook | undefined {
-  const m = text.match(new RegExp(String.raw`^L\('(${COLOR})', '(${COLOR})', '(${COLOR})', ([\d.]+)(?:, \{([^}]*)\})?\)`));
-  if (!m) return undefined;
-  const look: FishLook = { body: m[1], belly: m[2], fin: m[3], h: Math.min(1, Math.max(0.05, Number(m[4]) || 0.32)) };
-  for (const [, key, str, num] of (m[5] ?? '').matchAll(/(\w+): (?:'([^']*)'|([\d.]+))/g)) {
-    if ((key === 'glow' || key === 'spots' || key === 'stripes') && isColor(str)) look[key] = str;
-    else if (key === 'shape' && (str === 'eel' || str === 'ray')) look.shape = str;
-    else if ((key === 'sail' || key === 'whiskers') && num) look[key] = Number(num) > 0;
-  }
+const COLOR = /^(?:#[0-9a-fA-F]{6}|rgba\(\d{1,3},\d{1,3},\d{1,3},[\d.]+\))$/;
+const isColor = (c: unknown): c is string => typeof c === 'string' && COLOR.test(c);
+/** A fish's look from the game's data, keeping only what's expected: it ends up drawn in other people's apps. */
+export function cleanLook(raw: unknown): FishLook | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as Record<string, unknown>;
+  if (!isColor(r.body) || !isColor(r.belly) || !isColor(r.fin)) return undefined;
+  const look: FishLook = { body: r.body, belly: r.belly, fin: r.fin, h: Math.min(1, Math.max(0.05, Number(r.h) || 0.32)) };
+  for (const key of ['glow', 'spots', 'stripes'] as const) if (isColor(r[key])) look[key] = r[key];
+  if (r.shape === 'eel' || r.shape === 'ray') look.shape = r.shape;
+  for (const key of ['sail', 'whiskers'] as const) if (r[key]) look[key] = Number(r[key]) > 0;
   return look;
 }
-/** The fish, read from the game itself so the two never drift apart: F('id', 'Name', min, max, base, rarity, ...). */
 /** What a catch is worth on the leaderboard: the fish's own value, without anyone's upgrades or bonuses. */
 export const boardWorth = (sp: Species, score: number, stars: number, giant: boolean, starMul: number[]) =>
   Math.round(sp.base * (0.5 + score / 100) * (starMul[stars - 1] ?? 1) * (giant ? 3 : 1));
-/** The star multipliers, also read from the game: const STAR_MUL = [...]. */
-export function loadStarMul(file = new URL('../../client/games/fishing/game.js', import.meta.url)): number[] {
-  try {
-    const m = readFileSync(file, 'utf8').match(/const STAR_MUL = \[([\d., ]+)\]/);
-    const mul = m ? m[1].split(',').map(Number) : [];
-    if (mul.length === 5 && mul.every((x) => Number.isFinite(x))) return mul;
-  } catch { /* fall through */ }
-  return [0.6, 1, 1.5, 2.5, 5];
+
+type RawFish = { id: string; name: string; min: number; max: number; base: number; r: number; look?: unknown };
+type FishingData = { STAR_MUL: number[]; PONDS: { id: string; fish: RawFish[] }[]; TIMED: [string, number, RawFish][] };
+const DATA_FILE = new URL('../../client/games/fishing/fish-data.js', import.meta.url);
+/** The game's waters and fish (client/games/fishing/fish-data.js), so the server and the game never drift apart. */
+export function loadFishingData(file = DATA_FILE): FishingData {
+  // Plain data, run in an empty sandbox: no require, no process, nothing of the server's.
+  return runInNewContext(`${readFileSync(file, 'utf8')}\nFISHING_DATA`, Object.create(null), { timeout: 1000 }) as FishingData;
 }
-export function loadSpecies(file = new URL('../../client/games/fishing/game.js', import.meta.url)): Map<string, Species> {
+/** Every species, timed legendaries too, each with the water it's found at. */
+export function loadSpecies(data = loadFishingData()): Map<string, Species> {
   const species = new Map<string, Species>();
-  let src = '';
-  try { src = readFileSync(file, 'utf8'); } catch { return species; }
-  // Each water ({ id: 'mill', name: ..., cost: ...) lists its fish after it, so a fish belongs to the water before it.
-  let pond = '';
-  // The timed legendaries come after, each as ['mill', 9, F(...)], with its water in front.
-  for (const m of src.matchAll(/\{ id: '([a-z0-9]+)', name: '[^']*', cost:|\['([a-z0-9]+)', \d+, (?=F\()|\bF\('([a-z0-9]+)', '([^']+)', ([\d.]+), ([\d.]+), ([\d.]+), ([1-5]),/g)) {
-    if (m[1] || m[2]) pond = m[1] ?? m[2];
-    else {
-      // Its look is the L(...) at the end of the same F(...).
-      const rest = src.slice(m.index! + m[0].length, src.indexOf('\n', m.index));
-      const at = rest.indexOf('L(');
-      species.set(m[3], { name: m[4], min: Number(m[5]), max: Number(m[6]), base: Number(m[7]), rarity: Number(m[8]), pond, look: at >= 0 ? parseLook(rest.slice(at)) : undefined });
-    }
-  }
+  const add = (f: RawFish, pond: string) =>
+    species.set(f.id, { name: f.name, min: f.min, max: f.max, base: f.base, rarity: f.r, pond, look: cleanLook(f.look) });
+  for (const p of data.PONDS) for (const f of p.fish) add(f, p.id);
+  for (const [pond, , f] of data.TIMED) add(f, pond);
   return species;
 }
-
 /** The waters in walking order, and each one's regular fish (the timed legendaries are left out). */
-export function loadPonds(file = new URL('../../client/games/fishing/game.js', import.meta.url)): { id: string; fish: { id: string; rarity: number }[] }[] {
-  const ponds: { id: string; fish: { id: string; rarity: number }[] }[] = [];
-  let src = '';
-  try { src = readFileSync(file, 'utf8'); } catch { return ponds; }
-  for (const line of src.split('\n')) {
-    const p = line.match(/^ {2}\{ id: '([a-z]+)', name: '[^']+', cost: \d+, idle:/);
-    if (p) ponds.push({ id: p[1], fish: [] });
-    else if (ponds.length && line.startsWith('];')) break;
-    else if (ponds.length) for (const m of line.matchAll(/\bF\('([a-z0-9]+)', '[^']+', [\d.]+, [\d.]+, [\d.]+, ([1-5]),/g)) ponds[ponds.length - 1].fish.push({ id: m[1], rarity: Number(m[2]) });
-  }
-  return ponds;
+export function loadPonds(data = loadFishingData()): { id: string; fish: { id: string; rarity: number }[] }[] {
+  return data.PONDS.map((p) => ({ id: p.id, fish: p.fish.map((f) => ({ id: f.id, rarity: f.r })) }));
 }
 
 /** The Monday (Eastern) that starts the derby week t falls in, as YYYY-MM-DD. */
@@ -149,9 +129,10 @@ export function fishing(ctx: FishingContext) {
   const { db, route, fail } = ctx;
   const saves = allowance(30, 2); // the game saves a second or so after you do something
   const catches = allowance(20, 1); // only a catch that beats your best of the day is sent
-  const species = loadSpecies();
-  const starMul = loadStarMul();
-  const ponds = loadPonds();
+  const data = loadFishingData();
+  const species = loadSpecies(data);
+  const starMul = data.STAR_MUL;
+  const ponds = loadPonds(data);
   const clock = ctx.now ?? Date.now;
   const derbyEntries = allowance(60, 1); // every perfect one counts, so a lucky streak sends a few
   const firstPond = species.values().next().value?.pond ?? '';
