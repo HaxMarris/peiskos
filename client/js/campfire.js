@@ -733,6 +733,7 @@ function sizeRing(ring, total, anyoneSharing) {
   ring.style.setProperty('--cy', `${g - fire * (phone ? 0.144 : 0.12)}px`);
   ring.classList.toggle('crowded', total > 8);
   ring.classList.toggle('at-table', backdrop === 'lounge');
+  ring.classList.toggle('under-sea', backdrop === 'ocean');
   fireGroundLayout(ring, { W, H, g, rx, ry, fire, phone, total, backdrop });
   return (el, i) => {
     el.dataset.i = i;
@@ -839,7 +840,7 @@ function renderFire() {
     }
     const wrap = seat.el.querySelector('.seat-face-wrap');
     decorateSeat(wrap, id);
-    fireSeatArt(wrap, seatKindOf(id));
+    fireSeatArt(wrap, seatKindOf(id, i));
     wrap.querySelector('.seat-live')?.remove();
     if (sharing?.screen) wrap.insertAdjacentHTML('beforeend', '<span class="seat-live">LIVE</span>');
     seat.el.className = 'seat' + (me ? ' me' : '') + (speaking ? ' speaking' : '') + (camTrack ? ' has-video' : '');
@@ -872,7 +873,7 @@ function renderFire() {
     el.className = 'seat open';
     el.innerHTML = '<span class="seat-face"></span><span class="seat-status">Open seat</span>';
     place(el, i);
-    fireSeatArt(el.querySelector('.seat-face'), ring.classList.contains('at-table') ? 'velvet' : 'stump');
+    fireSeatArt(el.querySelector('.seat-face'), fireDefaultSeat(i));
     ring.append(el);
   }
   anchorSeats(ring);
