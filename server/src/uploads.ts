@@ -16,7 +16,7 @@ import { withoutBidi } from './text.ts';
 
 export interface UploadsContext {
   allowed: (serverId: number, user: User, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
-  attachmentJson: (a: Json) => { thumb?: string | undefined; width?: {} | undefined; height?: {} | undefined; voiceSeconds?: {} | undefined; alt?: {} | undefined; spoiler?: boolean | undefined; id: unknown; name: unknown; type: unknown; size: unknown; url: string; };
+  attachmentJson: (a: Json) => unknown;
   checkTries: (keys: string[], limit: number) => void;
   db: Db;
   failedTry: (keys: string[], windowMs?: number) => void;
@@ -26,11 +26,11 @@ export interface UploadsContext {
   opts: AppOptions;
   route: (method: string, path: string, handler: Handler, auth?: boolean) => number;
   sendServerUpdate: (serverId: number) => void;
-  serverSummary: (serverId: number, viewerId: number) => { roles: { id: number; perms: ('voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit')[]; }[]; members: { status: string; custom: { text: string; emoji: string; until: number | null; } | null; activity: { name: string; since: number; } | null; deleted: boolean; bot: boolean; voiceMuted: boolean; timeoutUntil: number | null; roleIds: number[]; role: string; online: boolean; id: number; username: string; displayName: string | null; avatar: string | null; }[]; seen?: { userId: number; lastReadId: number; } | null | undefined; motd?: { id: number; text: string; picture: string | null; }[] | undefined; openReports?: number | undefined; wordFilter?: any; uploadMb?: number | null | undefined; myUploadLimit?: number | undefined; timeoutUntil?: number | null | undefined; rulesAccepted: boolean; pinnedFireId: number | null; notify: { level: string | null; mutedUntil: number | null; } | null; channels: ({ readOnlyRoleIds?: number[] | undefined; postRoleIds?: number[] | undefined; memberIds?: number[] | undefined; roleIds?: number[] | undefined; audienceIds?: number[] | undefined; voiceUsers: number[]; voiceMuted: number[]; voiceDeafened: number[]; voiceServerMuted: number[]; voiceSpeaking: number[]; keepChat: boolean; private: boolean; announce: boolean; archived: boolean; canPost: boolean; notify: { level: string | null; mutedUntil: number | null; } | null; id: number; name: string; kind: 'text' | 'voice' | 'thread'; slow: number; userLimit: number; topic: string; groupId: number | null; } | { readOnlyRoleIds?: number[] | undefined; postRoleIds?: number[] | undefined; memberIds?: number[] | undefined; roleIds?: number[] | undefined; audienceIds?: number[] | undefined; lastReadId: number; unread: number; mentions: number; keepChat: boolean; private: boolean; announce: boolean; archived: boolean; canPost: boolean; notify: { level: string | null; mutedUntil: number | null; } | null; id: number; name: string; kind: 'text' | 'voice' | 'thread'; slow: number; userLimit: number; topic: string; groupId: number | null; })[]; groups: Record<string, SQLOutputValue>[]; events: { rsvps: Record<string, SQLOutputValue>[]; }[]; threads: { lastReadId: number; unread: number; mentions: number; }[]; emoji: Record<string, SQLOutputValue>[]; sounds: Record<string, SQLOutputValue>[]; serverMuted: boolean; };
+  serverSummary: (serverId: number, viewerId: number) => unknown;
   textRoom: (id: number, userId: number) => Channel;
   uploadLimitFor: (serverId: number, userId: number) => number;
   userByToken: (raw: string | undefined) => User | undefined;
-  userChanged: (userId: number) => { accent: string | null; birthday: string | null; fireItem: string | null; id: number; username: string; displayName: string | null; avatar: string | null; };
+  userChanged: (userId: number) => unknown;
   visibleRoom: (id: number, userId: number) => Channel;
 }
 

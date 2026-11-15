@@ -29,7 +29,7 @@ export interface LoginContext {
   holdName: (name: string, userId: number) => void;
   isBotUser: (id: number) => boolean;
   leaveGroup: (serverId: number, user: User) => { ok: boolean; };
-  meJson: (user: User) => { recoveryCodesLeft: number; blockedIds: number[]; admin?: boolean | undefined; adminReports?: number | undefined; twoStep: boolean; displayName: string | null; bio: string; banner: string | null; accent: string | null; joinedAt: number | null; birthday: string | null; fireItem: string | null; readReceipts: boolean; status: string; customStatus: { text: string; emoji: string; until: number | null; } | null; quietHours: { start: number; end: number; timeZone: string | null; } | null; email: string | null; emailVerified: boolean; id: number; username: string; avatar: string | null; };
+  meJson: (user: User) => Json;
   newPassword: (body: Json) => string;
   now: () => number;
   opts: AppOptions;
@@ -45,7 +45,7 @@ export interface LoginContext {
   startSession: (user: User, from?: { ip: string; ua: string; } | undefined) => { token: string; user: User; };
   userById: (id: number) => User | undefined;
   userByToken: (raw: string | undefined) => User | undefined;
-  userChanged: (userId: number) => { accent: string | null; birthday: string | null; fireItem: string | null; id: number; username: string; displayName: string | null; avatar: string | null; };
+  userChanged: (userId: number) => unknown;
 }
 
 export function login(ctx: LoginContext) {

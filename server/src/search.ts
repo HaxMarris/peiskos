@@ -7,7 +7,7 @@ export interface SearchContext {
   canSee: (channel: Channel, userId: number) => boolean;
   db: Db;
   messagesByIds: (ids: number[]) => Json[];
-  placeOf: (channelId: number, viewerId: number) => { serverId: unknown; channelId: number; kind: string; serverName: unknown; channelName: unknown; threadName: unknown; } | null;
+  placeOf: (channelId: number, viewerId: number) => unknown;
   route: (method: string, path: string, handler: Handler, auth?: boolean) => number;
 }
 

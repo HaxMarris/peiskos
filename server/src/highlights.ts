@@ -4,11 +4,11 @@ import type { Db } from './db.ts';
 import { HttpError, type Json } from './http.ts';
 
 export interface HighlightsContext {
-  attachmentJson: (a: Json) => { thumb?: string | undefined; width?: {} | undefined; height?: {} | undefined; voiceSeconds?: {} | undefined; alt?: {} | undefined; spoiler?: boolean | undefined; id: unknown; name: unknown; type: unknown; size: unknown; url: string; };
+  attachmentJson: (a: Json) => Json;
   db: Db;
   isBurrow: (serverId: number) => boolean;
   messagesByIds: (ids: number[]) => Json[];
-  placeOf: (channelId: number, viewerId: number) => { serverId: unknown; channelId: number; kind: string; serverName: unknown; channelName: unknown; threadName: unknown; } | null;
+  placeOf: (channelId: number, viewerId: number) => unknown;
   route: (method: string, path: string, handler: Handler, auth?: boolean) => number;
   searchRooms: (user: User, scope: string | null) => number[];
   serverMemberIds: (serverId: number) => number[];

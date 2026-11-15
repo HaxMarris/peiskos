@@ -15,8 +15,8 @@ export interface EmailContext {
   db: Db;
   failedTry: (keys: string[], windowMs?: number) => void;
   knownAddress: (userId: number | undefined, ip: string) => boolean;
-  loginOrAskCode: (userId: number, from: { ip: string; ua: string; }) => { token: string; user: User; } | { twoStep: boolean; ticket: string; };
-  meJson: (user: User) => { recoveryCodesLeft: number; blockedIds: number[]; admin?: boolean | undefined; adminReports?: number | undefined; twoStep: boolean; displayName: string | null; bio: string; banner: string | null; accent: string | null; joinedAt: number | null; birthday: string | null; fireItem: string | null; readReceipts: boolean; status: string; customStatus: { text: string; emoji: string; until: number | null; } | null; quietHours: { start: number; end: number; timeZone: string | null; } | null; email: string | null; emailVerified: boolean; id: number; username: string; avatar: string | null; };
+  loginOrAskCode: (userId: number, from: { ip: string; ua: string; }) => unknown;
+  meJson: (user: User) => unknown;
   newPassword: (body: Json) => string;
   now: () => number;
   opts: AppOptions;

@@ -9,7 +9,7 @@ export interface ReadingContext {
   db: Db;
   isBurrow: (serverId: number) => boolean;
   isGroupDm: (serverId: number) => boolean;
-  meJson: (user: User) => { recoveryCodesLeft: number; blockedIds: number[]; admin?: boolean | undefined; adminReports?: number | undefined; twoStep: boolean; displayName: string | null; bio: string; banner: string | null; accent: string | null; joinedAt: number | null; birthday: string | null; fireItem: string | null; readReceipts: boolean; status: string; customStatus: { text: string; emoji: string; until: number | null; } | null; quietHours: { start: number; end: number; timeZone: string | null; } | null; email: string | null; emailVerified: boolean; id: number; username: string; avatar: string | null; };
+  meJson: (user: User) => unknown;
   messageChanged: (id: number, channel: Channel) => Json | undefined;
   messagesByIds: (ids: number[]) => Json[];
   now: () => number;
@@ -21,7 +21,7 @@ export interface ReadingContext {
   updateMyPresence: (user: User, body: Json) => boolean;
   updateProfile: (user: User, body: Json) => boolean;
   userById: (id: number) => User | undefined;
-  userChanged: (userId: number) => { accent: string | null; birthday: string | null; fireItem: string | null; id: number; username: string; displayName: string | null; avatar: string | null; };
+  userChanged: (userId: number) => unknown;
   visibleMessage: (user: User, id: number) => { channel: Channel; authorId: number; };
   visibleRoom: (id: number, userId: number) => Channel;
 }
