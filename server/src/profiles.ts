@@ -2,7 +2,6 @@
 // worked out from what people have done.
 import { unlink } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Channel, Handler, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json, send } from './http.ts';

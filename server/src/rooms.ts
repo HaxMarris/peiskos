@@ -1,6 +1,5 @@
 // Rooms and hearths: making, editing, ordering, archiving and deleting rooms and categories,
 // and editing the hearth itself (name, picture, rules, welcome).
-import type { SQLOutputValue } from 'node:sqlite';
 import type { Channel, Handler, Standing, User } from './app.ts';
 import { type Db, inTransaction } from './db.ts';
 import { HttpError, type Json } from './http.ts';

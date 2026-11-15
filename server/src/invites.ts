@@ -1,6 +1,5 @@
 // Invites: each hearth's permanent code, plus links that run out or can only be used so often.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Handler, Standing, User } from './app.ts';
 import { newInviteCode } from './auth.ts';
 import type { Db } from './db.ts';

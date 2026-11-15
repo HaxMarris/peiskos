@@ -1,6 +1,5 @@
 // Threads: side conversations off one message, each a small room of its own under the room it
 // started in.
-import type { SQLOutputValue } from 'node:sqlite';
 import type { Channel, Handler, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json } from './http.ts';

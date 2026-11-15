@@ -1,6 +1,5 @@
 // Direct messages: one-to-one and group conversations, each a tiny private hearth of kind 'dm'
 // with one room, plus calls in them (the conversation's own voice room, and ringing the others).
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Channel, Handler, User } from './app.ts';
 import { newInviteCode } from './auth.ts';
 import type { Db } from './db.ts';

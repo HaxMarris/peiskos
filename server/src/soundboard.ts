@@ -4,7 +4,6 @@ import { createReadStream } from 'node:fs';
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json, readLimited, send } from './http.ts';

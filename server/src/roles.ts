@@ -1,5 +1,4 @@
 // Custom roles: each hearth's own roles, their permissions and colors, and who has them.
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
 import { avatarUrl, parsePerms, PERMS } from './common.ts';
 import { type Db, inTransaction } from './db.ts';

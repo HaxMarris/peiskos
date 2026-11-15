@@ -5,7 +5,6 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, stat, statfs, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { SQLOutputValue } from 'node:sqlite';
 import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
 import type { Db } from './db.ts';
 import { download, gifSearch } from './gifs.ts';
