@@ -21,7 +21,7 @@ import { extras, voiceTimeTracker } from './extras.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
 import { looksBlank, withoutBidi } from './text.ts';
-import { MAX_ALT_LENGTH, MAX_ATTACHMENTS, MAX_DESCRIPTION, MAX_FOLDERS, MAX_GROUP_DM, MAX_MESSAGE_LENGTH, MAX_REACTIONS, MAX_ROLES, MAX_RULES, MAX_SOUNDS, MAX_TOPIC, SESSION_IDLE_MS } from './limits.ts';
+import { EMOJI, MAX_ALT_LENGTH, MAX_ATTACHMENTS, MAX_DESCRIPTION, MAX_FOLDERS, MAX_GROUP_DM, MAX_MESSAGE_LENGTH, MAX_REACTIONS, MAX_ROLES, MAX_RULES, MAX_SOUNDS, MAX_TOPIC, SESSION_IDLE_MS } from './limits.ts';
 import { firesInLiveKit } from './fires.ts';
 import { moderation } from './moderation.ts';
 import { botsAndWebhooks } from './bots.ts';
@@ -114,7 +114,6 @@ export type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: s
 
 export type StatusRow = { status: string; status_text: string | null; status_emoji: string | null; status_until: number | null };
 
-const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
 export function createApp(opts: AppOptions): Server {
   const db = withStatementCache(opts.db);
   const now = () => Date.now();
@@ -1234,6 +1233,38 @@ export function createApp(opts: AppOptions): Server {
     sendServerUpdate(serverId);
   };
 
+  // ---- calls in direct messages: a conversation's own voice room, and ringing the others
+
+  const callRoom = (serverId: number) =>
+    (db.prepare("SELECT id FROM channels WHERE server_id = ? AND kind = 'voice'").get(serverId) as { id: number } | undefined)?.id;
+  route('POST', '/api/dms/:id/call', ({ user, params }) => {
+    const serverId = Number(params[0]);
+    const kind = serverKind(serverId);
+    if (kind !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
+    if (!opts.voice) throw new HttpError(503, "Fires aren't set up on this server yet. Tell whoever runs it.");
+    // Nobody can ring someone who blocked them (or whom they blocked), or an account that's gone.
+    dmBlockCheck(serverId, user.id);
+    let channelId = callRoom(serverId);
+    if (channelId === undefined) {
+      channelId = Number(db.prepare("INSERT INTO channels (server_id, name, kind, created_at) VALUES (?, 'Call', 'voice', ?)").run(serverId, now()).lastInsertRowid);
+      sendServerUpdate(serverId);
+    }
+    reopenDm(serverId);
+    const inCall = new Set(usersInVoice(channelId));
+    const others = serverMemberIds(serverId).filter((id) => id !== user.id && !inCall.has(id));
+    sendTo(others, { type: 'ring', serverId, channelId, from: { id: user.id, username: user.displayName || user.username } });
+    return { channelId };
+  });
+  // Not picking up: the people in the call hear about it, and your other devices stop ringing.
+  route('POST', '/api/dms/:id/call/decline', ({ user, params }) => {
+    const serverId = Number(params[0]);
+    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
+    const channelId = callRoom(serverId);
+    if (channelId !== undefined) sendTo(usersInVoice(channelId), { type: 'ring_declined', serverId, userId: user.id, username: user.displayName || user.username });
+    sendTo([user.id], { type: 'ring_stop', serverId });
+    return { ok: true };
+  });
+
   // ---- custom roles ----
   // People who manage roles can only touch roles below their own highest role,
   // and can't hand out permissions they don't have themselves. The host can do anything.
@@ -1717,37 +1748,7 @@ export function createApp(opts: AppOptions): Server {
 
   fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember });
 
-  // ---- calls in direct messages: a conversation's own voice room, and ringing the others
-
-  const callRoom = (serverId: number) =>
-    (db.prepare("SELECT id FROM channels WHERE server_id = ? AND kind = 'voice'").get(serverId) as { id: number } | undefined)?.id;
-  route('POST', '/api/dms/:id/call', ({ user, params }) => {
-    const serverId = Number(params[0]);
-    const kind = serverKind(serverId);
-    if (kind !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
-    if (!opts.voice) throw new HttpError(503, "Fires aren't set up on this server yet. Tell whoever runs it.");
-    // Nobody can ring someone who blocked them (or whom they blocked), or an account that's gone.
-    dmBlockCheck(serverId, user.id);
-    let channelId = callRoom(serverId);
-    if (channelId === undefined) {
-      channelId = Number(db.prepare("INSERT INTO channels (server_id, name, kind, created_at) VALUES (?, 'Call', 'voice', ?)").run(serverId, now()).lastInsertRowid);
-      sendServerUpdate(serverId);
-    }
-    reopenDm(serverId);
-    const inCall = new Set(usersInVoice(channelId));
-    const others = serverMemberIds(serverId).filter((id) => id !== user.id && !inCall.has(id));
-    sendTo(others, { type: 'ring', serverId, channelId, from: { id: user.id, username: user.displayName || user.username } });
-    return { channelId };
-  });
-  // Not picking up: the people in the call hear about it, and your other devices stop ringing.
-  route('POST', '/api/dms/:id/call/decline', ({ user, params }) => {
-    const serverId = Number(params[0]);
-    if (serverKind(serverId) !== 'dm' || !isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
-    const channelId = callRoom(serverId);
-    if (channelId !== undefined) sendTo(usersInVoice(channelId), { type: 'ring_declined', serverId, userId: user.id, username: user.displayName || user.username });
-    sendTo([user.id], { type: 'ring_stop', serverId });
-    return { ok: true };
-  });
+  // ---- messages: reading, sending, editing, reacting and deleting ----
 
   // The newest messages, or with ?before= older ones, ?after= newer ones (oldest first),
   // or ?around= the messages either side of one (to jump to it).
