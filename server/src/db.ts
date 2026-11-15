@@ -209,7 +209,34 @@ export function openDb(file: string): Db {
   addPlanning(db);
   clearDeletedRoomJobs(db);
   hashSessionTokens(db);
+  runMigrations(db);
   return db;
+}
+
+/**
+ * Database changes from here on are numbered, and PRAGMA user_version says how many have run, so each
+ * runs exactly once, in order, inside a transaction. Everything above (the add* steps, which check for
+ * themselves whether they're needed) is the starting point every database reaches first.
+ *
+ * To change the database: add a step to the END of this list. Never edit, remove or reorder a step
+ * that has shipped, because databases out there have already run it.
+ */
+export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
+  { why: 'Start numbering: the schema built by the steps above', run: () => {} },
+];
+
+/** Runs the numbered steps this database hasn't had yet. */
+export function runMigrations(db: Db, steps = MIGRATIONS) {
+  const done = (db.prepare('PRAGMA user_version').get() as { user_version: number }).user_version;
+  // A newer Peiskos ran here before (an update rolled back, or a newer backup restored). Its extra
+  // steps only ever add to the database, so carry on.
+  if (done > steps.length) console.warn(`The database has had ${done} numbered changes, but this Peiskos knows only ${steps.length}.`);
+  for (let i = done; i < steps.length; i++) {
+    inTransaction(db, () => {
+      steps[i].run(db);
+      db.exec(`PRAGMA user_version = ${i + 1}`);
+    });
+  }
 }
 
 const hasColumn = (db: Db, table: string, column: string) =>
