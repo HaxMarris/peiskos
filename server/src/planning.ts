@@ -1,13 +1,13 @@
 // Planning together: polls, shared lists (who's bringing what), and "when works?", a poll of
 // times that the one who asked turns into an event.
-import type { Channel, Handler, PollInput, PostExtras, User } from './app.ts';
+import type { Channel, Handler, Perm, PollInput, PostExtras, User } from './app.ts';
 import type { Db } from './db.ts';
 import { EVENT_REMIND_MS } from './events.ts';
 import { HttpError, type Json } from './http.ts';
 import { withoutBidi } from './text.ts';
 
 export interface PlanningContext {
-  can: (serverId: number, userId: number, perm: 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'voice' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => boolean;
+  can: (serverId: number, userId: number, perm: Perm) => boolean;
   channelById: (id: number) => Channel | undefined;
   cleanName: (value: unknown, field: string, max?: number) => string;
   db: Db;

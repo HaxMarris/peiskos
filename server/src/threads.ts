@@ -1,11 +1,11 @@
 // Threads: side conversations off one message, each a small room of its own under the room it
 // started in.
-import type { Channel, Handler, User } from './app.ts';
+import type { Channel, Handler, Perm, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json } from './http.ts';
 
 export interface ThreadsContext {
-  can: (serverId: number, userId: number, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => boolean;
+  can: (serverId: number, userId: number, perm: Perm) => boolean;
   canSee: (channel: Channel, userId: number) => boolean;
   channelById: (id: number) => Channel | undefined;
   db: Db;

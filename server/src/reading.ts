@@ -1,11 +1,11 @@
 // Reading: the newest message each person has read in each room (unread counts, read receipts),
 // pinned messages, and edit history.
-import type { Channel, Handler, User } from './app.ts';
+import type { Channel, Handler, Perm, User } from './app.ts';
 import { type Db, inTransaction } from './db.ts';
 import { HttpError, type Json } from './http.ts';
 
 export interface ReadingContext {
-  can: (serverId: number, userId: number, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => boolean;
+  can: (serverId: number, userId: number, perm: Perm) => boolean;
   db: Db;
   isBurrow: (serverId: number) => boolean;
   isGroupDm: (serverId: number) => boolean;

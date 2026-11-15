@@ -1,5 +1,5 @@
 // Custom roles: each hearth's own roles, their permissions and colors, and who has them.
-import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
+import type { AppOptions, Channel, Handler, Perm, Standing, User } from './app.ts';
 import { avatarUrl, parsePerms, PERMS } from './common.ts';
 import { type Db, inTransaction } from './db.ts';
 import { HttpError, type Json } from './http.ts';
@@ -9,9 +9,9 @@ import { voiceToken } from './voice.ts';
 export interface RolesContext {
   accessChanged: (serverId: number) => void;
   accessList: (serverId: number, ids: unknown) => number[];
-  allowed: (serverId: number, user: User, perm: 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'voice' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   audit: (serverId: number, actorId: number | null, action: string, targetId: number | null, detail?: string) => void;
-  can: (serverId: number, userId: number, perm: 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'voice' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => boolean;
+  can: (serverId: number, userId: number, perm: Perm) => boolean;
   channelById: (id: number) => Channel | undefined;
   checkSeat: (channel: Channel, userId: number) => void;
   cleanName: (value: unknown, field: string, max?: number) => string;

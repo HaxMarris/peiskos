@@ -5,7 +5,7 @@ import { createReadStream, createWriteStream } from 'node:fs';
 import { mkdir, readFile, stat, statfs, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
+import type { AppOptions, Channel, Handler, Perm, Standing, User } from './app.ts';
 import type { Db } from './db.ts';
 import { download, gifSearch } from './gifs.ts';
 import { bearer, HttpError, type Json, readLimited, send } from './http.ts';
@@ -14,7 +14,7 @@ import { AVATAR_TYPES, INLINE_TYPES, MAX_AVATAR_BYTES } from './media.ts';
 import { withoutBidi } from './text.ts';
 
 export interface UploadsContext {
-  allowed: (serverId: number, user: User, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   attachmentJson: (a: Json) => unknown;
   checkTries: (keys: string[], limit: number) => void;
   db: Db;

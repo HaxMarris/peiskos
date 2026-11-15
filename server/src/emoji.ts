@@ -1,12 +1,12 @@
 // Each hearth's own custom emoji and stickers.
 import { unlink } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AppOptions, Handler, Standing, User } from './app.ts';
+import type { AppOptions, Handler, Perm, Standing, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json, send } from './http.ts';
 
 export interface EmojiContext {
-  allowed: (serverId: number, user: User, perm: 'emoji' | 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   db: Db;
   isMember: (serverId: number, userId: number) => boolean;
   now: () => number;

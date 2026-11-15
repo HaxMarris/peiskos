@@ -4,14 +4,14 @@ import { createReadStream } from 'node:fs';
 import { mkdir, stat, unlink, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { join } from 'node:path';
-import type { AppOptions, Channel, Handler, Standing, User } from './app.ts';
+import type { AppOptions, Channel, Handler, Perm, Standing, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json, readLimited, send } from './http.ts';
 import { MAX_SOUNDS } from './limits.ts';
 import { MAX_SOUND_BYTES, SOUND_TYPES } from './media.ts';
 
 export interface SoundboardContext {
-  allowed: (serverId: number, user: User, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   channelById: (id: number) => Channel | undefined;
   db: Db;
   inVoice: Map<number, number>;

@@ -1,6 +1,6 @@
 // Rooms and hearths: making, editing, ordering, archiving and deleting rooms and categories,
 // and editing the hearth itself (name, picture, rules, welcome).
-import type { Channel, Handler, Standing, User } from './app.ts';
+import type { Channel, Handler, Perm, Standing, User } from './app.ts';
 import { type Db, inTransaction } from './db.ts';
 import { HttpError, type Json } from './http.ts';
 import { MAX_DESCRIPTION, MAX_RULES } from './limits.ts';
@@ -8,7 +8,7 @@ import { MAX_DESCRIPTION, MAX_RULES } from './limits.ts';
 export interface RoomsContext {
   BURROW_FIELDS: Record<string, string>;
   accessChanged: (serverId: number) => void;
-  allowed: (serverId: number, user: User, perm: 'voice' | 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   audit: (serverId: number, actorId: number | null, action: string, targetId: number | null, detail?: string) => void;
   canSee: (channel: Channel, userId: number) => boolean;
   channelById: (id: number) => Channel | undefined;

@@ -1,14 +1,14 @@
 // Invites: each hearth's permanent code, plus links that run out or can only be used so often.
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { AppOptions, Handler, Standing, User } from './app.ts';
+import type { AppOptions, Handler, Perm, Standing, User } from './app.ts';
 import { newInviteCode } from './auth.ts';
 import type { Db } from './db.ts';
 import { clientIp, HttpError } from './http.ts';
 
 export interface InvitesContext {
-  allowed: (serverId: number, user: User, perm: 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'voice' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => Standing;
+  allowed: (serverId: number, user: User, perm: Perm) => Standing;
   audit: (serverId: number, actorId: number | null, action: string, targetId: number | null, detail?: string) => void;
-  can: (serverId: number, userId: number, perm: 'rooms' | 'messages' | 'remove' | 'ban' | 'roles' | 'burrow' | 'emoji' | 'voice' | 'everyone' | 'pin' | 'invites' | 'timeout' | 'audit') => boolean;
+  can: (serverId: number, userId: number, perm: Perm) => boolean;
   checkTries: (keys: string[], limit: number) => void;
   db: Db;
   escHtml: (t: string) => string;
