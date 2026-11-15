@@ -840,7 +840,7 @@ function renderFire() {
     }
     const wrap = seat.el.querySelector('.seat-face-wrap');
     decorateSeat(wrap, id);
-    fireSeatArt(wrap, seatKindOf(id));
+    fireSeatArt(wrap, seatKindOf(id, i));
     wrap.querySelector('.seat-live')?.remove();
     if (sharing?.screen) wrap.insertAdjacentHTML('beforeend', '<span class="seat-live">LIVE</span>');
     seat.el.className = 'seat' + (me ? ' me' : '') + (speaking ? ' speaking' : '') + (camTrack ? ' has-video' : '');
@@ -873,7 +873,7 @@ function renderFire() {
     el.className = 'seat open';
     el.innerHTML = '<span class="seat-face"></span><span class="seat-status">Open seat</span>';
     place(el, i);
-    fireSeatArt(el.querySelector('.seat-face'), fireDefaultSeat());
+    fireSeatArt(el.querySelector('.seat-face'), fireDefaultSeat(i));
     ring.append(el);
   }
   anchorSeats(ring);

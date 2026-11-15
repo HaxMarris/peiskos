@@ -212,11 +212,11 @@ function fireItemOf(userId) {
 }
 
 /** What someone sits on at this fire: the seat they picked in its hearth, else the fire's own (fireDefaultSeat). */
-function seatKindOf(userId) {
+function seatKindOf(userId, i = 0) {
   const here = state.voice && roomById(state.voice.channelId)?.s;
   const seat = here?.members?.find((x) => x.id === userId)?.seat;
   if (seat && FIRE_ART.SEATS[seat]) return seat;
-  return fireDefaultSeat();
+  return fireDefaultSeat(i);
 }
 
 /** Called by renderFire for each seat: the thing by it, and the look of the whole fire. */
