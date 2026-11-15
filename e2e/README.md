@@ -38,7 +38,11 @@ friend; `startGame(seat, 'trivia')` and `joinGame(seat)` use the same buttons a 
 `seat.game()` is the game's own page; `sees(locator, text)` waits for a page to catch up.
 
 Games keep time on the host's copy. `startGame` takes over that window's clock, so
-`await host.wait(30.5)` jumps half a minute ahead instead of waiting it out.
+`await host.wait(30.5)` jumps half a minute ahead instead of waiting it out. Keep Playwright at
+1.63 or later (tested): 1.56's clock could undo a jump now and then on a busy machine (`clock.test.mjs`
+checks for it). A jump only moves the host's time, not the messages between windows, so when a
+player's clock sends something just before the host's runs out, wait until the host has it
+before jumping the host ahead.
 
 The casino's cards and reels are random, so its tests check what must always be true (whose cards
 you can see, whose turn it is, that chips add up) and not who wins.
