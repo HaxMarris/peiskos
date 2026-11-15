@@ -81,10 +81,9 @@ test('Smoke Signals: three sketchbooks go round, nobody sees another page early,
   await maya.game().getByRole('button', { name: 'Change guess' }).click();
   await guess(maya, 'cat cycling');
   await guess(theo, 'mountain lunch');
-  // Ines types but doesn't send: the clock sends it.
+  // Ines types but doesn't send: her clock sends it, and with everyone in, the page moves on (no jump on the host's clock).
   await ines.game().locator('#guess').fill('a guess from the clock');
   await ines.wait(45.5);
-  await maya.wait(47);
 
   // The reveal, one page at a time; only the host turns them. The sketchbooks come in the order they went round.
   const title = await sees(theo.game().locator('h1'), /sketchbook$/);
