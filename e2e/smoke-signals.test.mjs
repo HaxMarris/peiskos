@@ -147,7 +147,12 @@ test('Smoke Signals: four players, someone leaves mid-game, and their pages show
   assert.equal(next.filter((x) => x.includes('Omar prompt')).length, 1);
 
   // Run the clock out on the rest of the pages, then check Omar's sketchbook.
-  for (let i = 0; i < 3; i++) await maya.wait(61.6);
+  // One page at a time: each jump has to land (the host moving the page on) before the next one.
+  for (const n of [4, 5]) {
+    await maya.wait(61.6);
+    await sees(maya.game().locator('#playHead, #panel'), `Page ${n} of 5`);
+  }
+  await maya.wait(61.6);
   await sees(maya.game().locator('h1'), /sketchbook/);
   let found = false;
   for (let b = 0; b < 4 && !found; b++) {
