@@ -20,6 +20,7 @@ import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
+import { looksBlank, withoutBidi } from './text.ts';
 import { firesInLiveKit } from './fires.ts';
 import { moderation } from './moderation.ts';
 import { botsAndWebhooks } from './bots.ts';
@@ -32,13 +33,6 @@ import { fishing, fishingDock } from './fishing.ts';
 import { codeEmail, type CodeEmail } from './mail-template.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 import { checkTotp, hashRecovery, newRecoveryCodes, newTotpSecret, verifyAssertion, verifyRegistration, ZipWriter } from './account.ts';
-
-// Characters that flip the direction of the text after them, which can disguise a link or a name.
-const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069]/g;
-/** Text with direction overrides taken out. */
-export const withoutBidi = (text: string) => text.replace(BIDI_CONTROLS, '');
-/** Nothing anyone could see: only spaces and invisible characters. */
-export const looksBlank = (text: string) => !text.replace(/[\s\u200B-\u200D\u2060\uFEFF\u180E\u3164\u115F\u1160\uFFA0]/g, '').length;
 
 export interface AppOptions {
   db: Db;
@@ -118,6 +112,10 @@ const SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000; // logins unused for 30 days e
 // A user's picture link, from their users.avatar file name (or null).
 const avatarUrl = (col: string) => `CASE WHEN ${col} IS NULL THEN NULL ELSE '/api/avatars/' || ${col} END`;
 const MAX_SOUNDS = 30;
+
+export type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
+/** What a posted message can carry besides its text. */
+export type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
 
 const EMOJI = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
 export function createApp(opts: AppOptions): Server {
@@ -628,7 +626,6 @@ export function createApp(opts: AppOptions): Server {
         .all(userId) as { user_id: number }[]
     ).map((r) => r.user_id);
 
-  type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
   // Anyone can send a burst of messages, then about one a second: enough for any conversation, not for a flood.
   const postAllowance = allowance(60, 1);
   // Reactions, edits and poll votes get their own, roomier allowances: a quick burst of reacting
@@ -641,7 +638,6 @@ export function createApp(opts: AppOptions): Server {
   const notTooFast = (userId: number) => {
     if (!refreshAllowance.take(userId)) throw new HttpError(429, "You're changing things very fast. Wait a moment.");
   };
-  type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
 
   // ---- slash commands, worked out by the server so nobody can fake a dice roll
 
