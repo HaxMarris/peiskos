@@ -211,12 +211,12 @@ function fireItemOf(userId) {
   return null;
 }
 
-/** What someone sits on at this fire: the seat they picked in its hearth, else a stump (a cushion at the card table). */
+/** What someone sits on at this fire: the seat they picked in its hearth, else the fire's own (fireDefaultSeat). */
 function seatKindOf(userId) {
   const here = state.voice && roomById(state.voice.channelId)?.s;
   const seat = here?.members?.find((x) => x.id === userId)?.seat;
   if (seat && FIRE_ART.SEATS[seat]) return seat;
-  return $('#fire-ring').classList.contains('at-table') ? 'velvet' : 'stump';
+  return fireDefaultSeat();
 }
 
 /** Called by renderFire for each seat: the thing by it, and the look of the whole fire. */
@@ -236,7 +236,7 @@ function decorateFire(s) {
   // A backdrop someone chose for themselves wins over one put up for the whole hearth; either hides the sky.
   const backdrop = hearth ? (BACKDROP_SCENES[s.myBackdrop] && s.myBackdrop) || (BACKDROP_SCENES[s.backdrop] && s.backdrop) || null : null;
   backdropLayer(backdrop, hearth ? s.id : null);
-  fireLogs(backdrop === 'lounge' ? 'money' : look === 'birch' ? 'birch' : 'crossed');
+  fireLogs(backdrop === 'lounge' ? 'money' : backdrop === 'ocean' ? 'vent' : look === 'birch' ? 'birch' : 'crossed');
   if (!backdrop) skyLayer(hearth ? s.skyLook || 'evening' : 'evening');
   seasonLayer();
 }

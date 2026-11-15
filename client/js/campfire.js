@@ -733,6 +733,7 @@ function sizeRing(ring, total, anyoneSharing) {
   ring.style.setProperty('--cy', `${g - fire * (phone ? 0.144 : 0.12)}px`);
   ring.classList.toggle('crowded', total > 8);
   ring.classList.toggle('at-table', backdrop === 'lounge');
+  ring.classList.toggle('under-sea', backdrop === 'ocean');
   fireGroundLayout(ring, { W, H, g, rx, ry, fire, phone, total, backdrop });
   return (el, i) => {
     el.dataset.i = i;
@@ -872,7 +873,7 @@ function renderFire() {
     el.className = 'seat open';
     el.innerHTML = '<span class="seat-face"></span><span class="seat-status">Open seat</span>';
     place(el, i);
-    fireSeatArt(el.querySelector('.seat-face'), ring.classList.contains('at-table') ? 'velvet' : 'stump');
+    fireSeatArt(el.querySelector('.seat-face'), fireDefaultSeat());
     ring.append(el);
   }
   anchorSeats(ring);

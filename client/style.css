@@ -2273,3 +2273,24 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .fire-ring-wrap .bd-stage { scale: 1.3; transform-origin: 50% 100%; }
 .seat-pick-art svg { width: 100%; height: 100%; overflow: visible; }
 .seat-pick-art { display: block; width: 72px; height: 40px; margin: 0 auto; }
+
+/* Under the sea the fire is a hydrothermal vent (fire-ground.js vent): no flames, a dark plume rising from
+   the chimney's glowing mouth. Sparks rise as bubbles. */
+.fire-ring.under-sea { --glow: #ff8a4a; --ember: #c8501e; }
+.fire-ring.under-sea .fire-flames { display: none; }
+.fire-ring.under-sea .fire-glow.outer { width: calc(var(--fire) * .36); opacity: .55; }
+.fire-ring.under-sea .fire-glow.inner { width: calc(var(--fire) * .16); translate: -50% -110%; }
+.fire-ring.under-sea .fire-core { filter: drop-shadow(0 0 14px color-mix(in srgb, var(--ember) 40%, transparent)); }
+.vent-puff { transform-box: fill-box; transform-origin: 50% 50%; opacity: 0; animation: vent-rise 6s linear calc(var(--i) / var(--n) * -6s) infinite; }
+.vent-plume.small .vent-puff { animation-duration: 4.4s; animation-delay: calc(var(--i) / var(--n) * -4.4s); }
+.vent-mouth { transform-box: fill-box; transform-origin: 50% 50%; animation: fire-breathe 2.4s ease-in-out infinite; }
+@keyframes vent-rise {
+  0% { transform: translate(0, 0) scale(.5); opacity: 0; }
+  12% { opacity: .9; }
+  60% { opacity: .55; }
+  100% { transform: translate(var(--dx), calc(var(--rise) * -1)) scale(2.6); opacity: 0; }
+}
+.fire-ring.under-sea .fire-sparks span { background: none; border: 1.5px solid #d8fbff; box-shadow: none; width: 6px; height: 6px; }
+@media (prefers-reduced-motion: reduce) { .vent-puff, .vent-mouth { animation: none; } .vent-puff { opacity: .5; } }
+[data-motion="reduce"] :is(.vent-puff, .vent-mouth) { animation: none; }
+[data-motion="reduce"] .vent-puff { opacity: .5; }

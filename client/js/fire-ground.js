@@ -70,6 +70,52 @@ const FIRE_ART = (() => {
     },
   };
 
+  // ---------- the vent under the sea (the logs' viewBox, 200x220, foot at 100,190) ----------
+  // A black smoker: a chimney of lumpy rock, hot water glowing at its mouth and a dark plume rising,
+  // a smaller spire beside it, and tube worms at the foot.
+  function vent() {
+    seed = 61;
+    const smooth = (pts) => {
+      let d = '';
+      for (let i = 0; i < pts.length; i++) { const [x, y] = pts[i], [x2, y2] = pts[(i + 1) % pts.length]; d += (i ? `Q${f(x)} ${f(y)} ` : 'M') + `${f((x + x2) / 2)} ${f((y + y2) / 2)}`; }
+      return d + 'Z';
+    };
+    // A chimney from (x, base) up to its mouth at `top`, w0 wide at the foot and w1 at the mouth.
+    const chimney = (x, base, top, w0, w1, n) => {
+      const left = [], right = [], at = (k) => ({ y: base - (base - top) * k, w: (w0 + (w1 - w0) * Math.pow(k, .7)) / 2, sway: Math.sin(k * 3.2) * w1 * .25 });
+      for (let i = 0; i <= n; i++) { const k = i / n, p = at(k), bump = i && i < n ? (rnd() * .5 + .75) : 1; left.push([x + p.sway - p.w * bump, p.y]); right.unshift([x + p.sway + p.w * (rnd() * .5 + .75 > 1 && i && i < n ? 1.15 : .95), p.y]); }
+      let s = `<path d="${smooth([...left, ...right])}" fill="#2c2826"/>`;
+      // Lit on one side, ledges where it grew in layers, and streaks of rust and sulphur.
+      s += `<path d="${smooth([...left.map(([px, py], i) => [px + (i ? 3 : 6), py]), ...left.slice().reverse().map(([px, py]) => [px + (right[0][0] - left[left.length - 1][0]) * .35 + 4, py])])}" fill="#4a423c" opacity=".7"/>`;
+      for (let i = 1; i < n; i++) { if (rnd() < .55) continue; const p = at(i / n), side = rnd() > .5 ? 1 : -1; s += `<path d="${blob(x + p.sway + side * p.w * .95, p.y, p.w * .38 + 3, 5 + rnd() * 3, .25, 7)}" fill="#332e2b"/>`; }
+      for (let i = 1; i < n; i++) { const p = at(i / n); s += `<path d="M${f(x + p.sway - p.w * 1.05)} ${f(p.y)}q${f(p.w)} ${f(5 + rnd() * 3)} ${f(p.w * 2.1)} ${f(-1 + rnd() * 2)}" stroke="#1a1614" stroke-width="2.4" fill="none" stroke-linecap="round" opacity=".8"/>`; }
+      for (let i = 0; i < n; i++) { const p = at(rnd() * .9); s += `<path d="${blob(x + p.sway + (rnd() - .5) * p.w, p.y, p.w * (.15 + rnd() * .2), 3 + rnd() * 4, .3, 6)}" fill="${rnd() > .45 ? '#9a5a2a' : '#c8a83c'}" opacity=".6"/>`; }
+      return s;
+    };
+    const plume = (x, y, n, big, rise, cls) => {
+      let s = '';
+      for (let i = 0; i < n; i++) s += `<circle class="vent-puff" cx="${f(x)}" cy="${f(y)}" r="${f(big * (.75 + rnd() * .5))}" style="--i:${i};--n:${n};--rise:${rise}px;--dx:${f((rnd() - .35) * big * 3)}px" fill="${['#26262c', '#33333b', '#3e3e46'][i % 3]}"/>`;
+      return `<g class="vent-plume ${cls}">${s}</g>`;
+    };
+    const mouth = (x, y, rx) => `<ellipse class="vent-mouth" cx="${f(x)}" cy="${f(y)}" rx="${f(rx * 2.2)}" ry="${f(rx * 1.4)}" fill="url(#vent-heat)"/>` +
+      `<ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(rx)}" ry="${f(rx * .36)}" fill="#1a0c06"/><ellipse cx="${f(x)}" cy="${f(y)}" rx="${f(rx * .62)}" ry="${f(rx * .2)}" fill="#ffa040"/>`;
+    const worm = (x, y, h, lean) => {
+      const tx = x + lean, ty = y - h;
+      let fan = '';
+      for (let k = -3; k <= 3; k++) { const a = (-90 + k * 16 + lean * 1.5) * Math.PI / 180; fan += `<path d="M${f(tx)} ${f(ty)}l${f(Math.cos(a) * 10)} ${f(Math.sin(a) * 10)}" stroke="${k % 2 ? '#e8384a' : '#c41e30'}" stroke-width="3" stroke-linecap="round"/>`; }
+      return `<path d="M${f(x)} ${f(y)}Q${f(x + lean * .1)} ${f(y - h * .6)} ${f(tx)} ${f(ty)}" stroke="#ece6da" stroke-width="4" fill="none" stroke-linecap="round"/>` +
+        `<path d="M${f(x + 1.2)} ${f(y)}Q${f(x + lean * .1 + 1.2)} ${f(y - h * .6)} ${f(tx + 1)} ${f(ty)}" stroke="#a89e8c" stroke-width="1.2" fill="none"/>` +
+        `<g class="vent-worm">${fan}</g>`;
+    };
+    const worms = (x, y, n) => { let s = ''; for (let i = 0; i < n; i++) s += worm(x + (i - n / 2) * 5 + rnd() * 2, y + rnd() * 4, 22 + rnd() * 22, (i - n / 2) * 4 + (rnd() - .5) * 6); return s; };
+    const defs = '<defs><radialGradient id="vent-heat"><stop offset="0" stop-color="#ffc070" stop-opacity=".95"/><stop offset=".45" stop-color="#ff6a2a" stop-opacity=".4"/><stop offset="1" stop-color="#ff6a2a" stop-opacity="0"/></radialGradient></defs>';
+    const back = defs +
+      plume(52, 128, 5, 8, 90, 'small') + chimney(52, 200, 128, 40, 15, 4) + mouth(52, 128, 7.5) +
+      plume(108, 46, 9, 14, 150, 'big') + chimney(108, 204, 46, 88, 26, 7) + mouth(108, 46, 13);
+    const front = worms(150, 210, 5) + worms(66, 214, 4) + worms(170, 200, 3);
+    return { back, front };
+  }
+
   // ---------- seats (viewBox 130x60, face sits on y≈18-28, things can rise to y≈-70 behind the face) ----------
   const sh = (rx = 56, op = .35) => `<ellipse cx="65" cy="54" rx="${rx}" ry="7" fill="#000" opacity="${op}"/>`;
   const SEATS = {
@@ -107,6 +153,21 @@ const FIRE_ART = (() => {
     })(),
     beanbag: `${sh(60, .3)}<path d="M8 40Q2 15 34 9Q65 1 96 9Q128 15 122 40Q118 57 65 57Q12 57 8 40Z" fill="#c8562a"/><path d="M10 44Q20 56 65 56Q110 56 120 44Q118 58 65 59Q12 58 10 44Z" fill="#000" opacity=".22"/><ellipse cx="65" cy="22" rx="38" ry="10" fill="#9a3c18" opacity=".55"/><path d="M18 26Q20 12 40 9" stroke="#fff" stroke-width="4" opacity=".22" fill="none" stroke-linecap="round"/><path d="M30 48Q65 40 100 48" stroke="#8a3412" stroke-width="1.4" fill="none" stroke-dasharray="3 3"/>`,
     velvet: `${sh(58, .35)}<path d="M8 25Q4 32 10 38L18 46Q65 54 112 46L120 38Q126 32 122 25Z" fill="#7a1420"/><path d="M14 44Q65 53 116 44" stroke="#d4a84a" stroke-width="2.2" fill="none"/><path d="M12 24Q6 14 22 11Q65 4 108 11Q124 14 118 24Q124 34 108 36Q65 42 22 36Q6 34 12 24Z" fill="#b8323e"/><path d="M12 24Q6 14 22 11Q65 4 108 11Q124 14 118 24Q124 34 108 36Q65 42 22 36Q6 34 12 24Z" fill="none" stroke="#e8c35a" stroke-width="2.4"/><path d="M38 14L52 23L38 32M65 10L79 20L65 30L51 20Z M92 14L78 23L92 32" stroke="#8a1824" stroke-width="1.3" fill="none"/><g fill="#5a0c16">${[[38,14],[65,10],[92,14],[52,23],[79,23],[38,32],[65,30],[92,32]].map(([x,y])=>`<circle cx="${x}" cy="${y}" r="2.2"/>`).join('')}</g><path d="M22 14Q30 10 44 9" stroke="#fff" stroke-width="2.5" opacity=".22" fill="none" stroke-linecap="round"/><g fill="#e8c35a"><circle cx="9" cy="24" r="3"/><path d="M6 26L3 38H15L12 26Z"/><circle cx="121" cy="24" r="3"/><path d="M118 26L115 38H127L124 26Z"/></g>`,
+    // Under the sea everyone starts on a brain coral, with a sprig of branching coral behind.
+    coral: (() => {
+      let grooves = '';
+      for (const [y, w, ph] of [[14, 30, 0], [19, 40, 1.3], [24, 46, 2.1], [29, 46, .6], [34, 40, 1.8], [39, 30, 2.6]]) {
+        let d = `M${65 - w} ${y}`;
+        for (let x = -w; x < w; x += 6) d += `q3 ${f(Math.sin(x * .4 + ph) * 3.2)} 6 0`;
+        grooves += `<path d="${d}" stroke="#a8603e" stroke-width="1.8" fill="none" stroke-linecap="round" opacity=".8"/>`;
+      }
+      const branch = '<path d="M98 30C98 14 96 4 92 -10M96 10C104 4 108 -4 108 -14M93 -2C86 -6 84 -14 84 -22M107 -6C112 -10 116 -12 118 -20" stroke="#ff8a6a" stroke-width="5.5" fill="none" stroke-linecap="round"/>' +
+        '<g fill="#ffb0a0"><circle cx="92" cy="-11" r="3"/><circle cx="108" cy="-15" r="3"/><circle cx="84" cy="-23" r="3"/><circle cx="118" cy="-21" r="3"/></g>';
+      return `${sh(58, .35)}${branch}<path d="M10 40Q6 14 36 8Q65 2 94 8Q124 14 120 40Q116 56 65 56Q14 56 10 40Z" fill="#d8875c"/>` +
+        `<path d="M12 44Q22 56 65 56Q108 56 118 44Q116 58 65 59Q14 58 12 44Z" fill="#000" opacity=".25"/>${grooves}` +
+        '<path d="M22 22Q30 10 48 8" stroke="#ffd2b0" stroke-width="3" opacity=".45" fill="none" stroke-linecap="round"/>' +
+        '<path d="M14 50q-6 -2 -10 2M116 50q6 -2 10 2" stroke="#7a4a8a" stroke-width="4" stroke-linecap="round"/>';
+    })(),
     royal: `<ellipse cx="65" cy="55" rx="60" ry="7" fill="#000" opacity=".38"/><path d="M4 36Q2 44 10 48Q65 58 120 48Q128 44 126 36Z" fill="#2c1440"/><path d="M6 34Q2 26 16 24Q65 18 114 24Q128 26 124 34Q128 42 114 44Q65 50 16 44Q2 42 6 34Z" fill="#4a2468"/><path d="M6 34Q2 26 16 24Q65 18 114 24Q128 26 124 34Q128 42 114 44Q65 50 16 44Q2 42 6 34Z" fill="none" stroke="#e8c35a" stroke-width="2.2"/><path d="M14 46Q65 56 116 46" stroke="#e8c35a" stroke-width="1.6" fill="none" stroke-dasharray="4 3"/><path d="M22 30Q16 36 22 38L30 40Q65 46 100 40L108 38Q114 36 108 30Z" fill="#8a1a24"/><path d="M24 24Q18 16 32 14Q65 8 98 14Q112 16 106 24Q112 32 98 34Q65 39 32 34Q18 32 24 24Z" fill="#b8323e" stroke="#e8c35a" stroke-width="2"/><path d="M40 24Q52 16 65 24Q78 32 90 24M40 24Q52 32 65 24Q78 16 90 24" stroke="#e8c35a" stroke-width="1.3" fill="none" opacity=".85"/><path d="M65 15l4 4-4 5-4-5Z" fill="#ff9a3a" stroke="#fff3c4" stroke-width=".8"/><circle cx="65" cy="19" r="8" fill="#ff9a3a" opacity=".25"/><g fill="#e8c35a"><circle cx="5" cy="34" r="3.2"/><path d="M2 36L-2 50H12L8 36Z"/><circle cx="125" cy="34" r="3.2"/><path d="M122 36L118 50H132L128 36Z"/><circle cx="23" cy="24" r="2.4"/><circle cx="107" cy="24" r="2.4"/></g><path d="M0 50h12M118 50h14" stroke="#b8902a" stroke-width="1.4"/>`,
   };
 
@@ -178,7 +239,7 @@ const FIRE_ART = (() => {
     if (back) s += `<path d="${blob(cx, cy + ry * .3, rx * .8, ry * .45, .15)}" fill="#ff8a3a" opacity=".1"/>`;
     return s;
   }
-  function pit(pw, ph) {
+  function pit(pw, ph, sea = false) {
     const cx = pw / 2, cy = ph / 2; let back = '', front = ''; seed = 77;
     const ash = (k = 1) => `<ellipse cx="${f(cx)}" cy="${f(cy)}" rx="${f(pw * .36 * k)}" ry="${f(ph * .3 * k)}" fill="url(#fg-ash)"/><ellipse cx="${f(cx)}" cy="${f(cy)}" rx="${f(pw * .26 * k)}" ry="${f(ph * .2 * k)}" fill="#1a0e08" opacity=".85"/><ellipse cx="${f(cx)}" cy="${f(cy)}" rx="${f(pw * .2 * k)}" ry="${f(ph * .15 * k)}" fill="#ff7a2a" opacity=".45"/>`;
     const defs = `<defs><radialGradient id="fg-ash"><stop offset=".55" stop-color="#3a322c"/><stop offset=".8" stop-color="#4a423c" stop-opacity=".7"/><stop offset="1" stop-color="#4a423c" stop-opacity="0"/></radialGradient></defs>`;
@@ -188,25 +249,30 @@ const FIRE_ART = (() => {
       st.sort((p, q) => p.y - q.y);
       for (const t of st) { const svg = stone(t.x, t.y, t.rx, t.ry, cols[Math.floor(rnd() * cols.length)], t.sn < 0, flat); if (t.sn < .15) back += svg; else front += svg; }
     };
-    back += ash(); ring(15, .36, .072, ['#77706a', '#6a645f', '#857c72', '#5f5954']);
+    if (sea) {
+      // Dark rock round the vent, with pale patches of bacteria between the stones.
+      back += `<ellipse cx="${f(cx)}" cy="${f(cy)}" rx="${f(pw * .36)}" ry="${f(ph * .3)}" fill="#1e1a18" opacity=".75"/>`;
+      for (let i = 0; i < 9; i++) { const a = rnd() * Math.PI * 2, d = .2 + rnd() * .2; back += `<path d="${blob(cx + Math.cos(a) * pw * d, cy + Math.sin(a) * ph * d, pw * .035, ph * .05, .3, 6)}" fill="#eae2c4" opacity=".35"/>`; }
+      ring(10, .4, .058, ['#3a3634', '#2e2a28', '#45403c', '#363a3c'], false, .45);
+    } else { back += ash(); ring(15, .36, .072, ['#77706a', '#6a645f', '#857c72', '#5f5954']); }
     return { back: defs + back, front };
   }
 
-  return { LOGS, SEATS, ground, table, pit };
+  return { LOGS, SEATS, ground, table, pit, vent };
 })();
 
 // Backdrops whose own floor is water, sky or a mountainside get a patch of ground for the circle to sit on.
 const FIRE_GROUND = new Set(['ocean', 'volcano', 'space', 'fjord']);
 const fireGround = { key: '', ring: null, geo: null, logs: '' };
 
-/** What burns in the fire: crossed logs (birch for the birch look), or a pile of money at the card table. */
+/** What burns in the fire: crossed logs (birch for the birch look), a pile of money at the card table, or a vent under the sea. */
 function fireLogs(kind) {
   if (fireGround.logs === kind) return;
   fireGround.logs = kind;
-  const L = FIRE_ART.LOGS[kind]();
-  const t = `translate(100 192) scale(${kind === 'money' ? 1.45 : 1.3}) translate(-100 -192)`;
+  const L = kind === 'vent' ? FIRE_ART.vent() : FIRE_ART.LOGS[kind]();
+  const t = kind === 'vent' ? 'translate(100 204) scale(1.25) translate(-100 -204)' : `translate(100 192) scale(${kind === 'money' ? 1.45 : 1.3}) translate(-100 -192)`;
   // In winter there's snow on the far ends of the logs.
-  const snow = kind === 'money' ? '' : '<g class="fire-snow" fill="#fbfdff"><ellipse cx="138" cy="166" rx="11" ry="3.4" transform="rotate(-17.6 138 166)"/><ellipse cx="62" cy="166" rx="11" ry="3.4" transform="rotate(17.6 62 166)"/></g>';
+  const snow = kind === 'money' || kind === 'vent' ? '' : '<g class="fire-snow" fill="#fbfdff"><ellipse cx="138" cy="166" rx="11" ry="3.4" transform="rotate(-17.6 138 166)"/><ellipse cx="62" cy="166" rx="11" ry="3.4" transform="rotate(17.6 62 166)"/></g>';
   $('#fire-ring .fire-logs').innerHTML = `<g transform="${t}">${L.back}${snow}</g>`;
   $('#fire-ring .fire-logs-front').innerHTML = L.front ? `<g transform="${t}">${L.front}</g>` : '';
 }
@@ -237,7 +303,7 @@ function fireGroundLayout(ring, geo) {
     ring.insertAdjacentHTML('beforeend', FIRE_ART.table(W, H, g, rx, ry, total));
   } else {
     const pw = fire * (phone ? 0.6 : 0.5), ph = pw * 0.34;
-    const pit = FIRE_ART.pit(pw, ph);
+    const pit = FIRE_ART.pit(pw, ph, backdrop === 'ocean');
     const box = (z, inner) => `<svg class="fire-pit ${z}" style="top:${g}px" width="${pw.toFixed(1)}" height="${ph.toFixed(1)}" viewBox="0 0 ${pw.toFixed(1)} ${ph.toFixed(1)}" overflow="visible">${inner}</svg>`;
     ring.insertAdjacentHTML('beforeend', box('back', pit.back) + box('front', pit.front));
   }
@@ -245,6 +311,12 @@ function fireGroundLayout(ring, geo) {
 /** The light changed: the patch of ground is redrawn in it. */
 function fireGroundRefresh() {
   if (fireGround.ring && fireGround.geo && FIRE_GROUND.has(fireGround.geo.backdrop)) fireGroundLayout(fireGround.ring, fireGround.geo);
+}
+
+/** What everyone sits on until they pick a seat: a stump, a cushion at the card table, or coral under the sea. */
+function fireDefaultSeat() {
+  const ring = $('#fire-ring');
+  return ring.classList.contains('at-table') ? 'velvet' : ring.classList.contains('under-sea') ? 'coral' : 'stump';
 }
 
 /** The seat someone sits on, under their face: a stump, or a cushion at the card table. */
