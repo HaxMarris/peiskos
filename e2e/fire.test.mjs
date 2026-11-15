@@ -20,7 +20,7 @@ test("a game at the fire: the picker, the fire's game bar, a full game, and how 
   assert.equal(await bar(theo).isVisible(), false);
   await maya.page.click('#fire-game');
   assert.deepEqual(await maya.page.locator('#modal-card [data-game] b').allInnerTexts(),
-    ['Melon Bomber', 'Stockpile', 'Sketch & Guess', 'Fireside Trivia', 'Odd One Out', 'Same Page', 'Sketchpad']);
+    ['Melon Bomber', 'Stockpile', 'Sketch & Guess', 'Fireside Trivia', 'Odd One Out', 'Same Page', 'Smoke Signals', 'Sketchpad']);
   await maya.page.keyboard.press('Escape');
 
   // Maya starts Melon Bomber (four players): the others hear about it and can join from the bar.

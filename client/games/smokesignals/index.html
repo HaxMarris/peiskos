@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- The desktop app opens this from its own files, with no security headers; in a browser the server's apply too. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file: 'unsafe-inline'; img-src 'self' file: data: blob:; font-src 'self' file:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Smoke Signals</title>
+<link rel="stylesheet" href="../shared/game.css">
+<link rel="stylesheet" href="../shared/canvas.css">
+<link rel="stylesheet" href="../shared/party.css">
+<style>
+  :root { --paper: #fffdf7; --ink: #2a1f18; --pencil: #6b5a4b; }
+  /* Drawing or guessing: the page takes the room, the task sits above it. */
+  #play { position: absolute; inset: 0; display: flex; flex-direction: column; gap: 6px; padding: 8px 10px 10px; }
+  #playHead { display: flex; flex-direction: column; gap: 6px; width: min(100%, 980px); margin: 0 auto; }
+  .task { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .task .muted { font-size: 14px; }
+  .task b { font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 24px; color: var(--strong); overflow-wrap: anywhere; }
+  #play .composer { width: min(100%, 620px); margin: 0 auto; }
+  .waitline { text-align: center; font-size: 13px; margin: 0; min-height: 18px; }
+  .suggest { display: flex; flex-wrap: wrap; gap: 8px; }
+  .suggest .btn { font-weight: 700; }
+  .sent { margin: 0; padding: 10px 14px; border-radius: 14px; border: 1.5px solid var(--ember); background: rgba(240, 138, 75, .18); }
+  .sent b { font-family: 'Fraunces', Georgia, serif; font-size: 20px; color: var(--strong); overflow-wrap: anywhere; }
+
+  /* The reveal: a sketchbook of cream pages, punched down the left edge, each laid a touch off square. */
+  .panel.book { width: min(96vw, 720px); gap: 10px; }
+  .bookhead { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .bookhead span { white-space: nowrap; }
+  .pages { list-style: none; margin: 0; padding: 4px 4px 4px 0; display: flex; flex-direction: column; gap: 14px; }
+  .leaf { position: relative; background: var(--paper); color: var(--ink); border-radius: 3px 10px 10px 3px; padding: 14px 18px 12px 34px;
+    box-shadow: 0 2px 0 #e7dccb, 0 8px 22px rgba(0,0,0,.35); transform: rotate(var(--tilt, 0deg)); }
+  .leaf::before { content: ''; position: absolute; left: 10px; top: 10px; bottom: 10px; width: 10px;
+    background: radial-gradient(circle at 5px 5px, var(--bg) 3.5px, transparent 4px) 0 0 / 10px 20px repeat-y; }
+  .leaf:nth-child(odd) { --tilt: -.5deg; }
+  .leaf:nth-child(even) { --tilt: .4deg; }
+  .leaf .said { display: block; font-family: 'Fraunces', Georgia, serif; font-size: 28px; line-height: 1.2; overflow-wrap: anywhere; }
+  .leaf canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 10; border-radius: 4px; background: var(--paper); outline: 1px solid #eee3d3; }
+  .leaf .who { display: block; margin-top: 8px; font-size: 13px; color: var(--pencil); }
+  .leaf.gone .said { font-size: 16px; font-family: inherit; color: var(--pencil); font-style: italic; }
+  .leaf.new { animation: turn .32s ease-out; }
+  @keyframes turn { from { opacity: 0; transform: translateY(-10px) rotate(-2deg); } to { opacity: 1; transform: rotate(var(--tilt, 0deg)); } }
+  @media (prefers-reduced-motion: reduce) { .leaf.new { animation: none; } }
+  @media (max-width: 520px) {
+    .task b { font-size: 20px; }
+    .leaf { padding: 12px 12px 10px 28px; }
+    .leaf::before { left: 7px; }
+    .leaf .said { font-size: 23px; }
+    /* Phones: the page sits under the task, not in the middle of the room left over. */
+    #play .board canvas { top: 0; transform: translateX(-50%); }
+  }
+  @media (max-height: 500px) { .task b { font-size: 18px; } #play { padding: 4px 8px 6px; gap: 4px; } }
+</style>
+</head>
+<body>
+<div class="screen" id="screen"><div class="panel wide" id="panel"></div></div>
+<div id="play" class="hidden">
+  <div id="playHead"></div>
+  <div class="board"><canvas id="page" aria-label="The drawing"></canvas></div>
+  <div class="tools" id="tools"></div>
+  <form class="composer hidden" id="guessForm" autocomplete="off">
+    <input id="guess" maxlength="60" placeholder="What is it?" aria-label="Your guess" autocapitalize="off" enterkeyhint="send">
+    <button class="btn" type="submit">Send guess</button>
+  </form>
+  <p class="waitline muted" id="waitline"></p>
+</div>
+<div id="say" class="sr-only" role="status"></div>
+<script src="../shared/bridge.js"></script>
+<script src="../shared/canvas.js"></script>
+<script src="../shared/party.js"></script>
+<script src="../sketchguess/words.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
