@@ -8,6 +8,7 @@ import { createServer, type Server } from 'node:http';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller } from './helpers.ts';
 
 // A stand-in for LiveKit's API that records what Burrow asks it to do.
 const liveKitCalls: { method: string; body: any }[] = [];
@@ -37,14 +38,7 @@ after(() => {
   app.close();
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 async function socket(token: string) {
   const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${token}`);

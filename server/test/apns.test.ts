@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller } from './helpers.ts';
 
 // A stand-in for Apple's push service: it keeps what it's sent, and says a token is gone when told to.
 const { privateKey } = generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
@@ -46,14 +47,7 @@ after(() => {
   app.close();
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 test('the iPhone app gets alerts through Apple, signed with the APNs key', async () => {

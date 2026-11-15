@@ -1,32 +1,18 @@
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { AddressInfo } from 'node:net';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller, listening } from './helpers.ts';
 
 const uploadDir = join(mkdtempSync(join(tmpdir(), 'burrow-media-')), 'uploads');
 const app = createApp({ db: openDb(':memory:'), publicDir: '/nonexistent', uploadDir });
 let base = '';
-before(async () => {
-  await new Promise<void>((r) => app.listen(0, r));
-  base = `http://localhost:${(app.address() as AddressInfo).port}`;
-});
-after(() => {
-  app.closeAllConnections();
-  app.close();
-});
+listening(app, (url) => (base = url));
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 const raw = (path: string, token: string, data: Uint8Array, type: string, headers: Record<string, string> = {}) =>
   fetch(base + path, { method: 'POST', headers: { authorization: `Bearer ${token}`, 'content-type': type, ...headers }, body: data as BodyInit });

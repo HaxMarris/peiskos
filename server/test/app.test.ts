@@ -6,6 +6,7 @@ import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller } from './helpers.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const app = createApp({ db: openDb(':memory:'), publicDir: resolve(here, '../../client'), registrationCode: 'friends' });
@@ -20,14 +21,7 @@ after(() => {
   app.close();
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 function openSocket(token: string) {
   const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${token}`);

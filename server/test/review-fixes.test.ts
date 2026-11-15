@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller } from './helpers.ts';
 
 // Fixes from the full code review (October 2026).
 const uploadDir = mkdtempSync(join(tmpdir(), 'peiskos-review-'));
@@ -22,14 +23,7 @@ after(() => {
   rmSync(uploadDir, { recursive: true, force: true });
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 let n = 0;
 const reg = async (name: string) => (await call('/api/register', { body: { username: `${name}${++n}`, password: 'password1' } })).data;
 const burrowWith = async (host: any, ...others: any[]) => {

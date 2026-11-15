@@ -9,6 +9,7 @@ import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { fetchEmbed, isPrivateAddress, linksIn, parsePage } from '../src/embeds.ts';
+import { caller } from './helpers.ts';
 
 const uploadDir = mkdtempSync(join(tmpdir(), 'burrow-extras-'));
 const db = openDb(':memory:');
@@ -53,14 +54,7 @@ after(() => {
   rmSync(uploadDir, { recursive: true, force: true });
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 function openSocket(token: string) {
   const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${token}`);
