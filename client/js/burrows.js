@@ -1,5 +1,5 @@
 // Burrows and their rooms: the switcher, the room list and the people in it.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- servers & channels

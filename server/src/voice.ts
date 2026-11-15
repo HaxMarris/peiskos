@@ -3,9 +3,9 @@ import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 export interface VoiceOptions {
   apiKey: string;
   apiSecret: string;
-  /** Public LiveKit address for clients. Unset means "same host as Burrow", with Caddy routing to LiveKit. */
+  /** Public LiveKit address for clients. Unset means "same host as Peiskos", with Caddy routing to LiveKit. */
   url?: string;
-  /** Where Burrow itself reaches LiveKit's API, to take people out of rooms. */
+  /** Where Peiskos itself reaches LiveKit's API, to take people out of rooms. */
   apiUrl?: string;
 }
 

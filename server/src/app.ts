@@ -61,13 +61,13 @@ export interface AppOptions {
   linkPreviews?: EmbedOptions | false;
   /** Where to send email (confirming an address, resetting a forgotten password); email is off without it. */
   mail?: MailConfig;
-  /** The address people open Burrow at, for links in emails. */
+  /** The address people open Peiskos at, for links in emails. */
   publicUrl?: string;
   /** Where Fireside Trivia's question packs are (server/trivia). */
   triviaDir?: string;
   /** Who push services can contact about this server's pushes (a mailto: or https: address). */
   pushContact?: string;
-  /** Push services Burrow will send to. Tests add their own. */
+  /** Push services Peiskos will send to. Tests add their own. */
   pushHosts?: string[];
   /** Alerts for the iPhone app, through Apple (see apns.ts); off without it. */
   apns?: ApnsConfig;
@@ -2168,7 +2168,7 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // ---- GIFs ---------------------------------------------------------------
-  // Searching and previews go through Burrow (see gifs.ts). A GIF that's sent is saved like an
+  // Searching and previews go through Peiskos (see gifs.ts). A GIF that's sent is saved like an
   // uploaded file, so it keeps working even if KLIPY drops it.
 
   const gifs = opts.gifs && opts.uploadDir ? gifSearch(opts.gifs) : null;
@@ -2484,7 +2484,7 @@ export function createApp(opts: AppOptions): Server {
     return r.quiet_start < r.quiet_end ? minutes >= r.quiet_start && minutes < r.quiet_end : minutes >= r.quiet_start || minutes < r.quiet_end;
   };
 
-  // ---- push: alerts while Burrow is closed ----
+  // ---- push: alerts while Peiskos is closed ----
 
   const vapid: VapidKeys = (() => {
     const saved = db.prepare("SELECT value FROM app_secrets WHERE name = 'vapid'").get() as { value: string } | undefined;
@@ -2617,7 +2617,7 @@ export function createApp(opts: AppOptions): Server {
 
   /**
    * After a message is sent: pushes to the phones and browsers of people it's for who aren't
-   * looking at Burrow right now, and remembers mentions for email. Muted rooms, "nothing" and
+   * looking at Peiskos right now, and remembers mentions for email. Muted rooms, "nothing" and
    * do not disturb stay silent; quiet hours make the alert silent.
    */
   const alertAway = (channel: Channel, message: Json, forWhom: Set<number>) => {
@@ -4453,7 +4453,7 @@ export function createApp(opts: AppOptions): Server {
 
   // A device's id in "your devices": the start of its login's hash.
   const sessionId = (hash: string) => hash.slice(0, 16);
-  /** "Chrome on Windows", "Burrow app on Mac" and so on, from a user agent. */
+  /** "Chrome on Windows", "Peiskos app on Mac" and so on, from a user agent. */
   const deviceName = (ua: string | null) => {
     if (!ua) return 'Unknown device';
     const os = /iPhone|iPad/.test(ua) ? (/iPad/.test(ua) ? 'iPad' : 'iPhone') : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac OS X|Macintosh/.test(ua) ? 'Mac' : /Linux/.test(ua) ? 'Linux' : '';
@@ -4880,7 +4880,7 @@ export function createApp(opts: AppOptions): Server {
       if (invite) return sendInvitePage(req, res, invite[1]);
       const calendar = url.pathname.match(/^\/calendar\/([\w-]{20,64})\.ics$/);
       if (calendar && req.method === 'GET') return sendCalendar(req, res, calendar[1]);
-      // Something shared from another app on a phone, before Burrow's service worker was there to
+      // Something shared from another app on a phone, before Peiskos's service worker was there to
       // catch it: open the app (the shared things are lost, but it doesn't error).
       if (req.method === 'POST' && url.pathname === '/share') return res.writeHead(303, { location: '/' }).end();
       const legal = url.pathname.match(/^\/(privacy|terms|child-safety)\/?$/);

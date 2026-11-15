@@ -1,4 +1,4 @@
-// Web Push: alerts on phones and in browsers while Burrow isn't open.
+// Web Push: alerts on phones and in browsers while Peiskos isn't open.
 //
 // The browser gives each device an address at its push service (Google's, Mozilla's, Apple's)
 // and two keys. A message is encrypted for that device (RFC 8291, "aes128gcm") so the push

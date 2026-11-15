@@ -1,5 +1,5 @@
 // Your voice and video settings: devices, noise filtering, the voice changer.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- your voice and video settings
@@ -67,7 +67,7 @@ const voiceFx = () => (voicePrefs.music ? VOICE_FX.off : VOICE_FX[voicePrefs.fx]
 const filtersOn = () => !voicePrefs.music && voicePrefs.noise !== 'off';
 /** The automatic gate: your voice is sent only while RNNoise thinks you're talking. */
 const autoGate = () => voicePrefs.mode !== 'ptt' && voicePrefs.autoGate && filtersOn();
-/** Push to talk, the automatic gate, or a sensitivity you set: your voice goes through Burrow's gate. */
+/** Push to talk, the automatic gate, or a sensitivity you set: your voice goes through Peiskos's gate. */
 const wantsGate = () => voicePrefs.mode === 'ptt' || autoGate() || (voicePrefs.sensitivity !== null && !voicePrefs.music);
 const wantsMicProcessor = () => filtersOn() || voiceFx() !== VOICE_FX.off || voicePrefs.inputVolume !== 1 || wantsGate();
 
@@ -148,7 +148,7 @@ async function fxNodes(ctx, fx) {
 
 const DEVICE_NAMES = { audioinput: 'Microphone', audiooutput: 'Speakers', videoinput: 'Camera' };
 const savedDevices = (() => { try { return JSON.parse(store.get('devices')) ?? {}; } catch { return {}; } })();
-// Burrow mixes voices with Web Audio, which can only be sent to another output where AudioContext
+// Peiskos mixes voices with Web Audio, which can only be sent to another output where AudioContext
 // has setSinkId: Chrome, Edge and the desktop app. Safari, every iPhone browser and Firefox can't.
 const canPickOutput = typeof AudioContext !== 'undefined' && 'setSinkId' in AudioContext.prototype;
 const isAppleMobile = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -836,7 +836,7 @@ function voiceSettings() {
     </div>`;
 }
 
-/** Fills in the device lists. Before Burrow may use your microphone, browsers hide the names. */
+/** Fills in the device lists. Before Peiskos may use your microphone, browsers hide the names. */
 async function fillDeviceLists() {
   const devices = await listDevices();
   let unnamed = false;

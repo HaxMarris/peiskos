@@ -1,7 +1,7 @@
-// Running Burrow: the admin page for whoever hosts it (people, storage, voice, backups, signup
+// Running Peiskos: the admin page for whoever hosts it (people, storage, voice, backups, signup
 // links, updates and crash reports), a burrow's bots and webhooks, and slash commands in the
 // message box.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 const ago = (t) => {
@@ -118,13 +118,13 @@ function adminOverview(pane) {
   if (u?.updating || u?.requested) watchUpdate();
 }
 
-// While updating: check now and then; once Burrow is back on a new version, reload.
+// While updating: check now and then; once Peiskos is back on a new version, reload.
 function watchUpdate() {
   if (updatePoll) return;
   const from = adminData.updater?.commit;
   updatePoll = setInterval(async () => {
     const r = await api('/api/admin/update').catch(() => null);
-    if (!r?.updater) return; // Burrow is restarting
+    if (!r?.updater) return; // Peiskos is restarting
     if (r.updater.commit !== from && !r.updater.updating) { clearInterval(updatePoll); location.reload(); return; }
     if (!r.updater.updating && !r.updater.requested && r.updater.result === 'failed') {
       clearInterval(updatePoll);

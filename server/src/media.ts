@@ -20,7 +20,7 @@ export const SOUND_TYPES: FileKind[] = [
   { ext: 'm4a', type: 'audio/mp4', magic: (b) => b.subarray(4, 8).toString('latin1') === 'ftyp' },
 ];
 
-// Shown in the page. Everything else downloads, so an uploaded .html or .svg can't run as part of Burrow.
+// Shown in the page. Everything else downloads, so an uploaded .html or .svg can't run as part of Peiskos.
 export const INLINE_TYPES = new Set([
   'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif',
   'video/mp4', 'video/webm', 'video/quicktime', 'audio/mpeg', 'audio/ogg', 'audio/wav', 'audio/webm',

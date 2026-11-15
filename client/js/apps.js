@@ -1,8 +1,8 @@
 // The app itself, on phones, computers and the web: display settings (compact messages, text
 // size, less motion), keyboard shortcuts and the quick switcher, screen reader and keyboard
-// help, swipes on phones, working offline, installing on Android, sharing into Burrow from
+// help, swipes on phones, working offline, installing on Android, sharing into Peiskos from
 // other apps, and in the desktop app the tray, starting with the computer and several servers.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- display settings
@@ -147,7 +147,7 @@ if (updates) {
   updates.onReady(showUpdateButton);
 }
 
-// The service worker: alerts while Burrow is closed, the app's files for working offline, and
+// The service worker: alerts while Peiskos is closed, the app's files for working offline, and
 // things shared from other apps. (Only on the web; the desktop app has its files built in.)
 if (!isApp && 'serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('sw.js').catch(() => {});
 
@@ -815,7 +815,7 @@ function openMessageSheet(line) {
 // ---------------------------------------------------------------- working offline
 //
 // What you last saw (your burrows, rooms and people, and the latest messages in the rooms you
-// opened) is kept on this device. If Burrow opens with no connection it shows that, says it's
+// opened) is kept on this device. If Peiskos opens with no connection it shows that, says it's
 // offline, and comes back to life by itself. Messages written while offline wait in a tray
 // above the message box and go out once you're connected again.
 
@@ -877,7 +877,7 @@ function setOffline(on) {
   $('#offline-bar').classList.toggle('hidden', !on);
 }
 
-/** Burrow opened with no connection: show what was saved, if anything. Returns false if nothing was. */
+/** Peiskos opened with no connection: show what was saved, if anything. Returns false if nothing was. */
 function startOffline(err) {
   if (!(err instanceof TypeError) || !state.token) return false;
   const snap = readSnapshot();

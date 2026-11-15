@@ -1,10 +1,10 @@
 // Voice rooms, the camera and screen sharing.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- voice rooms
 //
-// Audio goes through LiveKit, which runs next to the Burrow server. Burrow hands out
+// Audio goes through LiveKit, which runs next to the Peiskos server. Peiskos hands out
 // a token for the room, and tells everyone in the burrow who has joined.
 
 const SPEAKER_ICON = '<svg viewBox="0 0 24 24" class="voice-icon"><path d="M4 9h4l5-4v14l-5-4H4V9Zm12.5 3a4.5 4.5 0 0 0-2.5-4v8a4.5 4.5 0 0 0 2.5-4Zm-2.5-8.8v2.1a7 7 0 0 1 0 13.4v2.1a9 9 0 0 0 0-17.6Z"/></svg>';
@@ -234,7 +234,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
 }
 
 /**
- * Turns your microphone on and sends it, through Burrow's noise filter, voice changer and gate
+ * Turns your microphone on and sends it, through Peiskos's noise filter, voice changer and gate
  * (all before it's encrypted). Started muted, it's set up and then turned straight off.
  */
 async function startMic(voice) {

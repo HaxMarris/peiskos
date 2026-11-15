@@ -1,5 +1,5 @@
 // Rooms, threads, what you've read, and message formatting.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- rooms, threads and what you've read
@@ -436,7 +436,7 @@ function toast(text, { action, onAction, timeout = 5000, kind = '' } = {}) {
   if (timeout) setTimeout(() => t.remove(), timeout);
 }
 
-/** Where a message is, in words: "Burrow › #room" or "Direct message with Sam". */
+/** Where a message is, in words: "Peiskos › #room" or "Direct message with Sam". */
 function placeLabel(place) {
   if (!place) return '';
   if (place.kind === 'dm') return `Direct message with ${place.serverName}`;

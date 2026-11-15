@@ -1,5 +1,5 @@
 // The app's state machines, written down: each one's phases and which phase may follow which.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 // This file loads first, so the others can make their machines with phaseMachine().
 //
 // A machine holds one phase. Moving to a phase the table doesn't allow still happens (so a

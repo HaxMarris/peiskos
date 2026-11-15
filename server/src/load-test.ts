@@ -1,4 +1,4 @@
-// How many people can chat on this server at once? Starts a throwaway Burrow server next to
+// How many people can chat on this server at once? Starts a throwaway Peiskos server next to
 // the real one (its own empty database, removed afterwards), then adds people in steps. Everyone
 // sits in one busy room, sending a message every few seconds, and the test measures how long
 // messages take to reach everyone and how long loading a room takes, until it gets slow.

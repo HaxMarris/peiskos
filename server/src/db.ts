@@ -465,7 +465,7 @@ function addPresence(db: Db) {
   addColumn(db, 'messages', 'pings', 'TEXT'); // {"everyone":1,"here":1,"roles":[ids]} when the author may ping those
   const hadMentions = !!db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'mentions'").get();
   db.exec(`
-    -- Phones and browsers that get alerts while Burrow is closed.
+    -- Phones and browsers that get alerts while Peiskos is closed.
     CREATE TABLE IF NOT EXISTS push_subs (
       id         INTEGER PRIMARY KEY,
       user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

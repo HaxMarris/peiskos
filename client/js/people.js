@@ -1,5 +1,5 @@
 // Roles, direct messages, your account, replies and reactions.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- roles: host, moderators, private rooms

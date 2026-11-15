@@ -3,8 +3,8 @@ import { request as httpsRequest } from 'node:https';
 import { lookup as dnsLookup, type LookupAddress } from 'node:dns';
 import { BlockList, isIP } from 'node:net';
 
-// Link previews: when a message has links, Burrow fetches each page itself and keeps its title,
-// description and picture. People's apps only ever talk to Burrow, so the sites never see them.
+// Link previews: when a message has links, Peiskos fetches each page itself and keeps its title,
+// description and picture. People's apps only ever talk to Peiskos, so the sites never see them.
 //
 // The server makes these requests on someone's say-so, so it refuses to reach anything private:
 // its own machine, the home or cloud network it sits in, and the cloud's metadata address.
@@ -15,7 +15,7 @@ export interface Embed {
   siteName?: string;
   title?: string;
   description?: string;
-  /** The picture's address on the site; the app gets it through Burrow instead. */
+  /** The picture's address on the site; the app gets it through Peiskos instead. */
   image?: string;
 }
 
