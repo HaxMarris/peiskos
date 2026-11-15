@@ -21,6 +21,8 @@ import { extras, voiceTimeTracker } from './extras.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
 import { looksBlank, withoutBidi } from './text.ts';
+import { CHANNEL_COLS, PERMS, avatarUrl, parsePerms, type Perm } from './common.ts';
+export type { Perm } from './common.ts';
 import { EMOJI, MAX_ALT_LENGTH, MAX_ATTACHMENTS, MAX_DESCRIPTION, MAX_FOLDERS, MAX_GROUP_DM, MAX_MESSAGE_LENGTH, MAX_REACTIONS, MAX_ROLES, MAX_RULES, MAX_SOUNDS, MAX_TOPIC, SESSION_IDLE_MS } from './limits.ts';
 import { firesInLiveKit } from './fires.ts';
 import { moderation } from './moderation.ts';
@@ -83,7 +85,6 @@ export interface AppOptions {
   apns?: ApnsConfig;
   /** Alerts for the Android app, through Google's Firebase (see fcm.ts); off without it. */
   fcm?: FcmConfig;
-  /** How long a mention waits unread before it's emailed (default 15 minutes). */
   /** Backups, the admin page, updates and uptime (see hosting.ts). */
   hosting?: HostingOptions;
   /** Who runs this server and how to reach them, for the privacy policy and terms (see legal.ts). */
@@ -95,10 +96,7 @@ export interface AppOptions {
 // What a route is handed. `session` is the hash of the login's token, as it's kept in the sessions table.
 export type Handler = (ctx: { user: User; params: string[]; body: Json; url: URL; session: string | undefined; ip: string; ua: string; host: string; secure: boolean }) => unknown;
 export type User = { id: number; username: string; displayName: string | null; avatar: string | null };
-const PERMS = ['rooms', 'messages', 'remove', 'ban', 'roles', 'burrow', 'emoji', 'voice', 'everyone', 'pin', 'invites', 'timeout', 'audit'] as const;
-export type Perm = (typeof PERMS)[number];
 export type Standing = { host: boolean; rank: number; perms: Set<Perm>; roleIds: number[] };
-const parsePerms = (text: string) => text.split(',').filter((p): p is Perm => (PERMS as readonly string[]).includes(p));
 export type Channel = {
   id: number;
   serverId: number;
@@ -112,10 +110,6 @@ export type Channel = {
   userLimit: number; // seats at a fire; 0 is no limit
   keepChat: number; // the fireside chat stays after everyone leaves
 };
-const CHANNEL_COLS = `id, server_id AS serverId, name, kind, private, parent_id AS parentId,
-  slow_seconds AS slow, announce, archived_at AS archivedAt, user_limit AS userLimit, keep_chat AS keepChat`;
-// A user's picture link, from their users.avatar file name (or null).
-const avatarUrl = (col: string) => `CASE WHEN ${col} IS NULL THEN NULL ELSE '/api/avatars/' || ${col} END`;
 
 export type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
 /** What a posted message can carry besides its text. */
