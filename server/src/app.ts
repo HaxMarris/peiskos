@@ -21,6 +21,7 @@ import { extras, voiceTimeTracker } from './extras.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
 import { looksBlank, withoutBidi } from './text.ts';
+import { MAX_ALT_LENGTH, MAX_ATTACHMENTS, MAX_DESCRIPTION, MAX_FOLDERS, MAX_GROUP_DM, MAX_MESSAGE_LENGTH, MAX_REACTIONS, MAX_ROLES, MAX_RULES, MAX_SOUNDS, MAX_TOPIC, SESSION_IDLE_MS } from './limits.ts';
 import { firesInLiveKit } from './fires.ts';
 import { moderation } from './moderation.ts';
 import { botsAndWebhooks } from './bots.ts';
@@ -101,20 +102,8 @@ export type Channel = {
 };
 const CHANNEL_COLS = `id, server_id AS serverId, name, kind, private, parent_id AS parentId,
   slow_seconds AS slow, announce, archived_at AS archivedAt, user_limit AS userLimit, keep_chat AS keepChat`;
-const MAX_MESSAGE_LENGTH = 4000;
-const MAX_ALT_LENGTH = 1000;
-const MAX_ATTACHMENTS = 10;
-const MAX_REACTIONS = 20; // different emoji on one message
-const MAX_ROLES = 30;
-const MAX_TOPIC = 200;
-const MAX_DESCRIPTION = 300;
-const MAX_RULES = 2000;
-const MAX_GROUP_DM = 10; // people in a group conversation
-const MAX_FOLDERS = 20;
-const SESSION_IDLE_MS = 30 * 24 * 60 * 60 * 1000; // logins unused for 30 days expire
 // A user's picture link, from their users.avatar file name (or null).
 const avatarUrl = (col: string) => `CASE WHEN ${col} IS NULL THEN NULL ELSE '/api/avatars/' || ${col} END`;
-const MAX_SOUNDS = 30;
 
 export type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
 /** What a posted message can carry besides its text. */
