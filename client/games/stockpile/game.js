@@ -29,9 +29,7 @@ const DISCARDS = 4;
 const MAX_PLAYERS = 8;
 const DECK = 162;       // 12 of each number and 18 wilds
 
-// Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
-function peiskos(){ try { return window.parent.peiskosHost || window.parent; } catch(e){ return window.parent; } }
-function toPeiskos(msg){ peiskos().postMessage(msg, '*'); }
+// Messages go through ../shared/bridge.js (Peiskos), like every game at the fire.
 
 let me = null;          // {id, name}
 let hostUid = null;
@@ -183,11 +181,11 @@ function viewFor(uid){
 function publish(){
   for(const p of present){
     if(p.id === me.id) continue;
-    toPeiskos({kind:'send', to:p.id, data:viewFor(p.id)});
+    Peiskos.send(p.id, viewFor(p.id));
   }
   show(viewFor(me.id));
   // Kept by Peiskos, so the round carries on if this page has to load again (popping it out).
-  toPeiskos({kind:'snapshot', data:{present, G, phase, stockSetting, round}});
+  Peiskos.snapshot({present, G, phase, stockSetting, round});
 }
 
 // Peiskos says who's in the game now.
@@ -536,7 +534,7 @@ function pick(src, i, c){
 function send(a){
   picked = null;
   if(isHost) act(me.id, a);
-  else { toPeiskos({kind:'send', to:hostUid, data:a}); renderTable(); }
+  else { Peiskos.send(hostUid, a); renderTable(); }
 }
 
 function playTo(pile){
@@ -557,7 +555,7 @@ function discardTo(pile){
 // ================================================================
 // Buttons
 // ================================================================
-function leaveGame(){ toPeiskos({kind:'leave'}); }
+function leaveGame(){ Peiskos.leave(); }
 $('btnLeaveLobby').onclick = leaveGame;
 $('btnLeaveOver').onclick = leaveGame;
 $('btnQuit').onclick = leaveGame;
@@ -599,34 +597,29 @@ $('table').addEventListener('click', (e)=>{
 // ================================================================
 // PEISKOS
 // ================================================================
-window.addEventListener('message', e=>{
-  if(e.source !== peiskos()) return;
-  const m = e.data;
-  if(!m || typeof m !== 'object') return;
-  if(m.kind === 'init'){
-    me = {id:m.me.id, name:shortName(m.me.name)};
-    hostUid = m.hostId;
-    isHost = me.id === hostUid;
-    $('btnQuit').title = isHost ? 'End the game for everyone' : 'Leave this game';
-    const r = m.resume;
-    if(isHost && r && Array.isArray(r.present) && ['lobby','play','over'].includes(r.phase)){
-      ({present, G, phase, stockSetting, round} = r);
-      $('stockSelect').value = stockSetting;
-    }
-    if(isHost) syncPlayers(m.players || []);
-    else { showScreen('lobbyScreen'); $('lobbyStatus').textContent = 'Joining…'; toPeiskos({kind:'send', to:hostUid, data:{type:'hello'}}); }
-  } else if(m.kind === 'players'){
-    if(isHost && me) syncPlayers(m.players || []);
-  } else if(m.kind === 'msg'){
-    if(!me || !m.data || typeof m.data !== 'object') return;
-    if(isHost){
-      if(m.data.type === 'hello') toPeiskos({kind:'send', to:m.from, data:viewFor(m.from)});
-      else act(m.from, m.data);
-    } else if(m.from === hostUid && m.data.type === 'view'){
-      show(m.data);
-    }
+Peiskos.on('init', r=>{
+  me = {id:Peiskos.me.id, name:shortName(Peiskos.me.name)};
+  hostUid = Peiskos.hostId;
+  isHost = me.id === hostUid;
+  $('btnQuit').title = isHost ? 'End the game for everyone' : 'Leave this game';
+  if(isHost && r && Array.isArray(r.present) && ['lobby','play','over'].includes(r.phase)){
+    ({present, G, phase, stockSetting, round} = r);
+    $('stockSelect').value = stockSetting;
+  }
+  if(isHost) syncPlayers(Peiskos.players);
+  else { showScreen('lobbyScreen'); $('lobbyStatus').textContent = 'Joining…'; Peiskos.send(hostUid, {type:'hello'}); }
+});
+Peiskos.on('players', players=>{
+  if(isHost && me) syncPlayers(players);
+});
+Peiskos.on('msg', (from, data)=>{
+  if(!me) return;
+  if(isHost){
+    if(data.type === 'hello') Peiskos.send(from, viewFor(from));
+    else act(from, data);
+  } else if(from === hostUid && data.type === 'view'){
+    show(data);
   }
 });
-toPeiskos({kind:'ready'});
 
 })();
