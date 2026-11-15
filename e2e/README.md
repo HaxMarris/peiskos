@@ -14,6 +14,7 @@ go by.
 | `fire.test.mjs` | The game picker and the fire's game bar: start, join, full, leave, the host ending it. A Melon Bomber match reaching a second player. |
 | `party-games.test.mjs` | Same Page, Odd One Out, Fireside Trivia |
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
+| `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |
 | `stockpile.test.mjs` | Two whole rounds of Stockpile |
 | `casino.test.mjs` | Chips, blackjack, slots, cases, the poker table, a case battle |
 

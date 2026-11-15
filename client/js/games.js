@@ -42,6 +42,12 @@ const FIRE_GAMES = {
     maxPlayers: 12,
     blurb: 'Everyone answers the same prompt in secret. Score a point for every friend who wrote what you wrote. Two to twelve players.',
   },
+  smokesignals: {
+    title: 'Smoke Signals',
+    icon: '💨',
+    maxPlayers: 12,
+    blurb: 'Write something to draw, then pass the sketchbooks round: draw what you\'re given, guess what you see. Turn the pages together at the end. Three to twelve players.',
+  },
   sketchpad: {
     title: 'Sketchpad',
     icon: '🎨',

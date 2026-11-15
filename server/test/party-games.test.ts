@@ -20,6 +20,7 @@ test('every game the server seats has a page and a place in the picker, with the
   }
   assert.equal(GAMES.oddoneout, 12);
   assert.equal(GAMES.samepage, 12);
+  assert.equal(GAMES.smokesignals, 12);
 });
 
 test("Odd One Out's pairs are two different words, and no word comes up twice", () => {
