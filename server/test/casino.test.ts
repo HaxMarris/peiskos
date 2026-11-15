@@ -1,6 +1,5 @@
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -10,6 +9,7 @@ import { createApp } from '../src/app.ts';
 import { bestHand, PokerTable, type Card } from '../src/poker.ts';
 import { START_CHIPS } from '../src/casino.ts';
 import { CASES, SLOT_BETS, SLOT_LINES, SLOT_PAYS, SLOT_STRIPS, SLOT_TWO_CHERRIES, linePays } from '../src/casino-items.ts';
+import { caller, listening } from './helpers.ts';
 
 /** Cards come off the end of a deck, so the ones listed first are dealt first. */
 const dealt = (...cards: Card[]) => () => [...cards].reverse();
@@ -24,23 +24,9 @@ const app = createApp({
   casino: { timing: { turnMs: 5000, awayTurnMs: 5000, pauseMs: 150, dealMs: 20 }, deck: () => (nextDeck ? nextDeck() : (null as never)) },
 });
 let base = '';
-before(async () => {
-  await new Promise<void>((r) => app.listen(0, r));
-  base = `http://localhost:${(app.address() as AddressInfo).port}`;
-});
-after(() => {
-  app.closeAllConnections();
-  app.close();
-});
+listening(app, (url) => (base = url));
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 function listen(token: string) {
   const ws = new WebSocket(base.replace('http', 'ws') + '/ws?token=' + token);
   const events: any[] = [];

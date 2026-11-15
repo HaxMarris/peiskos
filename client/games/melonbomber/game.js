@@ -189,28 +189,26 @@ function showScreen(name){
 // started the game is its host and runs the match, as before.
 // ================================================================
 
-// Peiskos's page: the one around this frame, or the one that popped this game out into its own window.
-function peiskos(){ try { return window.parent.peiskosHost || window.parent; } catch(e){ return window.parent; } }
-function toPeiskos(msg){ peiskos().postMessage(msg, '*'); }
+// Messages go through ../shared/bridge.js (Peiskos), like every game at the fire.
 
 // Host: the lobby as it stands, kept by Peiskos so it survives this page loading again (popping
 // the game out into its own window, or back). A round can't be carried over, so Peiskos only
 // lets the game move between rounds, which it hears about from "busy".
 function keepSnapshot(){
   if(!isHost || !me) return;
-  toPeiskos({kind:'snapshot', data:{lobbyPlayers, scores:lobbyScores, storm:$('stormSelect').value}});
+  Peiskos.snapshot({lobbyPlayers, scores:lobbyScores, storm:$('stormSelect').value});
 }
 let lastBusy = false;
 setInterval(()=>{
   const busy = !!(game && !game.matchOver);
-  if(busy !== lastBusy){ lastBusy = busy; toPeiskos({kind:'busy', on:busy}); }
+  if(busy !== lastBusy){ lastBusy = busy; Peiskos.busy(busy); }
 }, 400);
 
 // Stands in for a peer connection: sending goes through Peiskos.
 function connFor(uid){
   return {
     uid, peer:'u'+uid, open:true,
-    send(data){ if(this.open) toPeiskos({kind:'send', to:uid, data}); },
+    send(data){ if(this.open) Peiskos.send(uid, data); },
     close(){ this.open = false; },
   };
 }
@@ -305,7 +303,7 @@ function broadcastLobby(){
 
 // One message for everyone; the Peiskos server hands it to each player.
 function broadcastToAll(payload){
-  if(conns.length) toPeiskos({kind:'send', to:'all', data:payload});
+  if(conns.length) Peiskos.send('all', payload);
 }
 
 function joinGame(){
@@ -397,7 +395,7 @@ function renderLobby(isFreshHost){
 // Leaving goes through Peiskos, which closes this page. When the host
 // leaves, the game is over for everyone.
 function leaveGame(){
-  toPeiskos({kind:'leave'});
+  Peiskos.leave();
 }
 
 $('btnQuit').addEventListener('click', ()=> leaveGame());
@@ -2508,28 +2506,24 @@ populateHatSelect();
 // ---------------------------------------------------------------
 // PEISKOS
 // ---------------------------------------------------------------
-window.addEventListener('message', e=>{
-  if(e.source !== peiskos()) return;
-  const m = e.data;
-  if(!m || typeof m !== 'object') return;
-  if(m.kind==='init'){
-    me = {id:m.me.id, name:shortName(m.me.name)};
-    hostUid = m.hostId;
-    if(me.id===hostUid) hostGame(m.players || [], m.resume);
-    else joinGame();
-  } else if(m.kind==='players'){
-    if(isHost && me) syncPlayers(m.players || []);
-  } else if(m.kind==='msg'){
-    if(!me || !m.data || typeof m.data !== 'object') return;
-    if(isHost){
-      const c = conns.find(cc=>cc.uid===m.from);
-      if(c) onHostReceiveData(c, m.data);
-    } else if(m.from===hostUid){
-      onClientReceiveData(m.data);
-    }
+Peiskos.on('init', resume=>{
+  me = {id:Peiskos.me.id, name:shortName(Peiskos.me.name)};
+  hostUid = Peiskos.hostId;
+  if(me.id===hostUid) hostGame(Peiskos.players, resume);
+  else joinGame();
+});
+Peiskos.on('players', players=>{
+  if(isHost && me) syncPlayers(players);
+});
+Peiskos.on('msg', (from, data)=>{
+  if(!me) return;
+  if(isHost){
+    const c = conns.find(cc=>cc.uid===from);
+    if(c) onHostReceiveData(c, data);
+  } else if(from===hostUid){
+    onClientReceiveData(data);
   }
 });
-toPeiskos({kind:'ready'});
 
 // prevent page scroll/zoom while playing
 document.addEventListener('touchmove', e=>{

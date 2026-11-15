@@ -8,6 +8,7 @@ import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { finishRestore, queueRestore } from '../src/backup.ts';
+import { caller } from './helpers.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'burrow-hosting-'));
 const uploadDir = join(dir, 'uploads');
@@ -31,14 +32,7 @@ after(() => {
   app.close();
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 const reg = (username: string, extra: object = {}) =>
   call('/api/register', { body: { username, password: 'password1', registrationCode: 'a-long-registration-code', ...extra } });
 

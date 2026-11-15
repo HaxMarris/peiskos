@@ -1,11 +1,11 @@
 // GIFs, files and pictures: uploading, video thumbnails and shrinking, showing them.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- GIFs
 
 // The GIF picker opens above the message box: trending GIFs first, then whatever you search for.
-// Searches and previews go through the Burrow server, which keeps the KLIPY key and your address to itself.
+// Searches and previews go through the Peiskos server, which keeps the KLIPY key and your address to itself.
 // Picking one sends it straight away (as a reply, if you're replying), and leaves what you typed alone.
 const gifPicker = $('#gif-picker');
 const gifGrid = $('#gif-grid');

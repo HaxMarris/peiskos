@@ -2,13 +2,14 @@
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { clientIp } from '../src/http.ts';
+import { caller, listening } from './helpers.ts';
 
 const db = openDb(':memory:');
 const app = createApp({
@@ -18,23 +19,9 @@ const app = createApp({
   voice: { apiKey: 'key', apiSecret: 'secret-secret-secret-secret-secret', apiUrl: 'http://127.0.0.1:9' },
 });
 let base = '';
-before(async () => {
-  await new Promise<void>((r) => app.listen(0, r));
-  base = `http://localhost:${(app.address() as AddressInfo).port}`;
-});
-after(() => {
-  app.closeAllConnections();
-  app.close();
-});
+listening(app, (url) => (base = url));
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 async function socket(token: string) {
   const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${token}`);

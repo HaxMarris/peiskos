@@ -1,9 +1,9 @@
-# End-to-end tests for the games at the fire
+# End-to-end tests
 
-These play the games for real. Each test file starts its own Peiskos server with an empty
-database, makes a hearth, and opens one Chromium window per friend, all sitting at the same fire.
-The windows then click, type and draw their way through a game, and the test checks what each
-player sees.
+These use Peiskos for real: chatting, direct messages, sitting at the fire, and the games. Each
+test file starts its own Peiskos server with an empty database, makes a hearth, and opens one
+Chromium window per friend. The windows then click, type and draw their way through, and the test
+checks what each friend sees.
 
 Everything is the real thing except the voice call: there is no LiveKit server here, so the call
 connects to nothing. Peiskos's own server still seats everyone at the fire, which is all the games
@@ -11,6 +11,7 @@ go by.
 
 | File | What it plays |
 | --- | --- |
+| `chat.test.mjs` | A room (send, reply, edit, react, delete), a direct message, sitting at the fire and muting, and Fireside Angler opening |
 | `fire.test.mjs` | The game picker and the fire's game bar: start, join, full, leave, the host ending it. A Melon Bomber match reaching a second player. |
 | `party-games.test.mjs` | Same Page, Odd One Out, Fireside Trivia |
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
@@ -35,7 +36,7 @@ fails, a picture of every player's screen is saved in `e2e/failures/` (on GitHub
 ## Writing one
 
 `lib.mjs` has the pieces: `fireWith(t, base, ['Maya', 'Theo'])` gives a hearth and a seat per
-friend; `startGame(seat, 'trivia')` and `joinGame(seat)` use the same buttons a person would;
+friend; `openApp(base, person)` opens the app without sitting down, and `closeWhenDone(t, seats)` closes those windows (with pictures if the test failed); `startGame(seat, 'trivia')` and `joinGame(seat)` use the same buttons a person would;
 `seat.game()` is the game's own page; `sees(locator, text)` waits for a page to catch up.
 
 Games keep time on the host's copy. `startGame` takes over that window's clock, so

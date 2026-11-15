@@ -1,7 +1,7 @@
 import { createHmac, randomBytes } from 'node:crypto';
 
-// GIF search goes through Burrow, so the KLIPY key stays on the server and KLIPY never sees
-// who is searching: it only gets Burrow's address and an anonymous id per person.
+// GIF search goes through Peiskos, so the KLIPY key stays on the server and KLIPY never sees
+// who is searching: it only gets Peiskos's address and an anonymous id per person.
 
 export interface GifOptions {
   apiKey: string;
@@ -11,7 +11,7 @@ export interface GifOptions {
   rating?: string;
 }
 
-/** A GIF as the app sees it: Burrow links only, never KLIPY's. */
+/** A GIF as the app sees it: Peiskos links only, never KLIPY's. */
 export interface GifItem {
   id: string;
   title: string;
@@ -35,7 +35,7 @@ const TIMEOUT_MS = 8000;
 export function gifSearch(opts: GifOptions) {
   const base = (opts.baseUrl ?? 'https://api.klipy.com').replace(/\/$/, '');
   const rating = opts.rating ?? 'pg-13';
-  // Search results get short random ids; the app can only ask for (and send) GIFs Burrow found itself.
+  // Search results get short random ids; the app can only ask for (and send) GIFs Peiskos found itself.
   const found = new Map<string, Found>();
   const remember = (f: Found) => {
     const id = randomBytes(12).toString('base64url');
@@ -79,7 +79,7 @@ export function gifSearch(opts: GifOptions) {
   return {
     search: (q: string, page: number, userId: number) => list('search', { q, page: String(page) }, userId),
     trending: (page: number, userId: number) => list('trending', { page: String(page) }, userId),
-    /** The GIF behind an id from a recent search, if Burrow still remembers it. */
+    /** The GIF behind an id from a recent search, if Peiskos still remembers it. */
     get: (id: string) => found.get(id),
   };
 }

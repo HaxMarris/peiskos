@@ -1,11 +1,11 @@
 // Presence and notifications, hotkeys, managing voice, the soundboard, listening together, calls.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- presence, status and notifications
 //
 // Your status (online, away or do not disturb), a custom status, what the desktop app sees you
-// playing, the mentions inbox, the number on the app icon, quiet hours, alerts while Burrow is
+// playing, the mentions inbox, the number on the app icon, quiet hours, alerts while Peiskos is
 // closed (push), and the email address that resets a forgotten password.
 
 const STATUS_LABELS = { online: 'Online', away: 'Away', dnd: 'Do not disturb', offline: 'Offline' };
@@ -90,7 +90,7 @@ function openCustomStatus() {
   };
 }
 
-// ---- away: nobody's touched Burrow on this device for a while
+// ---- away: nobody's touched Peiskos on this device for a while
 
 const IDLE_AFTER = 10 * 60_000;
 let lastTouch = Date.now();
@@ -207,10 +207,10 @@ async function openInbox() {
   try { await load(); } catch (err) { $('#inbox-list') && ($('#inbox-list').textContent = err.message); }
 }
 
-// ---- alerts while Burrow is closed: a service worker and the browser's push service
+// ---- alerts while Peiskos is closed: a service worker and the browser's push service
 
 const pushSupported = () => isPhoneApp ? appPushReady : !window.burrowDesktop && window.isSecureContext && 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
-// iPhones and iPads only allow it once Burrow is on the Home Screen.
+// iPhones and iPads only allow it once Peiskos is on the Home Screen.
 const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isStandalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
 let swReady = null;
@@ -261,7 +261,7 @@ async function turnOffPush() {
   await sub.unsubscribe().catch(() => {});
 }
 
-// A tapped alert opens Burrow at ?channel=…&message=…
+// A tapped alert opens Peiskos at ?channel=…&message=…
 function openLinkedMessage() {
   const params = new URLSearchParams(location.search);
   const channelId = Number(params.get('channel'));
@@ -391,7 +391,7 @@ function wireNotificationSettings() {
 //
 // A key is kept as where it sits on the keyboard (KeyboardEvent.code, so it works with any
 // layout) plus any Ctrl, Shift, Alt or Cmd held with it; the mouse's side buttons count too.
-// In a browser they work while Burrow is in front. The desktop app hears them everywhere, even in
+// In a browser they work while Peiskos is in front. The desktop app hears them everywhere, even in
 // a game, but only while you're in a voice room.
 
 const isMac = /Mac/.test(navigator.platform);
@@ -756,9 +756,9 @@ function openSounds(serverId) {
 //
 // One YouTube video per fire, played in step for everyone there, with a queue of what's next.
 // Anyone can add to the queue, pause or seek. Skipping takes more than half the fire's votes,
-// except for whoever put it on and the hearth's hosts and mods, who can skip or stop right away. Burrow keeps what's playing and where it was at a moment in time; each app works
+// except for whoever put it on and the hearth's hosts and mods, who can skip or stop right away. Peiskos keeps what's playing and where it was at a moment in time; each app works
 // out where it should be now and nudges its player there. The player is YouTube's own, in a
-// frame, controlled with the messages its embed understands (no YouTube script runs in Burrow).
+// frame, controlled with the messages its embed understands (no YouTube script runs in Peiskos).
 
 const LISTEN_ICON = '<svg viewBox="0 0 24 24"><path d="M12 3v10.6A4 4 0 1 0 14 17V7h4V3h-6Z"/></svg>';
 let listen = null; // { channelId, state, at, frame, ready, time, playerState, hidden }
@@ -822,7 +822,7 @@ function onListenState(ev) {
   if (!ev.state) return stopListen();
   if (!listen || listen.channelId !== ev.channelId) listen = { channelId: ev.channelId, hidden: store.get('listenHidden') === '1' };
   listen.state = ev.state;
-  listen.at = performance.now(); // what Burrow says is where it is as of now
+  listen.at = performance.now(); // what Peiskos says is where it is as of now
   if (before?.videoId !== ev.state.videoId) {
     if (before) fireNote(before.queue?.[0]?.videoId === ev.state.videoId ? `Up next, from ${nameOf(ev.state.by)}` : `${nameOf(ev.state.by)} put on something new`);
     loadListenFrame();
@@ -838,7 +838,7 @@ function loadListenFrame() {
   const frame = document.createElement('iframe');
   frame.className = 'listen-frame';
   frame.allow = 'autoplay; encrypted-media';
-  // YouTube wants to know which site it's in; Burrow otherwise sends no referrer anywhere.
+  // YouTube wants to know which site it's in; Peiskos otherwise sends no referrer anywhere.
   frame.referrerPolicy = 'strict-origin-when-cross-origin';
   frame.title = 'Listen together';
   const start = Math.floor(listenTarget());

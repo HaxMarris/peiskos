@@ -130,7 +130,7 @@ export function scheduleBackups(db: DatabaseSync, dir: string, keep: number, off
 
 // ---- restoring
 
-/** Where a backup waits to replace the database the next time Burrow starts. */
+/** Where a backup waits to replace the database the next time Peiskos starts. */
 export const pendingRestore = (dbFile: string) => `${dbFile}.restore`;
 
 /** Puts a backup in place to be restored on the next start. */

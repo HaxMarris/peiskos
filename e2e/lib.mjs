@@ -106,10 +106,10 @@ const QUIET_CALL = () => {
 };
 
 /**
- * Opens Peiskos as one of the hearth's people and sits them down at its fire.
- * Returns { page, ctx, errors, game() } where game() is the game's frame once one is open.
+ * Opens Peiskos as one of the hearth's people, signed in and connected, without sitting down anywhere.
+ * Returns { page, ctx, errors, ... } like sitDown.
  */
-export async function sitDown(base, hearth, person, { phone = false } = {}) {
+export async function openApp(base, person, { phone = false } = {}) {
   const b = await launch();
   const ctx = await b.newContext({
     ...(phone ? { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } : { viewport: { width: 1280, height: 800 } }),
@@ -128,8 +128,6 @@ export async function sitDown(base, hearth, person, { phone = false } = {}) {
   page.on('pageerror', (e) => errors.push(`${person.name}: ${e.message}`));
   await page.goto(base + '/');
   await page.waitForFunction(() => typeof state !== 'undefined' && state.me && state.ws?.readyState === 1, null, { timeout: 20000 });
-  await page.evaluate((id) => joinVoice(id), hearth.fireId);
-  await page.waitForFunction((id) => state.voice?.channelId === id && state.voice.connected, hearth.fireId, { timeout: 20000 });
   return {
     ...person, page, ctx, errors,
     /** The game's own page, framed on the fire's stage. */
@@ -141,12 +139,20 @@ export async function sitDown(base, hearth, person, { phone = false } = {}) {
   };
 }
 
-/** A hearth, and each of the named friends at its fire in a window of their own. Closed when the test ends. */
-export async function fireWith(t, base, names, { phone = [] } = {}) {
-  const hearth = await makeHearth(base, names);
-  const seats = [];
+/**
+ * Opens Peiskos as one of the hearth's people and sits them down at its fire.
+ * Returns { page, ctx, errors, game() } where game() is the game's frame once one is open.
+ */
+export async function sitDown(base, hearth, person, { phone = false } = {}) {
+  const seat = await openApp(base, person, { phone });
+  await seat.page.evaluate((id) => joinVoice(id), hearth.fireId);
+  await seat.page.waitForFunction((id) => state.voice?.channelId === id && state.voice.connected, hearth.fireId, { timeout: 20000 });
+  return seat;
+}
+
+/** Saves a picture of each window when the test failed, and closes them all when it ends. */
+export function closeWhenDone(t, seats) {
   t.after(async () => {
-    // A failed test leaves a picture of what each friend was looking at.
     if (!t.passed) {
       const dir = process.env.E2E_FAILURES ?? join(import.meta.dirname, 'failures');
       mkdirSync(dir, { recursive: true });
@@ -155,6 +161,13 @@ export async function fireWith(t, base, names, { phone = [] } = {}) {
     }
     for (const s of seats) await s.ctx.close().catch(() => {});
   });
+}
+
+/** A hearth, and each of the named friends at its fire in a window of their own. Closed when the test ends. */
+export async function fireWith(t, base, names, { phone = [] } = {}) {
+  const hearth = await makeHearth(base, names);
+  const seats = [];
+  closeWhenDone(t, seats);
   for (const p of hearth.people) seats.push(await sitDown(base, hearth, p, { phone: phone.includes(p.name) }));
   return { hearth, seats };
 }

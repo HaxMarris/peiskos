@@ -1,31 +1,17 @@
-import { test, before, after } from 'node:test';
+import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { AddressInfo } from 'node:net';
 import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
-import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, loadPonds, loadSpecies, parseLook, pickDerby } from '../src/fishing.ts';
+import { MAX_SAVE_BYTES, cleanStatus, derbyOrder, derbyWeek, easternMidnight, cleanLook, loadPonds, loadSpecies, pickDerby } from '../src/fishing.ts';
+import { caller, listening } from './helpers.ts';
 
 const db = openDb(':memory:');
 const app = createApp({ db, publicDir: '/nonexistent' });
 let base = '';
-before(async () => {
-  await new Promise<void>((r) => app.listen(0, r));
-  base = `http://localhost:${(app.address() as AddressInfo).port}`;
-});
-after(() => {
-  app.closeAllConnections();
-  app.close();
-});
+listening(app, (url) => (base = url));
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 function listen(token: string) {
   const ws = new WebSocket(base.replace('http', 'ws') + '/ws?token=' + token);
   const events: any[] = [];
@@ -74,7 +60,7 @@ test('the fishing save is per person per hearth, and an older device cannot over
   assert.deepEqual((await call(path, { token: a.token })).data.save, { v: 2, coins: 50 });
 });
 
-test('the game\'s fish are all read from its file', () => {
+test('the game\'s fish are all read from its data file', () => {
   const species = loadSpecies();
   assert.equal(species.size, 264);
   const { look, ...leviathan } = species.get('leviathan')!;
@@ -84,7 +70,8 @@ test('the game\'s fish are all read from its file', () => {
   assert.ok([...species.values()].every((sp) => sp.look));
   assert.deepEqual(species.get('cinderwyrm')?.look, { body: '#2a1410', belly: '#ff8a4a', fin: '#c4561c', h: 0.08, shape: 'eel', glow: '#ff6a2a', spots: '#ffc46b' });
   assert.equal(species.get('icefish')?.look?.body, 'rgba(220,235,245,.7)');
-  assert.equal(parseLook("L('#000000', '#ffffff', '#ff0000', .3, { glow: 'red\" onload=\"x', shape: 'blob' })")?.glow, undefined);
+  assert.deepEqual(cleanLook({ body: '#000000', belly: '#ffffff', fin: '#ff0000', h: 0.3, glow: 'red" onload="x', shape: 'blob' }), { body: '#000000', belly: '#ffffff', fin: '#ff0000', h: 0.3 });
+  assert.equal(cleanLook({ body: 'url(x)', belly: '#ffffff', fin: '#ff0000', h: 0.3 }), undefined);
   assert.equal(species.get('roach')?.pond, 'mill');
   // A timed legendary belongs to the water it's listed with.
   assert.equal(species.get('morningcarp')?.pond, 'mill');

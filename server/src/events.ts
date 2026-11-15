@@ -4,6 +4,9 @@ import type { Db } from './db.ts';
 import { HttpError, type Json } from './http.ts';
 import type { Channel, Handler, Perm, Standing, User } from './app.ts';
 
+/** How long before an event starts its reminder goes out. */
+export const EVENT_REMIND_MS = 15 * 60_000;
+
 export interface EventsContext {
   allowed: (serverId: number, user: User, perm: Perm) => Standing;
   canSee: (channel: Channel, userId: number) => boolean;
@@ -26,7 +29,6 @@ export function hearthEvents(ctx: EventsContext) {
     serverSummary, wakeAt,
   } = ctx;
 
-  const EVENT_REMIND_MS = 15 * 60_000;
   /** Upcoming events in a burrow, and ones that started in the last few hours. */
   const eventsIn = (serverId: number, viewerId: number) => {
     const rows = db
@@ -129,6 +131,6 @@ export function hearthEvents(ctx: EventsContext) {
   });
 
   return {
-    eventsIn, EVENT_REMIND_MS,
+    eventsIn,
   };
 }

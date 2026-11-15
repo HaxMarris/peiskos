@@ -1,4 +1,4 @@
-// Running the server: the admin page for whoever hosts Burrow (people, storage, voice, backups,
+// Running the server: the admin page for whoever hosts Peiskos (people, storage, voice, backups,
 // signup links, updates and crash reports), the health check for uptime monitors, and storage
 // clean-up. Only the host's admins can use the /api/admin routes.
 import { createHash, randomBytes } from 'node:crypto';
@@ -250,7 +250,7 @@ export function hosting(ctx: HostingContext) {
     if (!h?.offsite) return { backups: [] };
     return { backups: await offsiteBackups(h.offsite) };
   }));
-  // Restoring swaps the database when Burrow next starts, so it stops itself here; Docker starts it again.
+  // Restoring swaps the database when Peiskos next starts, so it stops itself here; Docker starts it again.
   route('POST', '/api/admin/backups/restore', admin(({ body }) => {
     const h = ctx.hosting;
     const name = String(body.name ?? '');

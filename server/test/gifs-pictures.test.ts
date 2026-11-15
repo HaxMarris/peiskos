@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
+import { caller } from './helpers.ts';
 
 const GIF = Buffer.concat([Buffer.from('GIF89a'), Buffer.alloc(40, 1)]);
 const WEBP = Buffer.concat([Buffer.from('RIFF'), Buffer.alloc(4), Buffer.from('WEBP'), Buffer.alloc(30, 2)]);
@@ -65,14 +66,7 @@ after(() => {
   }
 });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 const register = async (username: string) =>
   (await call('/api/register', { body: { username, password: 'password1' } })).data as { token: string; user: { id: number } };
 

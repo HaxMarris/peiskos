@@ -1,10 +1,10 @@
-// Puts Burrow back the way it was on an earlier day, from a backup. Run it where the server runs:
+// Puts Peiskos back the way it was on an earlier day, from a backup. Run it where the server runs:
 //
 //   docker compose exec burrow node --no-warnings server/src/restore.ts            lists the backups
 //   docker compose exec burrow node --no-warnings server/src/restore.ts 2026-10-09 restores that day's
 //   docker compose restart burrow                                                  finishes it
 //
-// The backup is picked up the next time Burrow starts; the database it replaces is kept next to
+// The backup is picked up the next time Peiskos starts; the database it replaces is kept next to
 // it (chat.db.before-restore-…). Off-site copies (BACKUP_S3_…) are listed too and downloaded
 // first. On a brand new server, --uploads also brings back every uploaded file from off-site.
 import { resolve, dirname, join } from 'node:path';

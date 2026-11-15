@@ -3,7 +3,7 @@
 //
 // SMTP_URL picks it: smtps://user:password@host:465 for a server that starts encrypted, or
 // smtp://user:password@host:587 for one that switches to encryption after saying hello
-// (STARTTLS). Burrow refuses to send a password over a connection that isn't encrypted,
+// (STARTTLS). Peiskos refuses to send a password over a connection that isn't encrypted,
 // except to the same computer (for testing).
 import { connect as tcpConnect, type Socket } from 'node:net';
 import { connect as tlsConnect, type TLSSocket } from 'node:tls';

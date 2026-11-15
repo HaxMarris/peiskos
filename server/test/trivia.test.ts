@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { loadPacks } from '../src/trivia.ts';
+import { caller } from './helpers.ts';
 
 // A small pack: 6 questions in two categories, so running out and starting over can be seen.
 const dir = mkdtempSync(join(tmpdir(), 'burrow-trivia-'));
@@ -22,14 +23,7 @@ before(async () => {
 });
 after(() => { app.closeAllConnections(); app.close(); });
 
-async function call(path: string, opts: { method?: string; body?: unknown; token?: string } = {}) {
-  const res = await fetch(base + path, {
-    method: opts.method ?? (opts.body ? 'POST' : 'GET'),
-    headers: { 'content-type': 'application/json', ...(opts.token ? { authorization: `Bearer ${opts.token}` } : {}) },
-    body: opts.body ? JSON.stringify(opts.body) : undefined,
-  });
-  return { status: res.status, data: (await res.json()) as any };
-}
+const call = caller(() => base);
 
 test('the real packs load, with unique ids', () => {
   const packs = loadPacks(new URL('../trivia/', import.meta.url).pathname);

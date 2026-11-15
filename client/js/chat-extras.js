@@ -1,5 +1,5 @@
 // Emoji and stickers, polls, link previews, threads, voice messages, search.
-// Part of Burrow's client: plain scripts that index.html loads in order, sharing one global scope.
+// Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
 // ---------------------------------------------------------------- emoji: the full picker, and each burrow's own

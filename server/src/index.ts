@@ -31,7 +31,7 @@ const app = createApp({
     backupDir,
     backupKeep,
     offsite: offsite ?? undefined,
-    // The updater (see docker-compose.yml) and Burrow talk through files in the data folder.
+    // The updater (see docker-compose.yml) and Peiskos talk through files in the data folder.
     dataDir: dirname(dbFile),
     admins: (process.env.ADMIN_USERS ?? '').split(',').map((n) => n.trim()).filter(Boolean),
     heartbeatUrl: process.env.HEARTBEAT_URL || undefined,
