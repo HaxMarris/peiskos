@@ -145,7 +145,7 @@ function onFishingDock(ev) {
 }
 
 // The game follows Peiskos's light and dark.
-new MutationObserver(() => fishing.play?.frame.contentWindow?.postMessage({ kind: 'theme', theme: currentTheme() }, '*'))
+new MutationObserver(() => { fishing.play?.frame.contentWindow?.postMessage({ kind: 'theme', theme: currentTheme() }, '*'); })
   .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
 
 $('#fishing-back').onclick = closeFishing;
