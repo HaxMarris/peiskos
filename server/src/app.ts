@@ -990,6 +990,7 @@ export function createApp(opts: AppOptions): Server {
     blockedEitherWay: (...a) => blockedEitherWay(...a),
     dmBlockCheck: (...a) => dmBlockCheck(...a),
     markRead: (...a) => markRead(...a),
+    removeBurrowPicture: (...a) => removeBurrowPicture(...a),
     removeFiles: (...a) => removeFiles(...a),
     serverKind: (...a) => serverKind(...a),
   });
@@ -1397,7 +1398,7 @@ export function createApp(opts: AppOptions): Server {
 
   // ---- uploads, pictures and GIFs (uploads.ts)
   const { DAILY_UPLOAD, avatarPath, filePath, gifs, handleAvatarUpload, handleBurrowPictureUpload, handleMotdPicture, handleThumbUpload, handleUpload, overDay, picturePath, removeBurrowPicture, removeFiles, roomOnDisk, savePicture, serveAttachment, serveGifPreview, servePicture, serveThumb, setAvatarFile, thumbPath, uploadedToday, uploader } = uploads({
-    allowed, attachmentJson, checkTries, db, failedTry, fun, maxUpload, now, opts, route, sendServerUpdate,
+    allowed, attachmentJson, checkTries, db, failedTry, fun, isGroupDm, isMember, maxUpload, now, opts, route, sendServerUpdate,
     serverSummary, textRoom, uploadLimitFor, userByToken, visibleRoom,
     userChanged: (...a) => userChanged(...a),
   });

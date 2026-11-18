@@ -20,6 +20,7 @@ export interface DmsContext {
   notBot: (user: User) => void;
   now: () => number;
   opts: AppOptions;
+  removeBurrowPicture: (serverId: number) => void;
   removeFiles: (rows: Json[]) => void;
   route: (method: string, path: string, handler: Handler, auth?: boolean) => number;
   sendServerUpdate: (serverId: number) => void;
@@ -34,7 +35,7 @@ export interface DmsContext {
 export function directMessages(ctx: DmsContext) {
   const {
     areFriends, blocked, blockedEitherWay, channelById, db, dmBlockCheck, isBotUser, isMember, kickFromVoice,
-    markRead, notBot, now, opts, removeFiles, route, sendServerUpdate, sendTo, serverKind, serverMemberIds,
+    markRead, notBot, now, opts, removeBurrowPicture, removeFiles, route, sendServerUpdate, sendTo, serverKind, serverMemberIds,
     serverSummary, usersInVoice, voiceRoomIds,
   } = ctx;
 
@@ -164,6 +165,7 @@ export function directMessages(ctx: DmsContext) {
       sendServerUpdate(serverId);
     } else {
       removeFiles(db.prepare('SELECT a.id FROM attachments a JOIN channels c ON c.id = a.channel_id WHERE c.server_id = ?').all(serverId) as Json[]);
+      removeBurrowPicture(serverId);
       db.prepare('DELETE FROM servers WHERE id = ?').run(serverId);
     }
     return { ok: true };
