@@ -85,6 +85,23 @@ function threadRows(s, c) {
     });
 }
 
+// A conversation's picture beside its name in the header: the group's photo, or the other person's.
+// Rooms in a hearth don't have one.
+function renderChatAvatar(s) {
+  let av;
+  if (s?.group) av = groupAvatar('lg', s);
+  else {
+    av = document.createElement('span');
+    av.className = 'avatar lg';
+    const p = s && partner(s);
+    if (p) setAvatar(av, p.username, avatarOf(p.id, p.avatar));
+    else av.classList.add('hidden');
+  }
+  av.id = 'chat-avatar';
+  av.setAttribute('aria-hidden', 'true');
+  $('#chat-avatar').replaceWith(av);
+}
+
 // The header's title, subtitle and buttons for the open room.
 function renderChatHeader() {
   const where = roomById(state.channelId);
@@ -92,6 +109,7 @@ function renderChatHeader() {
   const ch = where?.c;
   const title = !ch ? '' : isDm(s) ? dmTitle(s) : ch.name;
   $('#channel-name').textContent = title;
+  renderChatAvatar(ch && isDm(s) ? s : null);
   renderChannelSub();
   const slow = !where?.thread && ch?.slow && !slowExempt(s) ? ` (slow mode: ${slowLabel(ch.slow)})` : '';
   input.placeholder = !ch ? '' : isDm(s) ? `Message ${title}` : where.thread ? `Reply in ${title}` : `Say something in ${title}${slow}`;

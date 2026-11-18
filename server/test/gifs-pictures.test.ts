@@ -183,3 +183,41 @@ test('burrow pictures', async () => {
   await call(`/api/servers/${burrow.id}/leave`, { method: 'POST', token: host.token });
   await picturesSoon([]);
 });
+
+test('group conversation photos', async () => {
+  const ann = await register('ann');
+  const bo = await register('bo');
+  const cy = await register('cy');
+  const out = await register('out');
+  const hearth = (await call('/api/servers', { body: { name: 'Birches' }, token: ann.token })).data;
+  for (const p of [bo, cy, out]) await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: p.token });
+  const group = (await call('/api/dms', { body: { userIds: [bo.user.id, cy.user.id] }, token: ann.token })).data;
+  assert.equal(group.group, true);
+  assert.equal(group.icon, null);
+
+  // Anyone in it can set the photo, not someone outside it.
+  assert.equal((await uploadPicture(group.id, out.token, PNG)).status, 404);
+  const set = (await (await uploadPicture(group.id, bo.token, PNG)).json()) as any;
+  assert.match(set.icon, /^\/api\/burrow-pictures\/[\w-]+\.png$/);
+  const seen = (await call('/api/dms', { token: cy.token })).data.find((s: any) => s.id === group.id);
+  assert.equal(seen.icon, set.icon);
+  // Changing it removes the old file.
+  const next = (await (await uploadPicture(group.id, cy.token, GIF, 'image/gif')).json()) as any;
+  assert.equal((await fetch(base + set.icon)).status, 404);
+  await picturesSoon([next.icon.split('/').pop()]);
+
+  // A group has no banner, and a one-to-one conversation has no photo of its own.
+  const banner = await fetch(`${base}/api/servers/${group.id}/banner`, { method: 'POST', headers: { authorization: `Bearer ${ann.token}`, 'content-type': 'image/png' }, body: new Uint8Array(PNG) });
+  assert.equal(banner.status, 404);
+  const pair = (await call('/api/dms', { body: { userId: bo.user.id }, token: ann.token })).data;
+  assert.equal((await uploadPicture(pair.id, ann.token, PNG)).status, 404);
+
+  assert.equal((await call(`/api/servers/${group.id}/picture`, { method: 'DELETE', token: out.token })).status, 404);
+  assert.equal((await call(`/api/servers/${group.id}/picture`, { method: 'DELETE', token: ann.token })).data.icon, null);
+  await picturesSoon([]);
+
+  // The last one to leave takes the photo with them.
+  await uploadPicture(group.id, ann.token, PNG);
+  for (const p of [ann, bo, cy]) await call(`/api/servers/${group.id}/leave`, { method: 'POST', token: p.token });
+  await picturesSoon([]);
+});

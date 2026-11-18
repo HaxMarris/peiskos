@@ -422,7 +422,7 @@ function renderDmList() {
     // A round picture with who's online, the name over the newest message, and its time and unread count.
     const wrap = document.createElement('span');
     wrap.className = 'dm-avatar';
-    if (s.group) wrap.append(groupAvatar());
+    if (s.group) wrap.append(groupAvatar('xs', s));
     else {
       const p = partner(s);
       const av = document.createElement('span');

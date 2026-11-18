@@ -908,10 +908,14 @@ function dmTitle(s) {
   const names = s.members.filter((m) => m.id !== state.me.id).map(nameOfPerson);
   return names.length > 3 ? `${names.slice(0, 3).join(', ')} and ${names.length - 3} more` : names.join(', ') || 'Just you';
 }
-function groupAvatar(cls = 'xs') {
+/** A group's photo, or the people icon when it has none. */
+function groupAvatar(cls = 'xs', s = null) {
   const av = document.createElement('span');
   av.className = `avatar ${cls} group-avatar`;
-  av.innerHTML = PEOPLE_ICON;
+  if (s?.icon) {
+    av.classList.add('has-picture');
+    av.style.backgroundImage = `url("${state.serverUrl}${s.icon}")`;
+  } else av.innerHTML = PEOPLE_ICON;
   return av;
 }
 
@@ -982,6 +986,19 @@ function openGroupSettings(s) {
       <div class="error" id="modal-error"></div>
       <div class="modal-row"><button type="submit" class="btn secondary">Rename</button></div>
     </form>
+    ${state.maxUploadBytes ? `<h3>Photo</h3>
+    <div class="account-picture">
+      <span id="group-photo"></span>
+      <div class="buttons">
+        <div>
+          <button type="button" class="btn secondary" id="group-photo-pick">${s.icon ? 'Change photo' : 'Add a photo'}</button>
+          <button type="button" class="btn secondary ${s.icon ? '' : 'hidden'}" id="group-photo-remove">Remove</button>
+        </div>
+        <span class="small muted">Everyone in the conversation sees it. PNG, JPEG, GIF or WebP, cropped to a square.</span>
+      </div>
+      <input type="file" id="group-photo-input" accept="image/png,image/jpeg,image/gif,image/webp" hidden />
+    </div>
+    <div class="error" id="group-photo-error"></div>` : ''}
     <h3>People · ${s.members.length}</h3>
     <ul class="group-people">${s.members.map((m) => `<li data-avatar="${m.id}"><span class="avatar xs"></span>${escapeHtml(nameOfPerson(m))}${m.id === state.me.id ? ' <span class="muted small">(you)</span>' : ''}</li>`).join('')}</ul>
     <div class="modal-row">
@@ -993,6 +1010,7 @@ function openGroupSettings(s) {
     const m = s.members.find((x) => x.id === Number(li.dataset.avatar));
     setAvatar(li.querySelector('.avatar'), m.username, avatarOf(m.id, m.avatar));
   });
+  if ($('#group-photo')) wireGroupPhoto(s);
   $('#group-form').onsubmit = async (e) => {
     e.preventDefault();
     try { handleEvent({ type: 'server_updated', server: await api(`/api/servers/${s.id}`, { method: 'PATCH', body: { name: $('#group-name').value } }) }); closeModal(); }
@@ -1015,6 +1033,43 @@ function openGroupSettings(s) {
       closeModal();
       handleEvent({ type: 'server_deleted', serverId: s.id });
     } catch (err) { alertError(err); }
+  };
+}
+
+// Anyone in a group conversation can change or remove its photo, as with its name.
+function wireGroupPhoto(s) {
+  const pick = $('#group-photo-pick');
+  const show = (srv) => {
+    const av = groupAvatar('xl', srv);
+    av.id = 'group-photo';
+    $('#group-photo').replaceWith(av);
+    pick.textContent = srv.icon ? 'Change photo' : 'Add a photo';
+    $('#group-photo-remove').classList.toggle('hidden', !srv.icon);
+  };
+  const done = (srv) => {
+    handleEvent({ type: 'server_updated', server: srv });
+    show(srv);
+  };
+  show(s);
+  pick.onclick = () => $('#group-photo-input').click();
+  $('#group-photo-input').onchange = async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    $('#group-photo-error').textContent = '';
+    pick.disabled = true;
+    pick.textContent = 'Uploading…';
+    try { done(await uploadPicture(`/api/servers/${s.id}/picture`, await squarePicture(file))); }
+    catch (err) {
+      $('#group-photo-error').textContent = err.message;
+      pick.textContent = state.servers.get(s.id)?.icon ? 'Change photo' : 'Add a photo';
+    }
+    finally { pick.disabled = false; }
+  };
+  $('#group-photo-remove').onclick = async () => {
+    $('#group-photo-error').textContent = '';
+    try { done(await api(`/api/servers/${s.id}/picture`, { method: 'DELETE' })); }
+    catch (err) { $('#group-photo-error').textContent = err.message; }
   };
 }
 

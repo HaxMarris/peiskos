@@ -832,7 +832,8 @@ function handleEvent(ev) {
         addDm(ev.server);
         renderServers();
         if (state.inDms) renderChannels();
-        if (ev.server.id === state.serverId) { renderMembers(); renderSeen(); }
+        // The header too: a group's name or photo may have changed.
+        if (ev.server.id === state.serverId) { renderMembers(); renderSeen(); renderChatHeader(); }
         break;
       }
       const isNew = !state.servers.has(ev.server.id);

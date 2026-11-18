@@ -19,6 +19,8 @@ export interface UploadsContext {
   checkTries: (keys: string[], limit: number) => void;
   db: Db;
   failedTry: (keys: string[], windowMs?: number) => void;
+  isGroupDm: (serverId: number) => boolean;
+  isMember: (serverId: number, userId: number) => boolean;
   fun: { motdOf: (serverId: number) => { id: number; text: string; picture: string | null; }[]; addMotd: (serverId: number, user: User, text: unknown, picture?: string | null) => { motd: { id: number; text: string; picture: string | null; }[]; }; canAddMotd: (serverId: number, user: User) => void; };
   maxUpload: number;
   now: () => number;
@@ -35,7 +37,7 @@ export interface UploadsContext {
 
 export function uploads(ctx: UploadsContext) {
   const {
-    allowed, attachmentJson, checkTries, db, failedTry, fun, maxUpload, now, opts, route, sendServerUpdate,
+    allowed, attachmentJson, checkTries, db, failedTry, fun, isGroupDm, isMember, maxUpload, now, opts, route, sendServerUpdate,
     serverSummary, textRoom, uploadLimitFor, userByToken, userChanged, visibleRoom,
   } = ctx;
 
@@ -269,14 +271,23 @@ export function uploads(ctx: UploadsContext) {
     if (old?.file && opts.uploadDir) unlink(picturePath('burrow-pictures', old.file)).catch(() => {});
   };
 
-  // The host, and roles allowed to edit the burrow, can change its picture and banner.
+  // The host, and roles allowed to edit the burrow, can change its picture and banner. In a group
+  // conversation anyone in it can change its picture, as with its name; there's no banner.
+  const mayChangePicture = (serverId: number, user: User, column: PictureColumn) => {
+    if (column === 'icon' && isGroupDm(serverId)) {
+      if (!isMember(serverId, user.id)) throw new HttpError(404, 'That conversation is gone');
+      return;
+    }
+    allowed(serverId, user, 'burrow');
+  };
   const handleBurrowPictureUpload = async (req: IncomingMessage, res: ServerResponse, serverId: number, column: PictureColumn = 'icon') => {
     const user = uploader(req);
-    allowed(serverId, user, 'burrow');
-    const file = await savePicture(req, 'burrow-pictures', column === 'icon' ? 'Hearth pictures' : 'Banners');
-    // They may have lost the right (or the burrow may be gone) while it uploaded.
+    mayChangePicture(serverId, user, column);
+    const what = column === 'banner' ? 'Banners' : isGroupDm(serverId) ? 'Group photos' : 'Hearth pictures';
+    const file = await savePicture(req, 'burrow-pictures', what);
+    // They may have lost the right (or left, or the burrow may be gone) while it uploaded.
     try {
-      allowed(serverId, user, 'burrow');
+      mayChangePicture(serverId, user, column);
     } catch (err) {
       unlink(picturePath('burrow-pictures', file)).catch(() => {});
       throw err;
@@ -298,7 +309,7 @@ export function uploads(ctx: UploadsContext) {
   };
   route('DELETE', '/api/servers/:id/picture', ({ user, params }) => {
     const serverId = Number(params[0]);
-    allowed(serverId, user, 'burrow');
+    mayChangePicture(serverId, user, 'icon');
     setBurrowPicture(serverId, null);
     return serverSummary(serverId, user.id);
   });
