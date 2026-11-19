@@ -395,7 +395,8 @@ function drawChannels() {
     const li = document.createElement('li');
     const joined = state.voice?.channelId === c.id;
     const ids = c.voiceUsers ?? [];
-    li.className = (i === 0 ? 'fire-card' : 'voice-room') + (joined ? ' joined' : '');
+    const on = liveEventAt(s, c.id);
+    li.className = (i === 0 ? 'fire-card' : 'voice-room') + (joined ? ' joined' : '') + (on ? ' event-on' : '');
     const streamer = ids.find((id) => state.voice?.channelId === c.id && state.sharing.get(id)?.screen);
     const seats = c.userLimit ? ` of ${c.userLimit} seats` : ' gathered';
     const sub = !ids.length ? (c.userLimit ? `${c.userLimit} seats, all open` : 'Nobody here yet')
@@ -403,6 +404,13 @@ function drawChannels() {
     li.innerHTML = i === 0
       ? `<div class="voice-room-name"><span class="fire-badge">${FIRE_ICON}</span><span class="fire-text"><span class="room-name">${escapeHtml(c.name)}</span><span class="fire-sub">${escapeHtml(sub)}</span></span>${c.private ? LOCK_ICON : ''}</div>`
       : `<div class="voice-room-name">${FIRE_ICON.replace('<svg', '<svg class="voice-icon"')}<span class="room-name">${escapeHtml(c.name)}</span>${c.userLimit ? `<span class="seat-count">${ids.length}/${c.userLimit}</span>` : ''}${c.private ? LOCK_ICON : ''}</div>`;
+    if (on) {
+      const line = document.createElement('div');
+      line.className = 'fire-event-line';
+      line.innerHTML = '<span class="event-dot"></span><span></span><span class="muted">· on now</span>';
+      line.children[1].textContent = on.title;
+      li.firstChild.after(line);
+    }
     if (i > 0) li.firstChild.append(pinFireButton(s, c));
     if (can(s, 'rooms')) {
       li.firstChild.append(roomSettingsButton(c));
@@ -410,7 +418,7 @@ function drawChannels() {
     }
     li.title = joined ? 'Open the fire' : 'Join voice';
     li.dataset.key = `room-${c.id}`;
-    rowMain(li, li.querySelector('.room-name'), { label: rowLabel(c.name, sub, c.private && 'private', joined ? 'open the fire' : 'join voice') });
+    rowMain(li, li.querySelector('.room-name'), { label: rowLabel(c.name, sub, on && `${on.title} is on now`, c.private && 'private', joined ? 'open the fire' : 'join voice') });
     li.onclick = () => (joined ? goToVoice() : joinVoice(c.id));
     const people = ids.map((id) => {
       const name = nameOfPerson(s.members.find((m) => m.id === id)) ?? '?';

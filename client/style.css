@@ -2309,3 +2309,38 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { .vent-puff, .vent-mouth { animation: none; } .vent-puff { opacity: .5; } }
 [data-motion="reduce"] :is(.vent-puff, .vent-mouth) { animation: none; }
 [data-motion="reduce"] .vent-puff { opacity: .5; }
+
+/* An event on now at the fire: lights on two posts with a cloth banner (fire-event.js). Behind the seats. */
+.fire-event { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.fire-event-lights { position: absolute; }
+.fire-event-lights svg { display: block; overflow: visible; }
+.fire-event-banner { position: absolute; z-index: 3; translate: -50% 0; transform-origin: 50% 0; pointer-events: auto; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; max-width: 330px; padding: 8px 22px 14px; border: 0; color: #fff3e2;
+  background: linear-gradient(180deg, #b0461f, #963a18); font-family: var(--font-head); font-weight: 700; font-size: 20px; letter-spacing: .06em;
+  text-align: center; clip-path: polygon(0 0, 100% 0, 100% 100%, 50% 84%, 0 100%); filter: drop-shadow(0 6px 10px rgba(0, 0, 0, .3)); }
+.fire-event-banner small { font-family: var(--font-body); font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase; color: #ffe2bd; }
+.fire-event-banner b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; line-height: 1.15; }
+.fire-event-banner[data-size="medium"] { font-size: 17px; letter-spacing: .02em; }
+.fire-event-banner[data-size="long"] { font-size: 15px; letter-spacing: .02em; }
+.fire-event-banner:hover { background: linear-gradient(180deg, #a8441c, #8c3514); }
+.fire-event-banner:focus-visible { outline: 3px solid #ffd27a; outline-offset: 3px; clip-path: none; }
+@media (max-width: 760px) { .fire-event-banner { max-width: 260px; scale: .8; } }
+/* A seat kept for someone who said they're going: a folded blanket and their name on a tag. */
+.seat.open.saved .seat-face { border-color: transparent; }
+.seat.open.saved .seat-art { opacity: 1; }
+.saved-blanket { position: absolute; left: 50%; bottom: 18%; translate: -50% 0; rotate: -4deg; z-index: 2; width: 125%; height: 36%; border-radius: 6px;
+  background: repeating-linear-gradient(90deg, #b8462a 0 8px, #d9a441 8px 11px, #b8462a 11px 19px, #3d5a4a 19px 22px); box-shadow: 0 3px 6px rgba(0, 0, 0, .4); }
+.fire-ring .seat.saved .seat-status { padding: 2px 8px; border-radius: 999px; background: rgba(255, 236, 200, .95); color: #4a2c18; font-weight: 800; }
+
+/* The sidebar: the fire's row says what's on there now. */
+.voice-room.event-on, .fire-card.event-on { box-shadow: inset 3px 0 0 var(--ember); }
+.voice-room.event-on { background: linear-gradient(90deg, var(--ember-soft), transparent); border-radius: var(--radius); }
+.fire-event-line { display: flex; align-items: center; gap: 7px; min-width: 0; font-size: 12.5px; font-weight: 800; color: var(--accent-text); }
+.voice-room .fire-event-line { margin: 2px 0 4px 26px; }
+.fire-event-line span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fire-event-line .muted { flex: none; font-weight: 600; }
+.event-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ember); animation: event-dot 1.8s ease-out infinite; }
+@keyframes event-dot { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--ember) 55%, transparent); } 100% { box-shadow: 0 0 0 7px transparent; } }
+@media (prefers-reduced-motion: reduce) { .event-dot { animation: none; } }
+[data-motion="reduce"] .event-dot { animation: none; }
+.event-row .event-where { color: var(--accent-text); font-weight: 700; }

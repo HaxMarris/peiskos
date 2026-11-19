@@ -719,6 +719,14 @@ function renderEvents(s) {
     li.querySelector('b').textContent = e.title;
     const mine = e.rsvps.find((r) => r.userId === state.me.id)?.status;
     li.querySelector('.muted').textContent = `${eventWhen(e.startsAt)} · ${going(e)} going${mine === 'going' ? ', you too' : ''}`;
+    // On now somewhere: say where, so people know which fire or room to go to.
+    const where = e.channelId && liveEventAt(s, e.channelId) === e ? s.channels.find((c) => c.id === e.channelId) : null;
+    if (where) {
+      const w = document.createElement('span');
+      w.className = 'event-where';
+      w.textContent = where.kind === 'voice' ? `On now at ${where.name}` : `On now in #${where.name}`;
+      li.querySelector('.muted').replaceChildren(w, ` · ${going(e)} going`);
+    }
     li.dataset.key = `event-${e.id}`;
     rowMain(li, li.querySelector('.event-text'), { label: rowLabel(e.title, li.querySelector('.muted').textContent) });
     li.onclick = () => openEvent(s.id, e.id);

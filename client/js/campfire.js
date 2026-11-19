@@ -699,7 +699,7 @@ const seats = new Map(); // user id -> { el, face, track }
 function clearSeats() {
   for (const seat of seats.values()) if (seat.track && seat.face) seat.track.detach(seat.face);
   seats.clear();
-  $('#fire-ring').querySelectorAll('.seat').forEach((el) => el.remove());
+  $('#fire-ring').querySelectorAll('.seat, .fire-event').forEach((el) => el.remove());
 }
 
 /**
@@ -759,6 +759,7 @@ new ResizeObserver(() => {
   const place = sizeRing(ring, all.length, !!ring.querySelector('.seat-watch'));
   all.forEach((el) => place(el, Number(el.dataset.i)));
   anchorSeats(ring);
+  fireEventPlace(ring);
 }).observe($('.fire-ring-wrap'));
 
 function renderFire() {
@@ -877,6 +878,7 @@ function renderFire() {
     ring.append(el);
   }
   anchorSeats(ring);
+  fireEventScene(ring, s, ch, ids);
 }
 
 // The fireside chat is in view: docked beside the fire on a wide screen, or opened over it.
