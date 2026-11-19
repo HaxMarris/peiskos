@@ -53,9 +53,26 @@ window.addEventListener('unhandledrejection', (e) => {
   reportError(e.reason, 'promise');
 });
 
-const store = {
+const pageStore = {
   get: (k) => { try { return localStorage.getItem(k); } catch { return null; } },
   set: (k, v) => { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch {} },
+};
+// The desktop app keeps logins in the system's locked storage where it can (see desktop/secrets.js),
+// since the page's own storage is a plain file other programs could read. Ones saved before move there.
+const LOGIN_KEYS = new Set(['token', 'accounts']);
+const lockedStore = window.burrowDesktop?.secrets?.available() ? window.burrowDesktop.secrets : null;
+const store = {
+  get: (k) => {
+    if (!lockedStore || !LOGIN_KEYS.has(k)) return pageStore.get(k);
+    const old = pageStore.get(k);
+    if (old != null && lockedStore.set(k, old)) pageStore.set(k, null);
+    return lockedStore.get(k) ?? pageStore.get(k);
+  },
+  set: (k, v) => {
+    if (!lockedStore || !LOGIN_KEYS.has(k)) return pageStore.set(k, v);
+    if (lockedStore.set(k, v)) pageStore.set(k, null);
+    else pageStore.set(k, v);
+  },
 };
 
 // The desktop and phone apps connect to Peiskos's own server without asking; "Use a different server" on
@@ -204,6 +221,7 @@ async function showAuth() {
   $('#server-url-row').classList.toggle('hidden', !otherServer);
   $('#other-server-row').classList.toggle('hidden', !isApp || otherServer);
   $('#server-url').value = state.serverUrl;
+  showServerUrlNote();
   if (!isApp && !/Android|iPhone|iPad/.test(navigator.userAgent)) showDesktopDownloads();
   if (!isApp && /Android/.test(navigator.userAgent)) showAndroidDownload();
   renderAuthMode();
@@ -365,7 +383,7 @@ $('#reset-form').addEventListener('submit', async (e) => {
     showReset(false);
     if (await finishLogin(result)) toast('Password changed. Your other devices were logged out.');
   } catch (err) {
-    $('#reset-error').textContent = err.message === 'Failed to fetch' ? "Couldn't reach that server." : err.message;
+    $('#reset-error').textContent = authErrorText(err);
   } finally {
     $('#reset-submit').disabled = false;
   }
@@ -387,17 +405,36 @@ $('#other-server').addEventListener('click', (e) => {
 
 $('#server-url').addEventListener('change', () => {
   state.serverUrl = normalizeServerUrl($('#server-url').value);
+  showServerUrlNote();
   renderAuthMode();
 });
 
 // Typed without http:// or https://? Public names get https://; local addresses
 // (localhost, an IP, a .local name, or anything with a :port) get http://.
+const isLocalHost = (host) => /^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:\d+)?$/i.test(host) || /\.local(:\d+)?$/i.test(host) || /:\d+$/.test(host);
 function normalizeServerUrl(v) {
   v = v.trim().replace(/\/+$/, '');
   if (!v || /^https?:\/\//i.test(v)) return v;
-  const host = v.split('/')[0];
-  const local = /^(localhost|\d{1,3}(\.\d{1,3}){3}|\[[0-9a-f:]+\])(:\d+)?$/i.test(host) || /\.local(:\d+)?$/i.test(host) || /:\d+$/.test(host);
-  return (local ? 'http://' : 'https://') + v;
+  return (isLocalHost(v.split('/')[0]) ? 'http://' : 'https://') + v;
+}
+
+// Under the address: phones can't use http:// at all (Android and iOS both refuse it), and on the
+// desktop a password sent to a public http:// address crosses the internet unencrypted.
+function showServerUrlNote() {
+  const url = isApp ? normalizeServerUrl($('#server-url').value) : '';
+  const http = /^http:\/\//i.test(url);
+  const note = !http ? '' : isPhoneApp ? 'The phone app only works with https:// addresses.'
+    : isLocalHost(url.slice(7).split('/')[0]) ? '' : 'This address is not encrypted. Your password would be sent as plain text.';
+  $('#server-url-note').textContent = note;
+  $('#server-url-note').classList.toggle('hidden', !note);
+}
+
+// A request that never got an answer. Chrome says "Failed to fetch", Safari and the iPhone app
+// "Load failed", Firefox "NetworkError when attempting to fetch resource."
+function authErrorText(err) {
+  if (!(err instanceof TypeError) || !/fetch|load failed|network/i.test(err.message)) return err.message;
+  if (isPhoneApp && /^http:/i.test(state.serverUrl || '')) return 'The phone app only works with https:// addresses.';
+  return "Couldn't reach that server.";
 }
 
 $('#auth-form').addEventListener('submit', async (e) => {
@@ -418,7 +455,7 @@ $('#auth-form').addEventListener('submit', async (e) => {
     if (registering) store.set('welcome', '1');
     await finishLogin(result);
   } catch (err) {
-    $('#auth-error').textContent = err.message === 'Failed to fetch' ? "Couldn't reach that server." : err.message;
+    $('#auth-error').textContent = authErrorText(err);
   } finally {
     $('#auth-submit').disabled = false;
   }
@@ -488,7 +525,7 @@ $('#passkey-login').addEventListener('click', async () => {
     await finishLogin(result);
   } catch (err) {
     if (err.name === 'NotAllowedError' || err.name === 'AbortError') return; // closed the prompt
-    $('#auth-error').textContent = err.message === 'Failed to fetch' ? "Couldn't reach that server." : err.message;
+    $('#auth-error').textContent = authErrorText(err);
   }
 });
 

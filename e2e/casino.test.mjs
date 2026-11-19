@@ -235,6 +235,15 @@ test('a case battle: both pay, both open the same case, and the higher total tak
     won: c.classList.contains('won'), items: c.querySelectorAll('.b-item').length,
   })));
   assert.deepEqual(cols.map((c) => c.items), [1, 1], 'one skin each');
+  const items = async (seat) => (await call(server.base, `/api/servers/${hearth.id}/casino`, { token: seat.token })).inventory;
+  // Two skins of the same worth are a tie: both win, and each keeps one.
+  if (cols[0].total === cols[1].total) {
+    assert.equal(cols.filter((c) => c.won).length, 2);
+    await sees(ines.page.locator('.battle-end'), /Maya and Theo won it all\.|Theo and Maya won it all\./);
+    for (const s of [maya, theo]) assert.equal((await items(s)).length, 1);
+    noErrors(seats);
+    return;
+  }
   assert.equal(cols.filter((c) => c.won).length, 1);
   const best = cols.find((c) => c.won);
   const pot = cols[0].total + cols[1].total;
@@ -246,7 +255,6 @@ test('a case battle: both pay, both open the same case, and the higher total tak
   await sees(ines.page.locator('.battle-end'), `${winner.name} won it all.`);
 
   // The skins really moved: two in the winner's inventory, none in the loser's, and both are 100 chips down.
-  const items = async (seat) => (await call(server.base, `/api/servers/${hearth.id}/casino`, { token: seat.token })).inventory;
   assert.equal((await items(winner)).length, 2);
   assert.equal((await items(loser)).length, 0);
   assert.equal((await items(winner)).reduce((n, i) => n + i.value, 0), pot);

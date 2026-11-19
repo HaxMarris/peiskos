@@ -253,6 +253,19 @@ FCM_SERVICE_ACCOUNT=the-long-line
 
 Then `docker compose up -d`.
 
+### Invite links that open the phone apps
+
+Invite links (`https://your-server/invite/…`) open in the browser unless the phone can check that the app belongs to your server. Once set up, tapping one opens the Peiskos app straight to the invite. This only works for the server the apps are built for (`peiskos.app`).
+
+- **iPhone:** it uses the `APNS_TEAM_ID` you set for alerts. At https://developer.apple.com/account/resources/identifiers, open `app.peiskos`, tick **Associated Domains**, and save. Then, in GitHub's **Settings › Secrets and variables › Actions › Variables**, add `IOS_UNIVERSAL_LINKS` with the value `on`, so the next iPhone release asks for it.
+- **Android:** put the SHA-256 fingerprints of both signing keys in `.env`, comma-separated: Play's (Play Console › your app › **Test and release › App integrity › App signing**, *App signing key certificate*) and your own upload key (same page, or `keytool -list -v -keystore peiskos.keystore`), since the `.apk` on the website is signed with it.
+
+```sh
+ANDROID_CERT_SHA256=AB:CD:…,12:34:…
+```
+
+Then `docker compose up -d`. Android checks the file when the app is installed or updated, so an installed app picks it up with its next update.
+
 ### Email
 
 Email is optional. With it, someone who forgets their password can get a code by email from *Forgot your password?* on the login screen; without it, a forgotten password means a new account. Peiskos needs a mail server it can send through. The easiest is a Gmail account (a spare one is best, since emails come from that address): turn on 2-Step Verification, make an app password at https://myaccount.google.com/apppasswords, and use its 16 letters as the password below with `smtp.gmail.com`. Your email provider, Amazon SES or Mailgun work too. Put it in `.env`:

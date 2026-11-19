@@ -109,7 +109,7 @@ export function friendships(ctx: FriendsContext) {
     } else if (!r) {
       const [a, b] = pair(user.id, target.id);
       db.prepare('INSERT INTO friends (user_a, user_b, requested_by, created_at) VALUES (?, ?, ?, ?)').run(a, b, user.id, now());
-      pushTo(target.id, { title: 'Friend request', body: `${user.displayName || user.username} wants to be friends`, tag: `friend-${user.id}` });
+      pushTo(target.id, { title: 'Friend request', body: `${user.displayName || user.username} wants to be friends`, private: 'New friend request', tag: `friend-${user.id}` });
     }
     friendsChanged(user.id, target.id);
     return friendsOf(user.id);

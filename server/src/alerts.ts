@@ -131,7 +131,12 @@ export function alerts(ctx: AlertsContext) {
     return Math.min(99, mentions + dms);
   };
 
-  const pushTo = (userId: number, message: Json) => {
+  /** message.private is what the alert says instead for people who turned off message text in alerts. */
+  const pushTo = (userId: number, full: Json) => {
+    const { private: instead, ...rest } = full;
+    // Without message text: no names or words, which Apple and Google would otherwise carry.
+    const text = (db.prepare('SELECT alert_text FROM users WHERE id = ?').get(userId) as { alert_text: number } | undefined)?.alert_text !== 0;
+    const message: Json = text ? rest : { ...rest, title: 'Peiskos', body: String(instead ?? 'New message') };
     const subs = db.prepare('SELECT endpoint, p256dh, auth FROM push_subs WHERE user_id = ?').all(userId) as { endpoint: string; p256dh: string; auth: string }[];
     for (const sub of subs) {
       const app = {
@@ -225,7 +230,7 @@ export function alerts(ctx: AlertsContext) {
       if (level === 'none' || level === 'mentions') continue;
       if (statusRow(id)?.status === 'dnd') continue;
       if (online.has(id) && !userIdle(id)) sendTo([id], { type: 'fire_gathered', serverId: channel.serverId, channelId: channel.id, text });
-      else pushTo(id, { title: hearth, body: text, tag: `fire-${channel.id}`, silent: inQuietHours(id) });
+      else pushTo(id, { title: hearth, body: text, private: 'Friends are at the fire', tag: `fire-${channel.id}`, silent: inQuietHours(id) });
     }
   };
 

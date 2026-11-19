@@ -2,6 +2,7 @@
 // server address on first launch and remembers it.
 const { app, BrowserWindow, shell, Menu, desktopCapturer, ipcMain, nativeImage, nativeTheme, powerMonitor } = require('electron');
 const path = require('node:path');
+const { pathToFileURL } = require('node:url');
 const { startUpdateChecks } = require('./updater');
 const appAudio = require('./app-audio');
 const hotkeys = require('./hotkeys');
@@ -10,10 +11,20 @@ const drawOverlay = require('./draw-overlay');
 const tray = require('./tray');
 const { fixOldShortcuts, refreshIcons } = require('./shortcuts');
 const windowState = require('./window-state');
+const { serveSecrets } = require('./secrets');
+
+// The app's own folder, as a file:// address: the only pages the window may show.
+const APP_URL = pathToFileURL(path.join(__dirname, 'app')).href + '/';
+// What the app's pages use: microphone, camera and screen, alerts, full screen and the
+// pointer for games, copying, and picking where sound plays.
+const ALLOWED_PERMISSIONS = new Set(['media', 'display-capture', 'notifications', 'fullscreen', 'pointerLock', 'clipboard-sanitized-write', 'speaker-selection']);
 
 // Peiskos used to be called Burrow. Keep the old settings folder (logins, servers, settings),
 // which is named after the app, so renaming it doesn't log anyone out.
 app.setPath('userData', path.join(app.getPath('appData'), 'Burrow'));
+
+// Logins, in the system's locked storage where there is one.
+serveSecrets();
 
 // The page asks how long the computer has been left alone, to show you as away.
 ipcMain.on('idle-seconds', (e) => { e.returnValue = powerMonitor.getSystemIdleTime(); });
@@ -30,7 +41,43 @@ ipcMain.handle('desktop-settings-set', (_e, change) => tray.saveSettings({
 
 // Only one copy of the app: opening it again brings back the window that's already running.
 if (!app.requestSingleInstanceLock()) app.exit(0);
-app.on('second-instance', () => showWindow());
+app.on('second-instance', (_e, argv) => {
+  showWindow();
+  takeLink(argv);
+});
+
+// peiskos://invite/<code>?server=<address> links, from an invite opened on the website. The page
+// shows the invite and joins only when Join is pressed. Windows and Linux hand the link over as an
+// argument; a Mac sends open-url, which can arrive before the window exists.
+let pendingLink = null;
+let pageWantsLinks = false;
+function takeLink(argv) {
+  const link = argv.find((a) => /^peiskos:\/\//i.test(a));
+  if (link) openLink(link);
+}
+function openLink(link) {
+  let url;
+  try { url = new URL(link); } catch { return; }
+  const code = /^\/([\w-]{1,32})\/?$/.exec(url.pathname)?.[1];
+  const server = url.searchParams.get('server') ?? '';
+  if (url.hostname !== 'invite' || !code || !/^https?:\/\/[^/?#]+$/i.test(server)) return;
+  pendingLink = { server, code };
+  deliverLink();
+}
+function deliverLink() {
+  const win = BrowserWindow.getAllWindows().find((w) => !w.getParentWindow() && w.webContents.getURL().startsWith(APP_URL));
+  if (!pendingLink || !pageWantsLinks || !win) return;
+  win.webContents.send('invite-link', pendingLink.server, pendingLink.code);
+  pendingLink = null;
+}
+ipcMain.on('invite-link-ready', () => { pageWantsLinks = true; deliverLink(); });
+app.on('open-url', (e, link) => {
+  e.preventDefault();
+  if (app.isReady()) showWindow();
+  openLink(link);
+});
+if (app.isPackaged) app.setAsDefaultProtocolClient('peiskos');
+takeLink(process.argv);
 
 function showWindow() {
   const win = BrowserWindow.getAllWindows()[0];
@@ -113,7 +160,25 @@ function createWindow({ hidden = false } = {}) {
     if (process.platform === 'darwin') app.dock?.hide();
   });
   win.on('show', () => { if (process.platform === 'darwin') app.dock?.show(); });
-  win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) hotkeys.stop(); });
+  win.webContents.on('did-start-navigation', (e) => {
+    if (!e.isMainFrame || e.isSameDocument) return;
+    hotkeys.stop();
+    pageWantsLinks = false;
+  });
+
+  // Electron grants every permission to every frame unless told otherwise. Only the app's own
+  // pages (and its games, which are files next to it) get what the app uses; YouTube's player and
+  // anything else get nothing.
+  // A popped-out stream or game is a blank window the page fills (see setWindowOpenHandler).
+  const ownPage = (url) => typeof url === 'string' && (url.startsWith(APP_URL) || url === 'about:blank');
+  win.webContents.session.setPermissionRequestHandler((_wc, permission, callback, details) => {
+    callback(ALLOWED_PERMISSIONS.has(permission) && ownPage(details.requestingUrl));
+  });
+  win.webContents.session.setPermissionCheckHandler((_wc, permission, origin, details) => {
+    // File pages have no origin of their own, so Chromium names them file:// or "null".
+    const fromApp = ownPage(details?.requestingUrl) || origin === 'file://' || origin === 'file:///' || origin === 'null';
+    return ALLOWED_PERMISSIONS.has(permission) && fromApp;
+  });
 
   // YouTube's player (listen together) won't play without knowing which site it's on, and an
   // app page has no web address of its own to tell it.
@@ -209,7 +274,7 @@ function createWindow({ hidden = false } = {}) {
   ipcMain.on('popout-on-top', (_e, on, which) => popouts.get(which === 'game' ? 'peiskos-game' : 'peiskos-popout')?.setAlwaysOnTop(!!on));
   win.webContents.on('did-start-navigation', (e) => { if (e.isMainFrame && !e.isSameDocument) for (const child of popouts.values()) child.close(); });
   win.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith('file://')) {
+    if (!url.startsWith(APP_URL)) {
       e.preventDefault();
       if (/^https?:\/\//i.test(url)) shell.openExternal(url);
     }

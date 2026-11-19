@@ -281,6 +281,8 @@ function notificationSettings() {
   return `<h3>Notifications</h3>
     ${window.burrowDesktop ? '' : `<label class="check"><input type="checkbox" id="push-on" ${pushOn ? 'checked' : ''} /> Alert me when Peiskos is closed</label>
     <span class="small muted" id="push-note">${pushSupported() ? 'New messages, on this device, while Peiskos isn\'t open. Mute a room, or set it to only @mentions, from its menu.' : isPhoneApp ? "The phone app can't alert you while it's closed yet." : isIos() && !isStandalone() ? 'On an iPhone or iPad, add Peiskos to your Home Screen (Share › Add to Home Screen) and turn this on there.' : "This browser can't show alerts while Peiskos is closed."}</span>`}
+    <label class="check"><input type="checkbox" id="alert-text" ${state.me.alertText !== false ? 'checked' : ''} /> Show names and message text in alerts</label>
+    <span class="small muted">Off, alerts only say "New message". Phone alerts pass through Apple or Google, who can read them. Applies to all your devices.</span>
     <label class="check"><input type="checkbox" id="quiet-on" ${q ? 'checked' : ''} /> Quiet hours</label>
     <div class="quiet-times ${q ? '' : 'hidden'}" id="quiet-times">
       <label>From<input type="time" id="quiet-start" value="${minutesToTime(q?.start ?? 22 * 60)}" /></label>
@@ -373,6 +375,10 @@ function wireNotificationSettings() {
     try { Object.assign(state.me, await api('/api/me', { method: 'PATCH', body: { quietHours } })); }
     catch (err) { alertError(err); }
   };
+  $('#alert-text')?.addEventListener('change', async (e) => {
+    try { Object.assign(state.me, await api('/api/me', { method: 'PATCH', body: { alertText: e.target.checked } })); }
+    catch (err) { e.target.checked = !e.target.checked; alertError(err); }
+  });
   $('#quiet-on').onchange = saveQuiet;
   $('#quiet-start').onchange = saveQuiet;
   $('#quiet-end').onchange = saveQuiet;

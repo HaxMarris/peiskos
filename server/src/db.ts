@@ -223,6 +223,9 @@ export function openDb(file: string): Db {
  */
 export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   { why: 'Start numbering: the schema built by the steps above', run: () => {} },
+  // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
+  // can read what's in them.
+  { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */
