@@ -551,7 +551,7 @@ function openInvites(serverId) {
     <label>Invite link
       <div class="invite-box"><input id="invite" readonly value="${escapeHtml(inviteLink(s.inviteCode))}" /><button class="btn" id="copy-invite">Copy</button>${shareButtonHtml('share-invite')}</div>
     </label>
-    <p class="small muted">It never runs out. In the desktop app, people can paste the link or just the code <b>${escapeHtml(s.inviteCode)}</b>.
+    <p class="small muted">It never runs out. In the desktop and phone apps, people can paste the link or just the code <b>${escapeHtml(s.inviteCode)}</b>.
       ${can(s, 'burrow') ? '<button type="button" class="link-btn" id="new-code">Make a new one</button> if it got out.' : ''}</p>
     <h3>A link that runs out</h3>
     <div class="invite-make">
@@ -626,15 +626,30 @@ if (linkInvite) {
   state.pendingInvite = linkInvite;
   history.replaceState(null, '', '/');
 }
+// An invite link opened from outside Peiskos: tapped on a phone, or a peiskos://invite link from
+// the website in the desktop app. Joining still takes a press of Join.
+function openInviteLink(server, code) {
+  if (!/^[\w-]{1,32}$/.test(code ?? '')) return;
+  let origin;
+  try { origin = new URL(server).origin; } catch { return; }
+  if (origin !== new URL(state.serverUrl).origin) return toast(`That invite is for ${new URL(origin).host}, not the server you're on.`);
+  state.pendingInvite = code;
+  if (state.me) openPendingInvite();
+  else if (!$('#auth').classList.contains('hidden')) showAuthInvite();
+}
+// In a browser on a computer, invites also offer to open in the desktop app (if it's installed).
+const desktopAppLink = (code) => !isApp && !/Android|iPhone|iPad/.test(navigator.userAgent) && navigator.maxTouchPoints < 2
+  ? `<p class="small"><a href="peiskos://invite/${encodeURIComponent(code)}?server=${encodeURIComponent(location.origin)}">Open in the desktop app</a></p>` : '';
+
 async function showAuthInvite() {
   const card = $('#invite-card');
   if (!state.pendingInvite || !state.serverUrl) return card.classList.add('hidden');
   try {
     const p = await invitePreview(state.pendingInvite);
-    card.innerHTML = inviteCardHtml(p) + '<p class="muted small">Log in or make an account to join.</p>';
+    card.innerHTML = inviteCardHtml(p) + '<p class="muted small">Log in or make an account to join.</p>' + desktopAppLink(state.pendingInvite);
     fillInviteTile(card, p);
   } catch (err) {
-    card.innerHTML = `<p class="small">${escapeHtml(err.message)}. Ask for a new link.</p>`;
+    card.innerHTML = `<p class="small">${escapeHtml(authErrorText(err).replace(/\.$/, ''))}. Ask for a new link.</p>`;
     state.pendingInvite = null;
   }
   card.classList.remove('hidden');
@@ -650,6 +665,7 @@ async function openPendingInvite() {
     return modal(`<h2>That invite doesn't work</h2><p class="muted">${escapeHtml(err.message)}. Ask whoever sent it for a new one.</p>`);
   }
   modal(`<div class="invite-card">${inviteCardHtml(p)}</div>
+    ${desktopAppLink(code)}
     <div class="error" id="modal-error"></div>
     <div class="modal-row"><button class="btn secondary" data-close>Not now</button><button class="btn" id="invite-join">Join ${escapeHtml(p.name)}</button></div>`);
   fillInviteTile($('#modal-card'), p);

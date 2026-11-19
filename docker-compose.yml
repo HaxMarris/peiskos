@@ -43,6 +43,8 @@ services:
       APNS_KEY_ID: ${APNS_KEY_ID:-}
       APNS_TEAM_ID: ${APNS_TEAM_ID:-}
       FCM_SERVICE_ACCOUNT: ${FCM_SERVICE_ACCOUNT:-}
+      # Invite links that open the Android app: the SHA-256 fingerprints of its signing keys (see README).
+      ANDROID_CERT_SHA256: ${ANDROID_CERT_SHA256:-}
       # Who runs this server and how to reach them, on /privacy and /terms (see README).
       LEGAL_NAME: ${LEGAL_NAME:-}
       LEGAL_CONTACT: ${LEGAL_CONTACT:-}

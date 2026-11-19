@@ -23,6 +23,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- Invite links to peiskos.app open here, once the server vouches for the app
+                 (/.well-known/assetlinks.json, see ANDROID_CERT_SHA256 in the README). -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="peiskos.app" android:pathPrefix="/invite/" />
+            </intent-filter>
+
             <!-- Peiskos in other apps' share menus: photos, videos, files and links. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />

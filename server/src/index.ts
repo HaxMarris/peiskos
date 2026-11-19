@@ -4,6 +4,7 @@ import { endLiveStreams, openDb } from './db.ts';
 import { createApp } from './app.ts';
 import { finishRestore, scheduleBackups } from './backup.ts';
 import { s3FromEnv } from './s3.ts';
+import { parseCertList } from './app-links.ts';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 3000);
@@ -46,6 +47,12 @@ const app = createApp({
     process.env.APNS_KEY && process.env.APNS_KEY_ID && process.env.APNS_TEAM_ID
       ? { key: process.env.APNS_KEY, keyId: process.env.APNS_KEY_ID.trim(), teamId: process.env.APNS_TEAM_ID.trim(), topic: process.env.APNS_TOPIC || 'app.peiskos' }
       : undefined,
+  // Invite links that open the phone apps: the Apple team is the one alerts already use.
+  appLinks: {
+    appleAppId: process.env.APNS_TEAM_ID ? `${process.env.APNS_TEAM_ID.trim()}.${process.env.APNS_TOPIC || 'app.peiskos'}` : undefined,
+    androidPackage: 'app.peiskos',
+    androidCerts: parseCertList(process.env.ANDROID_CERT_SHA256),
+  },
   fcm: process.env.FCM_SERVICE_ACCOUNT ? { serviceAccount: process.env.FCM_SERVICE_ACCOUNT } : undefined,
   legal: { name: process.env.LEGAL_NAME || undefined, contact: process.env.LEGAL_CONTACT || undefined },
   gifs: process.env.KLIPY_API_KEY ? { apiKey: process.env.KLIPY_API_KEY, rating: process.env.GIF_RATING || undefined } : undefined,

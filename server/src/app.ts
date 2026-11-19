@@ -10,6 +10,7 @@ import { staticFiles } from './static.ts';
 import type { GifOptions } from './gifs.ts';
 import { fetchEmbed, linksIn, type EmbedOptions } from './embeds.ts';
 import type { ApnsConfig } from './apns.ts';
+import { appLinkFile, type AppLinksConfig } from './app-links.ts';
 import type { FcmConfig } from './fcm.ts';
 import { looksLikeEmail, type MailConfig } from './mail.ts';
 import { hosting, type HostingOptions } from './hosting.ts';
@@ -81,6 +82,8 @@ export interface AppOptions {
   pushHosts?: string[];
   /** Alerts for the iPhone app, through Apple (see apns.ts); off without it. */
   apns?: ApnsConfig;
+  /** Lets the phone apps open this server's invite links (see app-links.ts). */
+  appLinks?: AppLinksConfig;
   /** Alerts for the Android app, through Google's Firebase (see fcm.ts); off without it. */
   fcm?: FcmConfig;
   /** Backups, the admin page, updates and uptime (see hosting.ts). */
@@ -1539,11 +1542,11 @@ export function createApp(opts: AppOptions): Server {
 
   type MeRow = StatusRow & {
     quiet_start: number | null; quiet_end: number | null; time_zone: string | null; email: string | null; email_verified: number;
-    totp_secret: string | null; recovery_codes: string;
+    totp_secret: string | null; recovery_codes: string; alert_text: number;
   };
   const meRow = (userId: number) =>
     db
-      .prepare('SELECT status, status_text, status_emoji, status_until, quiet_start, quiet_end, time_zone, email, email_verified, totp_secret, recovery_codes FROM users WHERE id = ?')
+      .prepare('SELECT status, status_text, status_emoji, status_until, quiet_start, quiet_end, time_zone, email, email_verified, totp_secret, recovery_codes, alert_text FROM users WHERE id = ?')
       .get(userId) as MeRow;
   /** You, as your own apps see you: settings included. */
   const meJson = (user: User) => {
@@ -1554,6 +1557,7 @@ export function createApp(opts: AppOptions): Server {
       status: r.status,
       customStatus: customOf(r),
       quietHours: r.quiet_start === null || r.quiet_end === null ? null : { start: r.quiet_start, end: r.quiet_end, timeZone: r.time_zone },
+      alertText: !!r.alert_text,
       email: r.email,
       emailVerified: !!r.email_verified,
       ...profileOf(user.id),
@@ -1592,6 +1596,10 @@ export function createApp(opts: AppOptions): Server {
         expireStatusAt(user.id, until);
       }
       changed = true;
+    }
+    if (body.alertText !== undefined) {
+      if (typeof body.alertText !== 'boolean') throw new HttpError(400, 'Say whether alerts show message text');
+      db.prepare('UPDATE users SET alert_text = ? WHERE id = ?').run(body.alertText ? 1 : 0, user.id);
     }
     if (body.quietHours !== undefined) {
       const q = body.quietHours as Json | null;
@@ -1921,6 +1929,10 @@ export function createApp(opts: AppOptions): Server {
       // Invite links open the app, which shows the burrow before joining.
       const invite = url.pathname.match(/^\/invite\/([\w-]{1,32})\/?$/);
       if (invite) return sendInvitePage(req, res, invite[1]);
+      const appLink = req.method === 'GET' || req.method === 'HEAD' ? appLinkFile(url.pathname, opts.appLinks) : null;
+      if (appLink) return res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'public, max-age=3600' }).end(req.method === 'HEAD' ? undefined : appLink);
+      // Not the app's page: a phone asking about links that aren't set up should hear "none".
+      if (url.pathname.startsWith('/.well-known/')) return send(res, 404, { error: 'Not found' });
       const calendar = url.pathname.match(/^\/calendar\/([\w-]{20,64})\.ics$/);
       if (calendar && req.method === 'GET') return sendCalendar(req, res, calendar[1]);
       // Something shared from another app on a phone, before Peiskos's service worker was there to

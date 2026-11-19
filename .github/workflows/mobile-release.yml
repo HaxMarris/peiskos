@@ -211,6 +211,7 @@ jobs:
           ASC_KEY_ID: ${{ github.event_name != 'pull_request' && secrets.APP_STORE_CONNECT_KEY_ID || '' }}
           ASC_ISSUER_ID: ${{ github.event_name != 'pull_request' && secrets.APP_STORE_CONNECT_ISSUER_ID || '' }}
           TEAM_ID: ${{ github.event_name != 'pull_request' && secrets.APPLE_TEAM_ID || '' }}
+          UNIVERSAL_LINKS: ${{ vars.IOS_UNIVERSAL_LINKS }}
         run: |
           if [ "${{ steps.asc.outputs.upload }}" = yes ]; then
             key="$RUNNER_TEMP/AuthKey.p8"
@@ -229,6 +230,12 @@ jobs:
             # so mark everything with them before signing: the share extension first, then the app.
             app="$RUNNER_TEMP/Peiskos.xcarchive/Products/Applications/App.app"
             sed 's|<string>development</string>|<string>production</string>|' App/App.entitlements > "$RUNNER_TEMP/release.entitlements"
+            # Invite links that open the app (Universal Links), only once Associated Domains is ticked
+            # for app.peiskos at developer.apple.com: signing fails if the app asks for it before then.
+            if [ "$UNIVERSAL_LINKS" = on ]; then
+              /usr/libexec/PlistBuddy -c 'Add :com.apple.developer.associated-domains array' \
+                -c 'Add :com.apple.developer.associated-domains:0 string applinks:peiskos.app' "$RUNNER_TEMP/release.entitlements"
+            fi
             codesign --force --deep --sign - "$app"
             codesign --force --sign - --entitlements ShareExtension/ShareExtension.entitlements "$app/PlugIns/ShareExtension.appex"
             codesign --force --sign - --entitlements "$RUNNER_TEMP/release.entitlements" "$app"

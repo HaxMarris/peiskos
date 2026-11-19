@@ -547,6 +547,19 @@ if (phonePlatform === 'android') {
     native('App', 'minimizeApp').catch(() => {});
   });
 }
+// Invite links tapped elsewhere on the phone (once the server vouches for the app, see
+// server/src/app-links.ts), whether they opened Peiskos or found it already running.
+if (isPhoneApp) {
+  const fromLink = (url) => {
+    const m = /^https:\/\/([^/?#]+)\/invite\/([\w-]{1,32})\/?$/.exec(url ?? '');
+    if (m) openInviteLink(`https://${m[1]}`, m[2]);
+  };
+  window.Capacitor.addListener('App', 'appUrlOpen', (e) => fromLink(e.url));
+  native('App', 'getLaunchUrl').then((r) => fromLink(r?.url)).catch(() => {});
+}
+// peiskos://invite links from the website, in the desktop app.
+window.burrowDesktop?.onInviteLink?.((server, code) => openInviteLink(server, code));
+
 if (isPhoneApp) {
   // The buttons on the call notification (Android) and the lock screen (iPhone).
   window.Capacitor.addListener('VoiceCall', 'leave', () => leaveVoice());
