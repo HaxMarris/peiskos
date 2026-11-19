@@ -16,7 +16,7 @@ export interface LegalOptions {
 }
 
 /** The date these were last changed. Bump it whenever the wording changes. */
-export const LEGAL_UPDATED = '12 November 2026';
+export const LEGAL_UPDATED = '19 November 2026';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -128,7 +128,7 @@ export function privacyPage(o: LegalOptions) {
       <li><b>The server's cloud provider</b> stores the server's disk, and backups go to a storage service if they're turned on. Neither uses your data for anything else.</li>
       <li><b>Email:</b> your address is used only to confirm it and to send password reset codes, through the server's email provider. No newsletters.</li>
       <li><b>Notifications in a browser</b> pass through your browser's notification service (Apple, Google or Mozilla), encrypted so that service can't read them.</li>
-      <li><b>Notifications in the phone apps</b> pass through Apple (iPhone) or Google (Android) so your phone can show them. They carry who wrote, where, and the start of the message, which Apple or Google can read on the way.</li>
+      <li><b>Notifications in the phone apps</b> pass through Apple (iPhone) or Google (Android) so your phone can show them. They carry who wrote, where, and the start of the message, which Apple or Google can read on the way. Turn off <i>Show names and message text in alerts</i> in your account and they only say "New message".</li>
       <li><b>Link previews and GIF search</b> are fetched by the server itself, so the websites and the GIF service (KLIPY) see the server, not you. KLIPY does see the words you search for, along with an anonymous code that's the same each time you search, so it can tell searches came from the same person without knowing who.</li>
       <li><b>Calendar apps:</b> if you add your events to Google, Apple or Outlook calendar, that service fetches your hearths' events (name, time, place and description) from your private address every so often, and keeps them under its own privacy policy. Turning the feed off stops it.</li>
       <li><b>Listen together</b> and YouTube links play in YouTube's privacy-enhanced player, which loads from YouTube in your app, so YouTube sees your IP address while it plays.</li>

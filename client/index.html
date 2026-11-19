@@ -84,8 +84,9 @@
         <h1 id="auth-title">Welcome back</h1>
         <p class="muted" id="auth-subtitle"></p>
         <label id="server-url-row" class="hidden">Server address
-          <input id="server-url" placeholder="peiskos.app" autocomplete="url" />
+          <input id="server-url" placeholder="peiskos.app" autocomplete="url" aria-describedby="server-url-note" />
         </label>
+        <p id="server-url-note" class="small error hidden" role="status"></p>
         <label>Username <input id="username" autocomplete="username" required /></label>
         <label>Password <input id="password" type="password" autocomplete="current-password" required /></label>
         <label id="email-row" class="hidden">Email <input id="signup-email" type="email" autocomplete="email" placeholder="For resetting a forgotten password" /></label>

@@ -332,6 +332,31 @@ test('a direct message pushes to the other person', async () => {
   assert.equal(pushes[0].message.badge, 1);
 });
 
+test('alerts without message text say only "New message"', async () => {
+  const [ann, bob] = await people('ann', 'bob');
+  await burrow(ann, bob);
+  const dm = (await call('/api/dms', { body: { userId: bob.user.id }, token: ann.token })).data;
+  await subscribe(bob.token);
+  assert.equal((await call('/api/me', { token: bob.token })).data.alertText, true);
+  assert.equal((await call('/api/me', { method: 'PATCH', body: { alertText: 'no' }, token: bob.token })).status, 400);
+  const me = (await call('/api/me', { method: 'PATCH', body: { alertText: false }, token: bob.token })).data;
+  assert.equal(me.alertText, false);
+  pushes.length = 0;
+  await say(ann.token, dm.channels[0].id, 'the secret plan');
+  await wait(150);
+  assert.equal(pushes.length, 1);
+  assert.equal(pushes[0].message.title, 'Peiskos');
+  assert.equal(pushes[0].message.body, 'New message');
+  assert.equal(pushes[0].message.private, undefined);
+  assert.equal(pushes[0].message.badge, 1);
+  // Back on, the words come back.
+  await call('/api/me', { method: 'PATCH', body: { alertText: true }, token: bob.token });
+  pushes.length = 0;
+  await say(ann.token, dm.channels[0].id, 'the plan, again');
+  await wait(150);
+  assert.equal(pushes[0].message.body, 'the plan, again');
+});
+
 test('email: required at signup, and it counts right away', async () => {
   const name = `zed${++n}`;
   assert.equal((await call('/api/register', { body: { username: name, password: 'password1' } })).status, 400);
