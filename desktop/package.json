@@ -40,11 +40,27 @@
       "tray.js",
       "shortcuts.js",
       "window-state.js",
+      "secrets.js",
       "draw-overlay.js",
       "draw-overlay-preload.js",
       "draw-overlay.html",
       "draw-overlay-page.js",
       "app/**/*"
+    ],
+    "electronFuses": {
+      "runAsNode": false,
+      "enableNodeOptionsEnvironmentVariable": false,
+      "enableNodeCliInspectArguments": false,
+      "enableEmbeddedAsarIntegrityValidation": true,
+      "onlyLoadAppFromAsar": true
+    },
+    "protocols": [
+      {
+        "name": "Peiskos invite",
+        "schemes": [
+          "peiskos"
+        ]
+      }
     ],
     "win": {
       "target": "nsis"

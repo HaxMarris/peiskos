@@ -51,6 +51,17 @@ contextBridge.exposeInMainWorld('burrowDesktop', {
     onReady: (fn) => ipcRenderer.on('update-ready', (_e, update) => fn(update)),
     install: () => ipcRenderer.send('update-install'),
   },
+  /** peiskos://invite links opened outside the app: fn(server, code). Ones from before the page was ready come now. */
+  onInviteLink: (fn) => {
+    ipcRenderer.on('invite-link', (_e, server, code) => fn(server, code));
+    ipcRenderer.send('invite-link-ready');
+  },
+  /** Logins kept in the system's locked storage: available() is false where there's none (then the page keeps them). set() says whether it was kept. */
+  secrets: {
+    available: () => ipcRenderer.sendSync('secrets-available'),
+    get: (key) => ipcRenderer.sendSync('secrets-get', key),
+    set: (key, value) => ipcRenderer.sendSync('secrets-set', key, value),
+  },
   platform: process.platform,
   hotkeys: {
     set: (binds) => ipcRenderer.invoke('hotkeys-set', binds),
