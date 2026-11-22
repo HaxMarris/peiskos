@@ -841,6 +841,7 @@ function renderFire() {
     }
     const wrap = seat.el.querySelector('.seat-face-wrap');
     decorateSeat(wrap, id);
+    tapeSeatMark(wrap, id);
     fireSeatArt(wrap, seatKindOf(id, i));
     wrap.querySelector('.seat-live')?.remove();
     if (sharing?.screen) wrap.insertAdjacentHTML('beforeend', '<span class="seat-live">LIVE</span>');

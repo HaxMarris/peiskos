@@ -54,6 +54,17 @@ services:
       HEARTBEAT_URL: ${HEARTBEAT_URL:-}
       # Fire decorations and marshmallows: all unlocked unless this is "hours" (see README).
       FIRE_UNLOCKS: ${FIRE_UNLOCKS:-}
+      # Fire tapes (see README). "off" turns them off.
+      TAPES: ${TAPES:-}
+      TAPE_KEEP_DAYS: ${TAPE_KEEP_DAYS:-30}
+      TAPE_STORAGE_MB: ${TAPE_STORAGE_MB:-10240}
+      TAPE_MAX_MINUTES: ${TAPE_MAX_MINUTES:-180}
+      # Transcripts, from the whisper service below: http://whisper:8080 when it's on.
+      WHISPER_URL: ${WHISPER_URL:-}
+      TAPE_LANGUAGE: ${TAPE_LANGUAGE:-auto}
+      TAPE_TRANSCRIBE_HOURS: ${TAPE_TRANSCRIBE_HOURS:-1-7}
+      # The server's time zone, for those hours, e.g. Europe/Oslo.
+      TZ: ${TZ:-}
       # Off-site copies of backups and uploads, to any S3-style storage (see README).
       # How many daily backups to keep; 0 turns them off.
       BACKUP_KEEP: ${BACKUP_KEEP:-7}
@@ -92,6 +103,20 @@ services:
             - ${LIVEKIT_WEBHOOK_URL:-http://127.0.0.1:3000/api/livekit/webhook}
         logging:
           level: info
+
+  # Writes out what was said on fire tapes, at night, on this machine (whisper.cpp). It only starts
+  # when .env's COMPOSE_PROFILES includes "transcripts", and Peiskos uses it once WHISPER_URL is set.
+  whisper:
+    build:
+      context: ./transcriber
+      args:
+        WHISPER_MODEL: ${WHISPER_MODEL:-base}
+    restart: unless-stopped
+    profiles: ["transcripts"]
+    logging: *logging
+    # Low priority: it only gets the processor time that Peiskos and LiveKit aren't using.
+    cpu_shares: 128
+    mem_limit: 1536m
 
   # Installs updates when the host asks for one on the admin page. It only starts when .env's
   # COMPOSE_PROFILES includes "updates". It can control Docker on this machine, which is what lets

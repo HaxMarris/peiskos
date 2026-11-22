@@ -412,10 +412,13 @@ function drawChannels() {
       li.firstChild.after(line);
     }
     if (i > 0) li.firstChild.append(pinFireButton(s, c));
-    if (can(s, 'rooms')) {
-      li.firstChild.append(roomSettingsButton(c));
-      onHold(li, () => openRoomSettings(c));
-    }
+    if (can(s, 'rooms')) li.firstChild.append(roomSettingsButton(c));
+    // Held or right-clicked: the fire's tapes, and its settings for whoever manages rooms.
+    const fireMenu = [
+      state.tapesEnabled && !isDm(s) && { label: 'Tapes', run: () => openTapes(c.id) },
+      can(s, 'rooms') && { label: 'Fire settings', run: () => openRoomSettings(c) },
+    ].filter(Boolean);
+    if (fireMenu.length) onHold(li, () => (fireMenu.length > 1 ? openMenu(li, fireMenu) : fireMenu[0].run()));
     li.title = joined ? 'Open the fire' : 'Join voice';
     li.dataset.key = `room-${c.id}`;
     rowMain(li, li.querySelector('.room-name'), { label: rowLabel(c.name, sub, on && `${on.title} is on now`, c.private && 'private', joined ? 'open the fire' : 'join voice') });

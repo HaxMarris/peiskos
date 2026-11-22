@@ -1,4 +1,5 @@
 import { resolve, dirname, join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { endLiveStreams, openDb } from './db.ts';
 import { createApp } from './app.ts';
@@ -21,6 +22,15 @@ const backupKeep = Number(process.env.BACKUP_KEEP ?? 7);
 const uploadDir = process.env.UPLOAD_DIR ?? join(dirname(dbFile), 'uploads');
 const offsite = s3FromEnv();
 if (backupKeep > 0) scheduleBackups(db, backupDir, backupKeep, offsite ? { cfg: offsite, uploadDir } : undefined);
+
+// Fire tapes mix people's audio with ffmpeg, so they're on wherever it's installed (it is in Docker).
+const tapesOn = process.env.TAPES !== 'off' && spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
+/** TAPE_TRANSCRIBE_HOURS: "1-7" (from 1 to 7 at night, server time), or "always". */
+function nightHours(text: string | undefined): [number, number] | undefined {
+  if (text === 'always') return [0, 24];
+  const m = text?.match(/^(\d{1,2})-(\d{1,2})$/);
+  return m && Number(m[1]) <= 24 && Number(m[2]) <= 24 ? [Number(m[1]), Number(m[2])] : undefined;
+}
 
 const app = createApp({
   db,
@@ -56,6 +66,16 @@ const app = createApp({
   fcm: process.env.FCM_SERVICE_ACCOUNT ? { serviceAccount: process.env.FCM_SERVICE_ACCOUNT } : undefined,
   legal: { name: process.env.LEGAL_NAME || undefined, contact: process.env.LEGAL_CONTACT || undefined },
   gifs: process.env.KLIPY_API_KEY ? { apiKey: process.env.KLIPY_API_KEY, rating: process.env.GIF_RATING || undefined } : undefined,
+  tapes: tapesOn
+    ? {
+        maxMinutes: Number(process.env.TAPE_MAX_MINUTES ?? 180),
+        keepDays: Number(process.env.TAPE_KEEP_DAYS ?? 30),
+        storageBytes: Number(process.env.TAPE_STORAGE_MB ?? 10240) * 1024 * 1024,
+        whisperUrl: process.env.WHISPER_URL || undefined,
+        language: process.env.TAPE_LANGUAGE || undefined,
+        nightHours: nightHours(process.env.TAPE_TRANSCRIBE_HOURS),
+      }
+    : false,
   voice:
     process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET
       ? {
@@ -79,5 +99,7 @@ app.listen(port, () => {
     console.log('Warning: REGISTRATION_CODE is not set, so anyone who can reach this server can sign up.');
   if (!process.env.KLIPY_API_KEY) console.log('The GIF picker is off (set KLIPY_API_KEY to turn it on).');
   if (!process.env.SMTP_URL) console.log("Email is off, so people can't reset a forgotten password themselves (set SMTP_URL to turn it on).");
+  if (process.env.LIVEKIT_API_KEY && process.env.TAPES !== 'off' && !tapesOn) console.log("Fire tapes are off: install ffmpeg to turn them on.");
+  if (tapesOn && !process.env.WHISPER_URL) console.log('Tapes have no transcripts (set WHISPER_URL to turn them on; see README).');
   if (!process.env.LIVEKIT_API_KEY) console.log('Voice rooms are off (set LIVEKIT_API_KEY and LIVEKIT_API_SECRET to turn them on).');
 });

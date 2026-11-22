@@ -98,6 +98,7 @@ export function privacyPage(o: LegalOptions) {
       <li><b>Where you are:</b> the hearths and groups you're in, your roles and nicknames, your friends and the people you've blocked, and what you've read, which is how other people in a conversation can see you've seen a message.</li>
       <li><b>Logins:</b> for each device you're logged in on, a description of the browser or app, its IP address, and when it was last used, so you can see them under Login and security and log them out. Logins you don't use for 30 days end on their own. Passkeys and two-step login keep only what's needed to check them.</li>
       <li><b>Unsent messages:</b> a message you've started typing but not sent, one per room, so it's there on your other devices. It's deleted when you send it or clear the box.</li>
+      <li><b>Fire tapes:</b> only if everyone at a fire says yes to taping it, and only for people who said yes: your own voice, recorded by your own app and sent to the server while the tape runs, and a written-out version (transcript) made later on the server itself, by a program that runs there. Anyone who can see that fire can listen to its tapes and clips. Whole tapes are deleted after a set number of days; clips stay until someone on the tape, or a moderator, deletes them. You can take yourself off a tape at any time, which deletes your voice from it and its clips.</li>
       <li><b>Time at the fire:</b> when you join and leave voice, which unlocks fire decorations, achievements and the year in review.</li>
       <li><b>Games:</b> in each hearth, your play chips, the items, pets, seats and backgrounds you've won or unlocked, the fish you've caught, your scores, and any trivia questions or words you add for your hearth's games. Drawings, clues and answers during a game are passed between the players and aren't saved.</li>
       <li><b>Achievements:</b> the badges on your profile, worked out from the things above.</li>
@@ -113,7 +114,7 @@ export function privacyPage(o: LegalOptions) {
 
     <h2>What Peiskos doesn't keep</h2>
     <ul>
-      <li>Voice calls, video and screen shares aren't recorded. They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
+      <li>Voice calls, video and screen shares aren't recorded, except for fire tapes everyone agreed to (above). They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
       <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire, unless the hearth's host chose to keep that fire's chat.</li>
       <li>The server doesn't keep a record of the pages you open or what you do in the app beyond what's listed above.</li>
     </ul>

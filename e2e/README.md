@@ -18,6 +18,7 @@ go by.
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
 | `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |
 | `stockpile.test.mjs` | Two whole rounds of Stockpile |
+| `tapes.test.mjs` | Fire tapes: asking everyone, taping, Clip that, the tapes list, a no stopping it |
 | `casino.test.mjs` | Chips, blackjack, slots, cases, the poker table, a case battle |
 
 ## Running them
