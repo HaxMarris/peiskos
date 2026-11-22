@@ -882,6 +882,7 @@ function handleEvent(ev) {
       if (isNew) state.serverOrder.push(ev.server.id);
       renderServers();
       leaveVoiceIfGone();
+      if (state.voice && ev.server.channels.some((c) => c.id === state.voice.channelId)) { updateSpatial(); renderFire(); }
       // Someone in our voice room was removed from the burrow: new key, without them.
       if (state.voice?.crypto && ev.server.channels.some((c) => c.id === state.voice.channelId)
         && [...state.voice.crypto.pubs.keys()].some((id) => !ev.server.members.some((m) => String(m.id) === id))) keysChanged(state.voice);
@@ -897,8 +898,13 @@ function handleEvent(ev) {
         }
         else { renderChannels(); renderMembers(); renderMessages(); renderChatHeader(); }
       }
+      capsulesChanged();
+      if (state.voice && ev.server.channels.some((c) => c.id === state.voice.channelId)) renderFire();
       break;
     }
+    case 'capsule_opened':
+      if (ev.fireId === null || state.voice?.channelId === ev.fireId) showCapsuleOpening(ev);
+      break;
     case 'server_deleted': {
       // Deleted, or we were removed from it. Someone else doing it says so; your own leaving doesn't.
       const gone = state.servers.get(ev.serverId);
@@ -960,6 +966,7 @@ function handleEvent(ev) {
           if (c.id === ev.channelId)
             Object.assign(c, { voiceUsers: ev.userIds, voiceMuted: ev.muted, voiceDeafened: ev.deafened, voiceServerMuted: ev.serverMuted ?? [] });
       checkRinging(ev.channelId, ev.userIds);
+      if (state.voice?.channelId === ev.channelId) updateSpatial();
       renderChannels();
       renderCallButton();
       syncPhoneCall(); // the call's Live Activity counts who's at the fire
@@ -1017,6 +1024,9 @@ function handleEvent(ev) {
       break;
     case 'game_msg':
       onGameMessage(ev);
+      break;
+    case 'league_points':
+      onLeaguePoints(ev);
       break;
     case 'fishing_dock':
       onFishingDock(ev);
