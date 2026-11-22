@@ -955,6 +955,7 @@ function renderStage() {
       stopClips(w.key);
       if (t.track && t.media) t.track.detach(t.media);
       t.media?.remove();
+      t.parked = false;
       if (w.track) {
         t.media = w.track.attach();
         t.media.muted = true; // sound comes through the voice mix

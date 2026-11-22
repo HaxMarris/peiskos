@@ -57,7 +57,28 @@ function updateStreamTools(t) {
   if (pip) {
     pip.classList.toggle('on', poppedOutKey() === t.key);
     pip.title = poppedOutKey() === t.key ? 'Put it back' : 'Pop out, to keep watching while you chat';
+    pip.setAttribute('aria-label', pip.title);
   }
+  showPoppedOut(t);
+}
+
+/** While a stream plays in its pop-out, its tile says so instead of playing it a second time. */
+function showPoppedOut(t) {
+  const out = !!t.track && poppedOutKey() === t.key && (!popWin || popWin.track === t.track);
+  t.el.classList.toggle('popped', out);
+  // The desktop window plays its own copy, so this one lets go of the video until it comes back.
+  // Picture-in-picture moves this same video element, so it stays attached.
+  const park = out && !!popWin;
+  if (park && !t.parked) { t.track.detach(t.media); t.parked = true; }
+  if (!park && t.parked) { if (t.track) t.track.attach(t.media); t.parked = false; }
+  if (!out) return t.popped?.remove();
+  if (!t.popped) {
+    t.popped = document.createElement('div');
+    t.popped.className = 'vtile-popped';
+    t.popped.innerHTML = `${PIP_ICON}<p>Popped out</p><button type="button" class="btn">Put it back</button>`;
+    t.popped.querySelector('button').onclick = (e) => { e.stopPropagation(); popOut(t); };
+  }
+  if (t.popped.parentNode !== t.el) t.el.append(t.popped);
 }
 
 // ---- pop out. In the desktop app a stream gets a window of its own, which goes behind other
