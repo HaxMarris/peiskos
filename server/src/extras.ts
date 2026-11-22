@@ -1,5 +1,5 @@
 // The fun extras: time at the fire and what it unlocks (something by your seat, and the look of a
-// hearth's fire and the sky above it), toasting marshmallows, the message of the day and the year in review.
+// hearth's fire and the sky above it), toasting marshmallows and the message of the day. The year in review is recap.ts.
 // Birthdays live with the rest of the profile in app.ts.
 import { randomInt } from 'node:crypto';
 import type { Db } from './db.ts';
@@ -227,70 +227,6 @@ export function extras(ctx: ExtrasContext) {
     db.prepare('DELETE FROM motd WHERE id = ?').run(id);
     ctx.sendServerUpdate(m.serverId);
     return { motd: motdOf(m.serverId) };
-  });
-
-  // ---- the year in review
-
-  route('GET', '/api/servers/:id/review/:id', ({ user, params }) => {
-    const [serverId, year] = params.map(Number);
-    hearth(serverId, user.id);
-    if (!(year >= 2000 && year <= 2100)) throw fail(400, 'Pick a year');
-    const from = Date.UTC(year, 0, 1), to = Date.UTC(year + 1, 0, 1);
-    // Only what this person can see: private rooms they're not in don't count.
-    const channels = (db.prepare('SELECT id FROM channels WHERE server_id = ?').all(serverId) as { id: number }[])
-      .map((c) => ctx.channelById(c.id)!)
-      .filter((c) => c && ctx.canSee(c as never, user.id));
-    const ids = channels.map((c) => c.id);
-    const roomOf = new Map(channels.map((c) => [c.id, c.kind === 'thread' && c.parentId ? c.parentId : c.id]));
-    const inList = ids.length ? ids.join(',') : 'NULL';
-    const inYear = `m.channel_id IN (${inList}) AND m.created_at >= ${from} AND m.created_at < ${to}`;
-    const nameOf = `COALESCE((SELECT nickname FROM members WHERE server_id = ${serverId} AND user_id = u.id), u.display_name, u.username)`;
-
-    const messages = (db.prepare(`SELECT COUNT(*) AS n FROM messages m WHERE ${inYear}`).get() as { n: number }).n;
-    const rooms = new Map<number, number>();
-    for (const r of db.prepare(`SELECT m.channel_id AS id, COUNT(*) AS n FROM messages m WHERE ${inYear} GROUP BY m.channel_id`).all() as { id: number; n: number }[]) {
-      const room = roomOf.get(r.id)!;
-      rooms.set(room, (rooms.get(room) ?? 0) + r.n);
-    }
-    const topRooms = [...rooms]
-      .map(([id, n]) => ({ id, name: ctx.channelById(id)?.name ?? '?', messages: n }))
-      .filter((r) => ctx.channelById(r.id)?.kind !== 'voice')
-      .sort((a, b) => b.messages - a.messages)
-      .slice(0, 5);
-    const topReactions = db
-      .prepare(`SELECT r.emoji, COUNT(*) AS n FROM reactions r JOIN messages m ON m.id = r.message_id WHERE ${inYear} GROUP BY r.emoji ORDER BY n DESC, MIN(r.created_at) LIMIT 8`)
-      .all();
-    const topPeople = db
-      .prepare(`SELECT u.id, ${nameOf} AS name, COUNT(*) AS n FROM messages m JOIN users u ON u.id = m.author_id
-                WHERE ${inYear} AND u.bot = 0 AND u.deleted_at IS NULL GROUP BY u.id ORDER BY n DESC LIMIT 5`)
-      .all();
-    const mostLoved = db
-      .prepare(`SELECT m.id, m.channel_id AS channelId, substr(m.content, 1, 160) AS content, ${nameOf} AS author, COUNT(r.user_id) AS reactions
-                FROM messages m JOIN reactions r ON r.message_id = m.id JOIN users u ON u.id = m.author_id
-                WHERE ${inYear} AND m.content != '' GROUP BY m.id ORDER BY reactions DESC, m.id LIMIT 1`)
-      .get() ?? null;
-    const busiestDay = db
-      .prepare(`SELECT date(m.created_at / 1000, 'unixepoch') AS day, COUNT(*) AS n FROM messages m WHERE ${inYear} GROUP BY day ORDER BY n DESC, day LIMIT 1`)
-      .get() ?? null;
-    const yearFire = `server_id = ${serverId} AND started_at >= ${from} AND started_at < ${to}`;
-    const fireHours = sumHours(yearFire);
-    const topFire = (db
-      .prepare(`SELECT u.id, ${nameOf} AS name, SUM(v.ended_at - v.started_at) AS ms FROM voice_time v JOIN users u ON u.id = v.user_id
-                WHERE v.server_id = ? AND v.started_at >= ? AND v.started_at < ?
-                  AND v.channel_id IS NOT (SELECT afk_channel_id FROM servers WHERE id = v.server_id)
-                GROUP BY u.id ORDER BY ms DESC LIMIT 3`)
-      .all(serverId, from, to) as { id: number; name: string; ms: number }[]).map((p) => ({ id: p.id, name: p.name, hours: p.ms / HOUR }));
-    const newPeople = (db.prepare('SELECT COUNT(*) AS n FROM members WHERE server_id = ? AND joined_at >= ? AND joined_at < ?').get(serverId, from, to) as { n: number }).n;
-    const you = {
-      messages: (db.prepare(`SELECT COUNT(*) AS n FROM messages m WHERE ${inYear} AND m.author_id = ?`).get(user.id) as { n: number }).n,
-      reactions: (db.prepare(`SELECT COUNT(*) AS n FROM reactions r JOIN messages m ON m.id = r.message_id WHERE ${inYear} AND r.user_id = ?`).get(user.id) as { n: number }).n,
-      fireHours: sumHours(`${yearFire} AND user_id = ?`, user.id),
-    };
-    const first = (db.prepare(`SELECT MIN(m.created_at) AS t FROM messages m WHERE m.channel_id IN (${inList})`).get() as { t: number | null }).t;
-    const thisYear = new Date().getUTCFullYear();
-    const years = [];
-    for (let y = thisYear; y >= new Date(first ?? now()).getUTCFullYear(); y--) years.push(y);
-    return { year, years, messages, topRooms, topReactions, topPeople, mostLoved, busiestDay, fireHours, topFire, newPeople, you };
   });
 
   return { motdOf, addMotd, canAddMotd };

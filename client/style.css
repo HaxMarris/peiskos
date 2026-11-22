@@ -1762,7 +1762,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
   .admin-stats { grid-template-columns: repeat(2, 1fr); }
 }
 
-/* ---- fun extras: seasons, fire decorations, marshmallows, birthdays, message of the day, year in review ---- */
+/* ---- fun extras: seasons, fire decorations, marshmallows, birthdays, message of the day, year at the fire ---- */
 
 /* A little mark by the name for the time of year. */
 .season-mark { display: none; width: 17px; height: 17px; margin-left: 6px; flex: none; background: var(--accent); -webkit-mask: var(--mark) center / contain no-repeat; mask: var(--mark) center / contain no-repeat; }
@@ -1942,7 +1942,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .birthday-row { display: flex; gap: 8px; align-items: flex-end; }
 .birthday-row label:first-child { flex: 1; }
 
-/* The hearth today: birthdays, the message of the day, the year in review. */
+/* The hearth today: birthdays, the message of the day, and in December and January the year at the fire. */
 .hearth-today { display: flex; flex-direction: column; gap: 8px; margin: 2px 4px 12px; }
 .today-birthday, .today-motd { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow); font-size: 14px; }
 .today-birthday { background: var(--mention-bg); flex-wrap: wrap; }
@@ -1960,28 +1960,122 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .motd-list img { width: 44px; height: 44px; object-fit: cover; border-radius: var(--radius-sm); flex: none; }
 .motd-text { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
 
-/* The year in review. */
-.modal-card.review-modal { max-width: 620px; }
-.review-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
-.review-kicker { width: 100%; font-size: 13px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: var(--ember); }
-.review-head h2 { flex: 1; font-size: 28px; }
-.review-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.review-stats div { display: flex; flex-direction: column; align-items: center; padding: 14px 6px; border-radius: var(--radius-lg); background: linear-gradient(160deg, color-mix(in srgb, var(--ember) 16%, var(--surface-2)), var(--surface-2)); text-align: center; }
-.review-stats b { font-size: 28px; color: var(--text-strong); }
-.review-stats span { font-size: 12px; color: var(--muted); }
-.review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; }
-.review-grid h3, .review-loved h3, .review-you h3 { margin: 0 0 4px; font-size: 15px; }
-.review-list { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 3px; font-size: 14px; }
-.review-list li > span:first-child { display: inline-block; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
-.review-list li > span.muted { float: right; }
-.review-emoji { display: flex; flex-wrap: wrap; gap: 6px; font-size: 24px; }
-.review-emoji span { display: inline-flex; align-items: baseline; gap: 2px; }
-.review-emoji small { font-size: 12px; color: var(--muted); }
-.review-emoji .cemoji { width: 26px; height: 26px; }
-.review-loved blockquote { margin: 0 0 2px; padding: 8px 12px; border-left: 3px solid var(--ember); border-radius: 0 var(--radius-md) var(--radius-md) 0; background: var(--surface-2); overflow-wrap: anywhere; }
+/* The year at the fire (recap.js): a deck of cards over one night's sky, dusk on the first card to first
+   light on the last. The cards stay dark in the light theme too: it's the sky over the fire. */
+.recap {
+  --r-text: #fbeee0; --r-soft: #d9c3b0; --r-glow: #ffb46b; --r-line: rgba(251, 238, 224, .18);
+  position: fixed; inset: 0; z-index: 40; display: grid; grid-template-rows: auto 1fr auto; gap: 10px;
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(14px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+  background: rgba(12, 9, 14, .86); backdrop-filter: blur(6px); color: var(--r-text);
+}
+.recap-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; max-width: 720px; width: 100%; margin: 0 auto; }
+.recap-top select { background: rgba(255, 255, 255, .08); color: var(--r-text); border: 1px solid var(--r-line); border-radius: var(--radius-pill); padding: 6px 10px; font: inherit; font-weight: 700; }
+.recap-top select option { color: #1d140f; }
+.recap-together { flex: 1; min-width: 0; font-size: 13px; color: var(--r-soft); }
+.recap-top .btn.secondary { background: rgba(255, 255, 255, .1); color: var(--r-text); padding: 7px 14px; }
+.recap-top .btn.secondary:hover { background: rgba(255, 255, 255, .18); }
+.recap .recap-close { color: var(--r-text); font-size: 18px; width: 40px; height: 40px; }
+.recap-stage { display: grid; grid-template-columns: auto minmax(0, 440px) auto; justify-content: center; align-items: center; gap: 14px; min-height: 0; }
+.recap-turn { width: 48px; height: 48px; border-radius: 50%; border: 1px solid var(--r-line); background: rgba(255, 255, 255, .06); display: grid; place-items: center; cursor: pointer; }
+.recap-turn svg { width: 26px; height: 26px; fill: var(--r-text); }
+.recap-turn:hover:not(:disabled) { background: rgba(255, 255, 255, .14); }
+.recap-turn:disabled { opacity: .25; cursor: default; }
+.recap-turn:focus-visible, .recap-top :focus-visible, .recap-card .btn:focus-visible { outline: 2px solid var(--r-glow); outline-offset: 2px; }
+
+.recap-card {
+  --sky-a: #3b2a4a; --sky-b: #7a4a52;
+  position: relative; height: min(680px, 100%); max-height: calc(100dvh - 150px); aspect-ratio: 9 / 15; max-width: 100%; justify-self: center;
+  border-radius: 22px; overflow: hidden; display: flex; flex-direction: column; touch-action: pan-y; user-select: none;
+  background: linear-gradient(180deg, var(--sky-a) 0%, var(--sky-b) 100%); box-shadow: 0 30px 80px rgba(0, 0, 0, .5);
+}
+.recap-card[data-sky="dusk"] { --sky-a: #2f2446; --sky-b: #8c4b4a; }
+.recap-card[data-sky="night"] { --sky-a: #121a35; --sky-b: #283160; }
+.recap-card[data-sky="deep"] { --sky-a: #080c1e; --sky-b: #1a1d3c; }
+.recap-card[data-sky="embers"] { --sky-a: #0d0d1d; --sky-b: #4a1f17; }
+/* First light stays low on the horizon, so the words above it keep their contrast. */
+.recap-card[data-sky="dawn"] { --sky-a: #2a3360; --sky-b: #c97a58; background: linear-gradient(180deg, var(--sky-a) 0%, #44446c 62%, var(--sky-b) 100%); }
+/* A few stars, fewer once it gets light. */
+.recap-card::before { content: ""; position: absolute; inset: 0 0 40% 0; pointer-events: none; opacity: .7;
+  background-image: radial-gradient(1px 1px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1.4px 1.4px at 74% 9%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 58% 27%, #fff 50%, transparent 51%), radial-gradient(1.2px 1.2px at 88% 33%, #fff 50%, transparent 51%),
+    radial-gradient(1px 1px at 31% 6%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 42% 40%, #fff 50%, transparent 51%); }
+.recap-card[data-sky="dusk"]::before, .recap-card[data-sky="dawn"]::before { opacity: .25; }
+.recap-body { position: relative; flex: 1; overflow-y: auto; padding: 30px 28px 10px; display: flex; flex-direction: column; justify-content: center; gap: 10px; font-size: 16px; line-height: 1.5; color: var(--r-soft); }
+.recap-body p { margin: 0; }
+.recap-small { font-size: 14px; font-weight: 700; color: var(--r-soft); }
+.recap-big { font-family: var(--font-head); font-size: clamp(64px, 17vw, 112px); line-height: .9; font-weight: 600; letter-spacing: -.03em; color: var(--r-text); font-variant-numeric: lining-nums; font-variation-settings: "opsz" 144, "SOFT" 50; overflow-wrap: anywhere; }
+.recap-big.recap-emoji .cemoji, .recap-big.recap-emoji img { width: 1em; height: 1em; }
+.recap-lead { font-family: var(--font-head); font-size: 22px; line-height: 1.2; color: var(--r-text); }
+.recap-mid { font-family: var(--font-head); font-size: 26px; line-height: 1.2; color: var(--r-text); }
+.recap-stars { color: var(--r-glow); letter-spacing: .05em; white-space: nowrap; }
+.recap-facts { display: grid; gap: 6px; margin: 14px 0 0; }
+.recap-facts div { display: flex; justify-content: space-between; gap: 12px; padding-top: 6px; border-top: 1px solid var(--r-line); }
+.recap-facts dt { color: var(--r-soft); }
+.recap-facts dd { margin: 0; font-weight: 800; color: var(--r-text); font-variant-numeric: tabular-nums; }
+.recap-list { margin: 4px 0; padding: 0; list-style: none; display: grid; gap: 10px; counter-reset: place; }
+.recap-list li { counter-increment: place; display: grid; grid-template-columns: 1.6em minmax(0, 1fr) auto; align-items: baseline; gap: 10px; font-family: var(--font-head); font-size: 24px; color: var(--r-text); }
+.recap-list li::before { content: counter(place); font-family: var(--font-body); font-size: 14px; font-weight: 800; color: var(--r-glow); }
+.recap-list li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recap-list li b { font-family: var(--font-body); font-size: 15px; font-weight: 800; color: var(--r-soft); font-variant-numeric: tabular-nums; }
+.recap-emoji-row { display: flex; flex-wrap: wrap; gap: 12px; font-size: 28px; }
+.recap-emoji-row span { display: inline-flex; align-items: baseline; gap: 3px; }
+.recap-emoji-row small { font-size: 13px; color: var(--r-soft); }
+.recap-emoji-row .cemoji { width: 30px; height: 30px; }
+.recap-quote { margin: 0; font-family: var(--font-head); font-size: 26px; line-height: 1.25; color: var(--r-text); overflow-wrap: anywhere; }
+.recap-quote::before { content: "“"; display: block; font-size: 64px; line-height: .6; color: var(--r-glow); }
+.recap-first q { color: var(--r-text); overflow-wrap: anywhere; }
+.recap-end-actions { display: flex; gap: 8px; margin-top: 12px; }
+.recap-card .btn.secondary { background: rgba(255, 255, 255, .12); color: var(--r-text); }
+/* The horizon, and the fire on it: it burns brighter card by card. */
+.recap-horizon { position: relative; flex: none; height: 64px; background: radial-gradient(120% 90% at 50% 100%, #0b0807 60%, transparent 61%); }
+.recap-ember { position: absolute; left: 50%; bottom: 14px; width: 14px; height: 14px; translate: -50% 0; border-radius: 50%;
+  background: radial-gradient(circle, #fff1c9 0%, var(--r-glow) 45%, #d0461c 100%);
+  box-shadow: 0 0 calc(10px + var(--burn) * 40px) calc(3px + var(--burn) * 14px) rgba(255, 150, 70, calc(.35 + var(--burn) * .4)); }
+.recap-dots { display: flex; justify-content: center; gap: 6px; }
+.recap-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--r-line); }
+.recap-dots span.on { background: var(--r-glow); width: 18px; border-radius: 3px; }
+@media (prefers-reduced-motion: no-preference) {
+  .recap-card.turn-in .recap-body { animation: recap-in .32s ease-out; }
+  .recap-card.turn-back .recap-body { animation: recap-back .32s ease-out; }
+  .recap-card { transition: background .5s; }
+}
+@keyframes recap-in { from { opacity: 0; translate: 24px 0; } }
+@keyframes recap-back { from { opacity: 0; translate: -24px 0; } }
 @media (max-width: 600px) {
-  .review-grid { grid-template-columns: 1fr; }
-  .review-stats b { font-size: 22px; }
+  .recap-stage { grid-template-columns: minmax(0, 1fr); }
+  .recap-turn { display: none; }
+  .recap-card { height: 100%; max-height: none; aspect-ratio: auto; width: 100%; }
+  .recap-body { padding: 24px 22px 8px; }
+}
+
+/* The page to print: every card, plainly, on paper. */
+.recap-print { display: none; }
+@media print {
+  body.printing-recap { height: auto; background: #fff; }
+  body.printing-recap > :not(#recap-print) { display: none !important; }
+  body.printing-recap .recap-print { display: block; color: #1d140f; font-family: var(--font-body); font-size: 11pt; line-height: 1.45; }
+  .recap-print header { margin-bottom: 14pt; padding-bottom: 8pt; border-bottom: 1.5pt solid #c4561c; }
+  .recap-print h1 { margin: 0; font-family: var(--font-head); font-size: 26pt; color: #1d140f; }
+  .recap-print header p { margin: 2pt 0 0; color: #6b5a4d; }
+  .recap-print-grid { columns: 2; column-gap: 22pt; }
+  .recap-print section { break-inside: avoid; margin: 0 0 14pt; display: flex; flex-direction: column; gap: 3pt; }
+  .recap-print p { margin: 0; }
+  .recap-print .recap-small { font-weight: 800; color: #c4561c; font-size: 10pt; }
+  .recap-print .recap-big { font-family: var(--font-head); font-size: 30pt; line-height: 1; font-weight: 600; }
+  .recap-print .recap-lead, .recap-print .recap-mid, .recap-print .recap-quote { font-family: var(--font-head); font-size: 13pt; }
+  .recap-print .recap-quote { margin: 0; overflow-wrap: anywhere; }
+  .recap-print [data-card="open"] :is(.recap-small, .recap-big, .recap-lead) { display: none; }
+  .recap-print .recap-list { margin: 0; gap: 1pt; }
+  .recap-print .recap-list li { grid-template-columns: 14pt max-content auto; gap: 8pt; font-family: var(--font-body); font-size: 11pt; color: inherit; }
+  .recap-print .recap-list li::before { font-size: 10pt; color: #c4561c; }
+  .recap-print .recap-list li b { font-size: 11pt; color: #6b5a4d; }
+  .recap-print .recap-quote::before { font-size: 24pt; color: #c4561c; }
+  .recap-print .recap-facts { margin: 0; display: grid; grid-template-columns: max-content max-content; gap: 1pt 14pt; }
+  .recap-print .recap-facts div { display: contents; }
+  .recap-print .recap-facts dd { margin: 0; font-weight: 800; }
+  .recap-print .recap-emoji-row { display: flex; gap: 8pt; flex-wrap: wrap; }
+  .recap-print .cemoji { width: 16pt; height: 16pt; }
+  .recap-print .recap-end-actions { display: none; }
 }
 
 /* The iPhone app reaches under the notch and home bar. The phone layout keeps clear of them itself;
