@@ -963,6 +963,7 @@ function handleEvent(ev) {
           if (c.id === ev.channelId)
             Object.assign(c, { voiceUsers: ev.userIds, voiceMuted: ev.muted, voiceDeafened: ev.deafened, voiceServerMuted: ev.serverMuted ?? [] });
       checkRinging(ev.channelId, ev.userIds);
+      recapVoiceState(ev);
       if (state.voice?.channelId === ev.channelId) updateSpatial();
       renderChannels();
       renderCallButton();
@@ -1006,6 +1007,9 @@ function handleEvent(ev) {
     }
     case 'marshmallow':
       onMarshmallow(ev);
+      break;
+    case 'recap':
+      onRecapShow(ev);
       break;
     case 'soundboard':
       onBoardSound(ev);

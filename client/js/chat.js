@@ -1010,7 +1010,7 @@ function openHearthSettings(serverId, first) {
     { id: 'league', group: 'Together', label: 'League', keywords: 'season points champion trophy standings', run: () => openLeague(s.id) },
     { id: 'best', group: 'Together', label: 'Best of', keywords: 'fire reactions favourite top messages', run: () => openBestOf(s.id) },
     { id: 'album', group: 'Together', label: 'Photo album', keywords: 'pictures photos videos gallery media', run: () => openAlbum(s.id) },
-    { id: 'review', group: 'Together', label: 'Year in review', keywords: 'stats recap', run: () => openYearReview(s.id) },
+    { id: 'review', group: 'Together', label: 'Year at the fire', keywords: 'stats recap review wrapped', run: () => openRecap(s.id) },
     { id: 'leave', group: ' ', label: owner ? 'Delete hearth' : 'Leave hearth', action: 'do', danger: true, run: () => leaveHearth(s) },
   ], first);
 }

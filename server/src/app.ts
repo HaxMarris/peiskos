@@ -15,6 +15,7 @@ import type { FcmConfig } from './fcm.ts';
 import { looksLikeEmail, type MailConfig } from './mail.ts';
 import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
+import { recap } from './recap.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
 import { looksBlank, withoutBidi } from './text.ts';
@@ -823,6 +824,10 @@ export function createApp(opts: AppOptions): Server {
     isMember, can, canSee, channelById, inVoice, sendServerUpdate, broadcastToChannel,
     allowed: (serverId, user, perm) => allowed(serverId, user as User, perm),
     userChanged: (userId) => userChanged(userId),
+  });
+  recap({
+    db, route, fail: (status, message) => new HttpError(status, message),
+    isMember, canSee, channelById, inVoice, usersInVoice, broadcastToChannel,
   });
   trivia({
     db, route, fail: (status, message) => new HttpError(status, message), isMember, can,
