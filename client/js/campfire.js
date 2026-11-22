@@ -738,7 +738,7 @@ function sizeRing(ring, total, anyoneSharing) {
   const face = Math.round(Math.min(phone ? 60 : 84, Math.max(40, H * (phone ? 0.1 : 0.13))) * (total > 8 ? 0.72 : 1));
   const below = (phone ? 50 : 56) + (anyoneSharing ? 38 : 0); // name, status and the watch button
   const labelW = phone ? 120 : 170;
-  const angle = (i) => (-90 + (180 + i * 360) / total) * (Math.PI / 180);
+  const angle = (i) => seatAngle(i, total);
   const sines = Array.from({ length: total }, (_, i) => Math.sin(angle(i)));
   const down = Math.max(...sines); // how far in front of the fire the nearest seats are
   // A bigger circle spreads out wider and deeper, so neighbours' names don't run into each other.
@@ -790,18 +790,16 @@ function renderFire() {
   const LK = window.LivekitClient;
   const room = voice.room;
   const ch = [...state.servers.values()].flatMap((s) => s.channels).find((c) => c.id === voice.channelId);
-  const ids = [...(ch?.voiceUsers ?? [])];
-  if (!ids.includes(state.me.id)) ids.push(state.me.id);
+  const { ids, total } = fireSeats(ch, state.me.id);
   const s = [...state.servers.values()].find((x) => x.channels.includes(ch));
   decorateFire(s);
   $('#stage-title').textContent = ch && s && !isDm(s) ? `${s.name}'s ${ch.name}` : ch ? fireName(ch) : 'Campfire';
   const streamer = ids.find((id) => id !== state.me.id && state.sharing.get(id)?.screen);
   $('#fire-count').textContent = (typeof status === 'string' ? status : !room ? 'Connecting…' : `${ids.length} gathered`)
-    + (streamer ? ` · ${nameOf(streamer)} is sharing` : '');
+    + (streamer ? ` · ${nameOf(streamer)} is sharing` : '')
+    + (room && spatialHere() ? ' · Spatial sound' : '');
 
-  // Seats are spread evenly around the fire, starting at the top. A small fire keeps a few open
-  // seats; one with a seat limit shows all of its seats (up to a dozen).
-  const total = Math.max(ch?.userLimit && ch.userLimit <= 12 ? ch.userLimit : 6, ids.length);
+  // Seats are spread evenly around the fire, starting at the top (see fireSeats).
   const ring = $('#fire-ring');
   const place = sizeRing(ring, total, ids.some((id) => state.sharing.get(id)?.screen));
   for (const [id, seat] of seats) {
