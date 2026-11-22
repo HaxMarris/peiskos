@@ -122,6 +122,8 @@ Data goes to `server/data/chat.db`.
 | `PUSH_CONTACT`      | Peiskos's GitHub page | A `mailto:` or `https:` address the phone push services can reach you at if something goes wrong. |
 | `ADMIN_USERS`       | the first account made | Usernames (comma-separated) that can open the admin page. See *The admin page*. |
 | `HEARTBEAT_URL`     | unset                  | An address Peiskos pings every five minutes, for uptime alerts. See *Uptime alerts*. |
+| `JOINT_FIRES`       | unset (off)            | `on` lets hearths here open a fire to a group on another Peiskos server. Needs `PUBLIC_URL`. See *Joint fires*. |
+| `JOINT_FIRE_SERVERS` | unset (off)           | Other Peiskos servers (comma-separated, like `https://their-peiskos.example`) whose fires hearths here may join. See *Joint fires*. |
 | `BACKUP_S3_BUCKET`, `BACKUP_S3_ENDPOINT`, `BACKUP_S3_REGION`, `BACKUP_S3_KEY_ID`, `BACKUP_S3_SECRET`, `BACKUP_S3_PREFIX` | unset (no off-site copies) | Where off-site backups go. See *Backups*. |
 
 ### Letting friends reach it
@@ -415,6 +417,26 @@ To get an email when Peiskos goes down, make a free check at [healthchecks.io](h
 `HEARTBEAT_URL=https://hc-ping.com/…`. Peiskos pings it every five minutes; when the pings stop, you
 hear about it. Monitors that check from outside, like UptimeRobot, can watch
 `https://your-address/api/health` instead, which also catches Caddy or the network being down.
+
+### Joint fires
+
+A joint fire is one fire shared by two Peiskos servers, so two friend groups can sit together
+without anyone making an account on the other's server. It's off unless both admins turn it on.
+
+- **The server the fire lives on (the host)** sets `JOINT_FIRES=on` and `PUBLIC_URL`. Someone who
+  can edit the hearth opens the fire's settings, chooses *Invite another group*, names the group and
+  sends them the code it shows. The code only appears once; *Close* in the same place ends it and
+  takes that group's guests out of the fire.
+- **The other server** lists the host in `JOINT_FIRE_SERVERS=https://their-peiskos.example` (its
+  server only ever calls the addresses listed there). Someone who can edit their hearth chooses
+  *Add another group's fire* from the rooms menu and pastes the code. The fire shows up in their
+  list like their own.
+
+Guests talk through the host's LiveKit with their microphone only: no camera, screen, games,
+fireside chat or anything else on the host. Their names show with the group name the host gave the
+code, and anyone who manages voice on the host can remove a guest from their seat. Voice stays
+encrypted end to end. The host's LiveKit has to be reachable from the guests' apps (it already is
+for a normal setup, through Caddy or `LIVEKIT_URL`).
 
 ### Updating from the admin page
 

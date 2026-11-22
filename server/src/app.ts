@@ -6,6 +6,7 @@ import { addModeratorRole, inTransaction, tokenHash, withStatementCache, type Db
 import { APP_CSP, HttpError, MIME, allowance, bearer, clientIp, readBody, sameText, send, type Json } from './http.ts';
 import { hashPassword, verifyPassword, newToken, newInviteCode } from './auth.ts';
 import { setCanSpeak, type VoiceOptions } from './voice.ts';
+import { jointFires, type JointFireOptions } from './joint-fires.ts';
 import { staticFiles } from './static.ts';
 import type { GifOptions } from './gifs.ts';
 import { fetchEmbed, linksIn, type EmbedOptions } from './embeds.ts';
@@ -101,6 +102,8 @@ export interface AppOptions {
   legal?: { name?: string; contact?: string };
   /** Clips at the fire (see tapes.ts): on with voice and uploads, unless this is false. */
   tapes?: TapeOptions | false;
+  /** Fires shared with other Peiskos servers (see joint-fires.ts); off without it. */
+  jointFires?: JointFireOptions;
   /** Tests make the casino's poker table quicker, and stack its decks. */
   casino?: Pick<CasinoContext, 'timing' | 'deck'>;
   /** Tests move the league's clock (seasons are calendar months). */
@@ -510,8 +513,11 @@ export function createApp(opts: AppOptions): Server {
     const userIds = usersInVoice(channelId);
     const flagged = (flag: 'muted' | 'deafened') => userIds.filter((u) => voiceFlags.get(u)?.[flag]);
     const serverId = channelById(channelId)?.serverId;
+    // Guests from other servers at a joint fire sit there too (joint-fires.ts).
+    const joint = joint_.voiceExtra(channelId);
     return {
-      voiceUsers: userIds,
+      voiceUsers: joint ? [...userIds, ...joint.ids] : userIds,
+      ...(joint ? { voiceJoint: joint.info } : {}),
       voiceMuted: flagged('muted'),
       voiceDeafened: flagged('deafened'),
       voiceServerMuted: serverId === undefined ? [] : userIds.filter((u) => serverMuted(serverId, u)),
@@ -524,8 +530,8 @@ export function createApp(opts: AppOptions): Server {
   let firesideId = 0;
   const FIRESIDE_KEEP = 100;
   const voiceStateEvent = (channelId: number) => {
-    const { voiceUsers, voiceMuted, voiceDeafened, voiceServerMuted, voiceSpeaking } = voiceSummary(channelId);
-    return { type: 'voice_state', channelId, userIds: voiceUsers, muted: voiceMuted, deafened: voiceDeafened, serverMuted: voiceServerMuted, speaking: voiceSpeaking };
+    const { voiceUsers, voiceMuted, voiceDeafened, voiceServerMuted, voiceSpeaking, voiceJoint } = voiceSummary(channelId);
+    return { type: 'voice_state', channelId, userIds: voiceUsers, muted: voiceMuted, deafened: voiceDeafened, serverMuted: voiceServerMuted, speaking: voiceSpeaking, ...(voiceJoint ? { joint: voiceJoint } : {}) };
   };
   const sendTo = (userIds: Iterable<number>, event: Json) => {
     const data = JSON.stringify(event);
@@ -642,6 +648,8 @@ export function createApp(opts: AppOptions): Server {
   } = firesInLiveKit({
     opts, canSee, channelById, checkSeat: (...a) => checkSeat(...a), db, inVoice, setVoice, userById, usersInVoice,
     voiceSockets,
+    guestsHere: (...a) => joint_.guestsHere(...a),
+    jointKick: (...a) => joint_.jointKick(...a),
   });
 
   const usersSharingServerWith = (userId: number) =>
@@ -860,6 +868,7 @@ export function createApp(opts: AppOptions): Server {
       gifs: !!gifs,
       email: !!opts.mail,
       tapes: !!tapes,
+      jointFires: joint_.config,
     }),
     false,
   );
@@ -1169,12 +1178,26 @@ export function createApp(opts: AppOptions): Server {
     cleanUploadMb: (...a) => cleanUploadMb(...a),
     dmBlockCheck: (...a) => dmBlockCheck(...a),
     groupIn: (...a) => groupIn(...a),
+    jointPass: (...a) => joint_.jointPass(...a),
     manageableThread: (...a) => manageableThread(...a),
     removeBot: (...a) => removeBot(...a),
     removeFiles: (...a) => removeFiles(...a),
     renameThread: (...a) => renameThread(...a),
     roleName: (...a) => roleName(...a),
     threadDeleted: (...a) => threadDeleted(...a),
+  });
+
+  // ---- fires shared with other Peiskos servers (joint-fires.ts)
+  const joint_ = jointFires({
+    db, opts, route, can, channelById, visibleRoom, usersInVoice, nameIn, sendServerUpdate, serverSummary, matchFireSoon,
+    allowed: (...a) => allowed(...a),
+    audit: (...a) => audit(...a),
+    serverKind: (...a) => serverKind(...a),
+    hearthOnline: (serverId) => serverMemberIds(serverId).some((id) => online.has(id)),
+    voiceChanged: (channelId) => {
+      const channel = channelById(channelId);
+      if (channel) broadcastToChannel(channel, voiceStateEvent(channelId));
+    },
   });
 
   // ---- voice and the Campfire -----------------------------------------------
@@ -1186,7 +1209,7 @@ export function createApp(opts: AppOptions): Server {
     if (!channel.userLimit || inVoice.get(userId) === channel.id) return;
     const move = pendingMoves.get(userId);
     if (move && move.channelId === channel.id && move.until > Date.now()) return;
-    if (usersInVoice(channel.id).length >= channel.userLimit && !can(channel.serverId, userId, 'voice'))
+    if (usersInVoice(channel.id).length + joint_.guestCount(channel.id) >= channel.userLimit && !can(channel.serverId, userId, 'voice'))
       throw new HttpError(403, `This fire is full (${channel.userLimit} seats)`);
   };
 

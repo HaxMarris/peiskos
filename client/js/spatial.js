@@ -93,7 +93,7 @@ function updateSpatial() {
   for (const p of voice.room.remoteParticipants.values()) {
     const track = p.getTrackPublication(LK.Track.Source.Microphone)?.track;
     if (!track) continue;
-    const spot = spots.get(Number(p.identity));
+    const spot = spots.get(pidOf(p.identity));
     if (ear && spot) mixAt(track, hearFrom(ear, spot, FIRE_HEARING));
     else mixOff(track);
   }

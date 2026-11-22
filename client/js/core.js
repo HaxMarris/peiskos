@@ -610,6 +610,7 @@ async function enterAppNow() {
   if ('Notification' in window && Notification.permission === 'default' && store.get('welcome') !== '1') Notification.requestPermission();
   const config = await api('/api/config').catch(() => ({}));
   state.voiceEnabled = !!config.voice;
+  state.jointFires = config.jointFires ?? null;
   state.maxUploadBytes = config.maxUploadBytes || 0;
   $('#mic-btn').classList.toggle('hidden', !state.maxUploadBytes || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined');
   state.gifsEnabled = !!config.gifs;
@@ -965,7 +966,7 @@ function handleEvent(ev) {
       for (const s of state.servers.values())
         for (const c of s.channels)
           if (c.id === ev.channelId)
-            Object.assign(c, { voiceUsers: ev.userIds, voiceMuted: ev.muted, voiceDeafened: ev.deafened, voiceServerMuted: ev.serverMuted ?? [] });
+            Object.assign(c, { voiceUsers: ev.userIds, voiceMuted: ev.muted, voiceDeafened: ev.deafened, voiceServerMuted: ev.serverMuted ?? [], voiceJoint: ev.joint });
       checkRinging(ev.channelId, ev.userIds);
       recapVoiceState(ev);
       if (state.voice?.channelId === ev.channelId) updateSpatial();

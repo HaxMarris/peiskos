@@ -80,6 +80,11 @@ const app = createApp({
         nightHours: nightHours(process.env.TAPE_TRANSCRIBE_HOURS),
       }
     : false,
+  // Fires shared with other Peiskos servers: off unless the admin turns it on (see joint-fires.ts).
+  jointFires: {
+    host: process.env.JOINT_FIRES === 'on',
+    servers: (process.env.JOINT_FIRE_SERVERS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  },
   voice:
     process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET
       ? {
@@ -106,4 +111,5 @@ app.listen(port, () => {
   if (process.env.LIVEKIT_API_KEY && process.env.TAPES !== 'off' && !tapesOn) console.log("Clips at the fire are off: install ffmpeg to turn them on.");
   if (tapesOn && !process.env.WHISPER_URL) console.log('Clips have no transcripts (set WHISPER_URL to turn them on; see README).');
   if (!process.env.LIVEKIT_API_KEY) console.log('Voice rooms are off (set LIVEKIT_API_KEY and LIVEKIT_API_SECRET to turn them on).');
+  if (process.env.JOINT_FIRES === 'on' && !process.env.PUBLIC_URL) console.log("Joint fires are on, but can't be hosted until PUBLIC_URL is set.");
 });

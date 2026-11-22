@@ -374,6 +374,41 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
     why: 'Meeting places for events',
     run: (db) => db.exec('ALTER TABLE events ADD COLUMN place_name TEXT; ALTER TABLE events ADD COLUMN place_lat REAL; ALTER TABLE events ADD COLUMN place_lng REAL;'),
   },
+  // Joint fires (joint-fires.ts). On the host: the codes a fire was opened to other groups with
+  // (only their hash), and the guests who came through each. On the other side: the fires a
+  // hearth joined, with the code it presents to the host.
+  {
+    why: 'Joint fires with other Peiskos servers',
+    run: (db) => db.exec(`
+      CREATE TABLE joint_links (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        label       TEXT NOT NULL,
+        secret_hash TEXT NOT NULL UNIQUE,
+        created_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at  INTEGER NOT NULL,
+        closed_at   INTEGER
+      );
+      CREATE INDEX joint_links_channel ON joint_links(channel_id);
+      CREATE TABLE joint_guests (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        link_id   INTEGER NOT NULL REFERENCES joint_links(id) ON DELETE CASCADE,
+        remote_id TEXT NOT NULL,
+        name      TEXT NOT NULL,
+        blocked   INTEGER NOT NULL DEFAULT 0,
+        last_seen INTEGER NOT NULL,
+        UNIQUE (link_id, remote_id)
+      );
+      CREATE TABLE joint_fires (
+        channel_id INTEGER PRIMARY KEY REFERENCES channels(id) ON DELETE CASCADE,
+        origin     TEXT NOT NULL,
+        secret     TEXT NOT NULL,
+        host_name  TEXT NOT NULL,
+        added_by   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        created_at INTEGER NOT NULL
+      );
+    `),
+  },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */

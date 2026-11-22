@@ -39,6 +39,22 @@ export function voiceToken(opts: VoiceOptions, user: { id: number; username: str
   );
 }
 
+/**
+ * A pass for a guest from another Peiskos server at a joint fire (joint-fires.ts): their microphone
+ * only, and room data for the voice key exchange. No camera or screen from people we don't host.
+ */
+export function guestVoiceToken(opts: VoiceOptions, identity: string, name: string, room: string, ttlSeconds: number, canSpeak: boolean) {
+  return sign(
+    opts,
+    {
+      sub: identity,
+      name,
+      video: { room, roomJoin: true, canPublish: canSpeak, canSubscribe: true, canPublishData: true, canPublishSources: canSpeak ? ['microphone'] : [] },
+    },
+    ttlSeconds,
+  );
+}
+
 async function twirp(opts: VoiceOptions, method: string, grant: Record<string, unknown>, body: Record<string, unknown>) {
   const token = sign(opts, { video: grant }, 60);
   const res = await fetch(`${(opts.apiUrl ?? 'http://localhost:7880').replace(/\/$/, '')}/twirp/livekit.RoomService/${method}`, {

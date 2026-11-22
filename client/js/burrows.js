@@ -411,6 +411,13 @@ function drawChannels() {
       line.children[1].textContent = on.title;
       li.firstChild.after(line);
     }
+    const shared = jointFireNote(c);
+    if (shared) {
+      const line = document.createElement('div');
+      line.className = 'fire-joint-line small muted';
+      line.textContent = shared;
+      li.firstChild.after(line);
+    }
     if (i > 0) li.firstChild.append(pinFireButton(s, c));
     if (can(s, 'rooms')) li.firstChild.append(roomSettingsButton(c));
     // Held or right-clicked: the fire's clips, and its settings for whoever manages rooms.
@@ -424,7 +431,8 @@ function drawChannels() {
     rowMain(li, li.querySelector('.room-name'), { label: rowLabel(c.name, sub, on && `${on.title} is on now`, c.private && 'private', joined ? 'open the fire' : 'join voice') });
     li.onclick = () => (joined ? goToVoice() : joinVoice(c.id));
     const people = ids.map((id) => {
-      const name = nameOfPerson(s.members.find((m) => m.id === id)) ?? '?';
+      const member = s.members.find((m) => m.id === id);
+      const name = member ? nameOfPerson(member) : visitorOf(id)?.name ?? '?';
       const row = document.createElement('div');
       row.className = 'voice-person';
       const av = document.createElement('span');
@@ -433,6 +441,8 @@ function drawChannels() {
       const label = document.createElement('span');
       label.textContent = name;
       row.append(av, label);
+      const from = visitorTag(id);
+      if (from) row.append(from);
       // Deafened says more than muted, so it's the one shown.
       if (c.voiceServerMuted?.includes(id)) row.insertAdjacentHTML('beforeend', SERVER_MUTED_ICON);
       else if (c.voiceDeafened?.includes(id)) row.insertAdjacentHTML('beforeend', DEAFENED_ICON);

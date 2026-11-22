@@ -56,6 +56,9 @@ services:
       ADMIN_USERS: ${ADMIN_USERS:-}
       # Uptime: an address pinged every five minutes (see README).
       HEARTBEAT_URL: ${HEARTBEAT_URL:-}
+      # Joint fires with other Peiskos servers: both off unless set (see README).
+      JOINT_FIRES: ${JOINT_FIRES:-}
+      JOINT_FIRE_SERVERS: ${JOINT_FIRE_SERVERS:-}
       # Fire decorations and marshmallows: all unlocked unless this is "hours" (see README).
       FIRE_UNLOCKS: ${FIRE_UNLOCKS:-}
       # Clips at the fire (see README). "off" turns them off.

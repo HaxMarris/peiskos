@@ -148,7 +148,7 @@ function openRoomSettings(c) {
         ${s.roles?.length ? `<ul class="access-list" id="post-roles">${s.roles.map((r) => `<li><label class="check"><input type="checkbox" value="${r.id}" ${postRoles.includes(r.id) ? 'checked' : ''} /> ${roleDot(r.color)}${escapeHtml(r.name)}</label></li>`).join('')}</ul>` : '<p class="small muted">This hearth has no roles yet.</p>'}
       </div>
       ${s.roles?.length ? `<h4>Read only</h4><p class="small muted">People with these roles can read this room but not write in it, unless they manage rooms.</p>
-        <ul class="access-list" id="read-only-roles">${s.roles.map((r) => `<li><label class="check"><input type="checkbox" value="${r.id}" ${(c.readOnlyRoleIds ?? []).includes(r.id) ? 'checked' : ''} /> ${roleDot(r.color)}${escapeHtml(r.name)}</label></li>`).join('')}</ul>` : ''}` : c.kind === 'voice' ? voiceRoomSettings(c) : ''}
+        <ul class="access-list" id="read-only-roles">${s.roles.map((r) => `<li><label class="check"><input type="checkbox" value="${r.id}" ${(c.readOnlyRoleIds ?? []).includes(r.id) ? 'checked' : ''} /> ${roleDot(r.color)}${escapeHtml(r.name)}</label></li>`).join('')}</ul>` : ''}` : c.kind === 'voice' ? voiceRoomSettings(c) + jointFireSettings(s, c) : ''}
       ${privacyFields(s, c.private, c.memberIds ?? [], c.roleIds ?? [], c.kind === 'voice' ? 'fire' : 'room')}
       <div class="error" id="modal-error"></div>
       <div class="modal-row">
@@ -160,6 +160,7 @@ function openRoomSettings(c) {
       </div>
     </form>`);
   wirePrivacyFields();
+  if (c.kind === 'voice') wireJointFireSettings(s, c);
   $('#room-announce')?.addEventListener('change', (e) => $('#room-posters').classList.toggle('hidden', !e.target.checked));
   $('#room-archive')?.addEventListener('click', async () => {
     if (!c.archived && !(await askConfirm(`Archive ${c.name}? It moves to the bottom of the list, keeps everything said in it, and takes no new messages.`))) return;
