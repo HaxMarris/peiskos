@@ -418,7 +418,7 @@ apps all move to it together. Updates that are only on `main` still wait for *Up
 In GitHub's Actions tab, run **Start release** with the new version (like `v0.8.12`). It builds
 the desktop and Android apps into a draft release that nobody sees yet, and sends the iPhone app
 to TestFlight for Apple's review (untick *iPhone* to leave it out). **Finish release** checks
-every 15 minutes and publishes the draft once Apple approves; without the iPhone app it's
+with Apple every 5 minutes and publishes the draft once Apple approves; without the iPhone app it's
 published as soon as the builds finish. To publish without waiting, run *Finish release* with the
 version and tick *now*. Don't publish the draft by hand on the Releases page: that builds every
 app a second time.

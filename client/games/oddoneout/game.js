@@ -234,6 +234,7 @@ function nextRound() {
     clearInterval(tick);
     G.phase = 'over';
     Peiskos.busy(false);
+    Peiskos.result([...G.scores].map(([id, score]) => ({ id, score })));
     return broadcast();
   }
   if (Peiskos.players.length < MIN_PLAYERS) {

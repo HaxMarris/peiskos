@@ -8,7 +8,8 @@ import type { Json } from './http.ts';
 /** The games, and how many can play each. */
 export const GAMES = { melonbomber: 4, stockpile: 8, sketchguess: 12, trivia: 12, oddoneout: 12, samepage: 12, smokesignals: 12, sketchpad: 16 } as const;
 type GameName = keyof typeof GAMES;
-type Game = { name: GameName; hostId: number; players: Map<number, WebSocket>; since: number };
+// played: everyone who's been in this game, so a result still counts someone who just left.
+type Game = { name: GameName; hostId: number; players: Map<number, WebSocket>; played: Set<number>; since: number };
 
 const MAX_MESSAGE = 16 * 1024; // one message's game data, as JSON
 
@@ -18,6 +19,8 @@ export interface GamesContext {
   usersInVoice: (channelId: number) => number[];
   sendTo: (userIds: Iterable<number>, event: Json) => void;
   fail: (status: number, message: string) => Error;
+  /** The host says how a game went (the league's points). */
+  result?: (channelId: number, game: GameName, players: Set<number>, standings: unknown) => void;
 }
 
 export function fireGames(ctx: GamesContext) {
@@ -57,11 +60,16 @@ export function fireGames(ctx: GamesContext) {
       }
       return;
     }
+    if (msg.action === 'result') {
+      // Only the host's app keeps score, so only it can say who won.
+      if (g && user.id === g.hostId && g.players.get(user.id) === ws) ctx.result?.(channelId, g.name, g.played, msg.standings);
+      return;
+    }
     if (msg.action === 'start') {
       const name = (Object.keys(GAMES) as GameName[]).find((n) => n === msg.game);
       if (!name) throw ctx.fail(400, "That game isn't here");
       if (!g) {
-        games.set(channelId, { name, hostId: user.id, players: new Map([[user.id, ws]]), since: Date.now() });
+        games.set(channelId, { name, hostId: user.id, players: new Map([[user.id, ws]]), played: new Set([user.id]), since: Date.now() });
       } else if (g.players.has(user.id)) {
         // Playing from this device now: the other one's copy closes instead of sitting there frozen.
         const old = g.players.get(user.id);
@@ -71,6 +79,7 @@ export function fireGames(ctx: GamesContext) {
         if (g.name !== name) throw ctx.fail(409, 'Another game is going at this fire');
         if (g.players.size >= GAMES[name]) throw ctx.fail(409, `The game is full (${GAMES[name]} players)`);
         g.players.set(user.id, ws);
+        g.played.add(user.id);
       }
     } else if (msg.action === 'leave') {
       return drop(channelId, user.id);

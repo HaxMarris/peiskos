@@ -120,6 +120,8 @@ export interface TableOptions {
   cashOut: (userId: number, chips: number) => void;
   /** Stacks as they stand between hands (and before the blinds), to keep in case of a restart. */
   settled: (stacks: { userId: number; stack: number }[]) => void;
+  /** After a hand: the people who took more from the pot than they put in. */
+  handWon?: (userIds: number[]) => void;
   changed: () => void;
   /** Tests stack the deck. */
   deck?: () => Card[];
@@ -539,6 +541,7 @@ export class PokerTable {
     h.done = true;
     for (const s of this.seats) if (s) s.need = false;
     this.settle();
+    this.opts.handWon?.(h.winners.map((i) => this.seats[i]!).filter((s) => s.won > s.total).map((s) => s.userId));
     // People who got up during the hand leave now; the next hand deals after a look at this one.
     this.later(this.opts.pauseMs, () => this.startHand());
   }

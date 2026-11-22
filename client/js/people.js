@@ -177,11 +177,12 @@ function openRoomSettings(c) {
       announce: $('#room-announce').checked,
       postRoleIds: [...document.querySelectorAll('#post-roles input:checked')].map((i) => Number(i.value)),
       ...($('#read-only-roles') ? { readOnlyRoleIds: [...document.querySelectorAll('#read-only-roles input:checked')].map((i) => Number(i.value)) } : {}),
-    } : c.kind === 'voice' ? { userLimit: Number($('#room-seats').value), keepChat: $('#room-keep-chat').checked } : {};
+    } : c.kind === 'voice' ? { userLimit: Number($('#room-seats').value), keepChat: $('#room-keep-chat').checked, spatialSound: $('#room-spatial').checked } : {};
     try {
       const updated = await api(`/api/channels/${c.id}`, { method: 'PATCH', body: { name: $('#room-name').value, ...extra, ...readPrivacyFields() } });
       state.servers.set(updated.id, updated);
       closeModal();
+      if (state.voice?.channelId === c.id) { updateSpatial(); renderFire(); }
       renderChannels();
       if (c.id === state.channelId) renderChatHeader();
     } catch (err) { $('#modal-error').textContent = err.message; }

@@ -43,12 +43,14 @@ import { savedMessages } from './saved-messages.ts';
 import { planning } from './planning.ts';
 import { threads } from './threads.ts';
 import { login } from './login.ts';
+import { capsules } from './capsules.ts';
 import { EVENT_REMIND_MS, hearthEvents } from './events.ts';
 import { friendships } from './friends.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
 import { fishing, fishingDock } from './fishing.ts';
+import { league } from './league.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 export type { Perm } from './common.ts';
 
@@ -95,6 +97,8 @@ export interface AppOptions {
   jointFires?: JointFireOptions;
   /** Tests make the casino's poker table quicker, and stack its decks. */
   casino?: Pick<CasinoContext, 'timing' | 'deck'>;
+  /** Tests move the league's clock (seasons are calendar months). */
+  league?: { now?: () => number };
 }
 
 // What a route is handed. `session` is the hash of the login's token, as it's kept in the sessions table.
@@ -113,11 +117,16 @@ export type Channel = {
   archivedAt: number | null;
   userLimit: number; // seats at a fire; 0 is no limit
   keepChat: number; // the fireside chat stays after everyone leaves
+  spatialSound: number; // voices at the fire pan and fade by seat (mixed by each listener's app)
 };
 
 export type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
 /** What a posted message can carry besides its text. */
-export type PostExtras = { forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean };
+export type PostExtras = {
+  forwarded?: Json; poll?: PollInput; list?: { title: string; items: string[] }; scheduled?: boolean; live?: Json; webhook?: boolean;
+  /** A time capsule being opened: posted as its author, with the files sealed in it (capsules.ts). */
+  capsule?: { id: number; sealedAt: number; opensAt: number; openedBy: number };
+};
 
 export type StatusRow = { status: string; status_text: string | null; status_emoji: string | null; status_until: number | null };
 
@@ -297,10 +306,11 @@ export function createApp(opts: AppOptions): Server {
   /** Adds attachments, reactions, reply previews, polls, link previews and threads to a list of message rows. */
   const withAttachments = (rows: Json[]): Json[] => {
     if (!rows.length) return rows;
-    rows = rows.map(({ replyToId, stickerId, embedsOff, forwarded, pings, live, authorBot, ...r }) => ({
+    rows = rows.map(({ replyToId, stickerId, embedsOff, forwarded, pings, live, capsule, authorBot, ...r }) => ({
       ...r,
       ...(authorBot ? { authorBot: true } : {}),
       ...(live ? { live: JSON.parse(live as string) } : {}),
+      ...(capsule ? { capsule: JSON.parse(capsule as string) } : {}),
       pings: pings ? JSON.parse(pings as string) : null,
       pinnedAt: r.pinnedAt ?? null,
       replyTo: replyPreview(replyToId),
@@ -324,7 +334,7 @@ export function createApp(opts: AppOptions): Server {
 
   // Every message is read with these columns, then filled in by withAttachments.
   const MESSAGE_SELECT = `SELECT m.id, m.channel_id AS channelId, m.content, m.created_at AS createdAt, m.edited_at AS editedAt,
-      m.reply_to AS replyToId, m.pinned_at AS pinnedAt, m.forwarded, m.sticker_id AS stickerId, m.embeds_off AS embedsOff, m.pings, m.live,
+      m.reply_to AS replyToId, m.pinned_at AS pinnedAt, m.forwarded, m.sticker_id AS stickerId, m.embeds_off AS embedsOff, m.pings, m.live, m.capsule,
       u.id AS authorId, ${nameSql('u', '(SELECT c.server_id FROM channels c WHERE c.id = m.channel_id)')} AS author, u.username AS authorUsername,
       ${avatarUrl('u.avatar')} AS authorAvatar, u.bot AS authorBot
     FROM messages m JOIN users u ON u.id = m.author_id`;
@@ -372,6 +382,7 @@ export function createApp(opts: AppOptions): Server {
       .map(({ serverId: _, private: priv, parentId: __, announce, archivedAt, ...c }) => ({
         ...c,
         keepChat: !!c.keepChat,
+        spatialSound: !!c.spatialSound,
         private: !!priv,
         announce: !!announce,
         archived: archivedAt !== null,
@@ -420,12 +431,13 @@ export function createApp(opts: AppOptions): Server {
       channels,
       groups: db.prepare('SELECT id, name FROM room_groups WHERE server_id = ? ORDER BY position, id').all(serverId),
       events: server.kind === 'burrow' ? eventsIn(serverId, viewerId) : [],
+      capsules: server.kind === 'burrow' ? capsulesIn(serverId, viewerId) : [],
       threads: threadsIn(serverId, viewerId),
       emoji: emojiOf(serverId),
       sounds: soundsOf(serverId),
       serverMuted: serverMuted(serverId, viewerId),
       ...(server.kind === 'burrow' ? moderationSummary(serverId, viewerId) : {}),
-      ...(server.kind === 'burrow' ? { motd: fun.motdOf(serverId) } : {}),
+      ...(server.kind === 'burrow' ? { motd: fun.motdOf(serverId), league: hearthLeague.summary(serverId) } : {}),
       ...(server.kind === 'dm' ? { seen: dmSeen(serverId, viewerId) } : {}),
       roles,
       members: members.map((m) => {
@@ -694,19 +706,21 @@ export function createApp(opts: AppOptions): Server {
    */
   const postMessage = (user: User, channelId: number, input: Json, extras: PostExtras = {}) => {
     const channel = channelById(channelId);
-    // A webhook writes in the one room it was made for, whoever can see it.
-    if (!channel || (!extras.webhook && !canSee(channel, user.id))) throw new HttpError(404, "That room is gone, or you can't see it.");
+    // A webhook writes in the one room it was made for, whoever can see it. A time capsule was
+    // sealed by someone who could post here, and opens even if they've left since.
+    const sealed = extras.capsule;
+    if (!channel || (!extras.webhook && !sealed && !canSee(channel, user.id))) throw new HttpError(404, "That room is gone, or you can't see it.");
     if (channel.kind === 'voice') throw new HttpError(400, 'Fires have no messages');
-    const problem = extras.webhook ? null : postProblem(channel, user.id);
+    const problem = extras.webhook || sealed ? null : postProblem(channel, user.id);
     if (problem) throw new HttpError(403, problem);
     dmBlockCheck(channel.serverId, user.id);
-    if (!extras.scheduled && !extras.webhook && !postAllowance.take(user.id))
+    if (!extras.scheduled && !extras.webhook && !sealed && !postAllowance.take(user.id))
       throw new HttpError(429, "You're sending messages very fast. Wait a moment.");
     const flagged = filterCheck(channel, user.id, typeof input.content === 'string' ? withoutBidi(input.content) : '');
     // Slow mode: people who manage rooms or messages aren't held back, and nor are scheduled messages.
     // A thread goes at its room's pace, counting the room and all its threads together.
     const paced = channel.kind === 'thread' && channel.parentId !== null ? channelById(channel.parentId) ?? channel : channel;
-    if (paced.slow && !extras.scheduled && !can(channel.serverId, user.id, 'rooms') && !can(channel.serverId, user.id, 'messages')) {
+    if (paced.slow && !extras.scheduled && !sealed && !can(channel.serverId, user.id, 'rooms') && !can(channel.serverId, user.id, 'messages')) {
       const last = (db.prepare('SELECT MAX(created_at) AS t FROM messages WHERE channel_id IN (SELECT id FROM channels WHERE id = ? OR parent_id = ?) AND author_id = ?')
         .get(paced.id, paced.id, user.id) as { t: number | null }).t;
       const wait = last === null ? 0 : Math.ceil((last + paced.slow * 1000 - now()) / 1000);
@@ -716,7 +730,7 @@ export function createApp(opts: AppOptions): Server {
     if (typeof raw !== 'string') throw new HttpError(400, 'Write something first');
     let content = withoutBidi(raw);
     if (content.length > MAX_MESSAGE_LENGTH) throw new HttpError(400, `Messages can be at most ${MAX_MESSAGE_LENGTH} characters. Shorten it, or send it in two parts.`);
-    if (content.startsWith('/') && !extras.forwarded && !extras.webhook) {
+    if (content.startsWith('/') && !extras.forwarded && !extras.webhook && !sealed) {
       const command = slashCommand(content);
       if (command) {
         content = command.content;
@@ -726,12 +740,12 @@ export function createApp(opts: AppOptions): Server {
     const attachmentIds = input.attachmentIds;
     const ids = Array.isArray(attachmentIds) ? [...new Set(attachmentIds.map(String))] : [];
     if (ids.length > MAX_ATTACHMENTS) throw new HttpError(400, `You can add up to ${MAX_ATTACHMENTS} files to a message`);
-    // Only your own uploads to this room that aren't on a message yet.
+    // Only your own uploads to this room that aren't on a message yet (or, opening a time capsule, its own files).
     const usable = ids.filter(
       (id) =>
         !!db
-          .prepare('SELECT 1 FROM attachments WHERE id = ? AND uploader_id = ? AND channel_id = ? AND message_id IS NULL')
-          .get(id, user.id, channelId),
+          .prepare('SELECT 1 FROM attachments WHERE id = ? AND uploader_id = ? AND channel_id = ? AND message_id IS NULL AND capsule_id IS ?')
+          .get(id, user.id, channelId, sealed?.id ?? null),
     );
     if (usable.length !== ids.length) throw new HttpError(400, "One of the files didn't finish uploading. Remove it and add it again.");
     const spoilers = new Set(Array.isArray(input.spoilerIds) ? input.spoilerIds.map(String) : []);
@@ -746,7 +760,7 @@ export function createApp(opts: AppOptions): Server {
       if (!sticker || !isMember(sticker.server_id, user.id)) throw new HttpError(400, "That sticker isn't available");
       stickerId = Number(input.stickerId);
     }
-    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.list && !extras.forwarded && !extras.live) throw new HttpError(400, 'Write something first');
+    if (looksBlank(content) && !usable.length && !stickerId && !extras.poll && !extras.list && !extras.forwarded && !extras.live && !sealed) throw new HttpError(400, 'Write something first');
     let replyId: number | null = null;
     const replyTo = input.replyTo;
     if (replyTo != null) {
@@ -761,13 +775,16 @@ export function createApp(opts: AppOptions): Server {
     const r = db
       // Numbered above any message ever deleted, so an id is never used twice (see addIdFloor in db.ts).
       .prepare(
-        `INSERT INTO messages (id, channel_id, author_id, content, created_at, reply_to, sticker_id, forwarded, live)
-         VALUES (MAX(COALESCE((SELECT MAX(id) FROM messages), 0), COALESCE((SELECT value FROM id_floor WHERE name = 'messages'), 0)) + 1, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO messages (id, channel_id, author_id, content, created_at, reply_to, sticker_id, forwarded, live, capsule)
+         VALUES (MAX(COALESCE((SELECT MAX(id) FROM messages), 0), COALESCE((SELECT value FROM id_floor WHERE name = 'messages'), 0)) + 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(channelId, user.id, content, now(), replyId, stickerId, extras.forwarded ? JSON.stringify(extras.forwarded) : null, extras.live ? JSON.stringify(extras.live) : null);
+      .run(
+        channelId, user.id, content, now(), replyId, stickerId, extras.forwarded ? JSON.stringify(extras.forwarded) : null, extras.live ? JSON.stringify(extras.live) : null,
+        sealed ? JSON.stringify({ sealedAt: sealed.sealedAt, opensAt: sealed.opensAt, openedBy: sealed.openedBy }) : null,
+      );
     const messageId = Number(r.lastInsertRowid);
-    // Sent: the draft for this room is done with, on every device.
-    if (db.prepare('DELETE FROM drafts WHERE user_id = ? AND channel_id = ?').run(user.id, channelId).changes)
+    // Sent: the draft for this room is done with, on every device. (Not when someone else opened their capsule.)
+    if (!sealed && db.prepare('DELETE FROM drafts WHERE user_id = ? AND channel_id = ?').run(user.id, channelId).changes)
       sendTo([user.id], { type: 'draft', channelId, content: '', updatedAt: now() });
     const forWhom = recordMentions(channel, messageId, user.id, content, replyId);
     usable.forEach((id, position) =>
@@ -789,7 +806,7 @@ export function createApp(opts: AppOptions): Server {
     if (flagged) fileReport(channel.serverId, message, null, `Word filter: ${flagged}`);
     alertAway(channel, message, forWhom);
     // Writing in a room means you've read it.
-    markRead(user.id, channel, messageId);
+    if (!sealed) markRead(user.id, channel, messageId);
     if (channel.kind === 'thread') threadChanged(channel);
     previewLinks(messageId, channel, content);
     return message;
@@ -1277,9 +1294,24 @@ export function createApp(opts: AppOptions): Server {
     fail: (status, message) => new HttpError(status, message),
   });
 
+  // ---- the hearth league (league.ts): a season of points a month from the games, fishing and the casino
+
+  const hearthLeague = league({
+    db, route, fail: (status, message) => new HttpError(status, message), isMember, can, channelById, sendServerUpdate,
+    isBurrow: (serverId) => isBurrow(serverId),
+    now: opts.league?.now,
+  });
+
   // ---- games at the fire
 
-  const games = fireGames({ inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message) });
+  const games = fireGames({
+    inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message),
+    result: (channelId, game, players, standings) => {
+      const got = hearthLeague.gameResult(channelId, game, players, standings);
+      // Everyone who scored hears how many points it was.
+      if (got) for (const [id, points] of Object.entries(got)) if (points) sendTo([Number(id)], { type: 'league_points', channelId, game, points });
+    },
+  });
   const dock = fishingDock({ inVoice, usersInVoice, sendTo });
 
   // ---- the casino (casino.ts): chips, blackjack, slots, cases, and a hold 'em table at each fire
@@ -1288,12 +1320,13 @@ export function createApp(opts: AppOptions): Server {
     db, route, fail: (status, message) => new HttpError(status, message),
     channelById, inVoice, usersInVoice, isMember, serverMemberIds, sendTo, can, sendServerUpdate,
     isOnline: (userId) => sockets.has(userId),
+    won: (serverId, userId, what) => hearthLeague.casinoWin(serverId, userId, what),
     ...opts.casino,
   });
 
   // ---- Fireside Angler (fishing.ts): the fishing game's save, per person per hearth
 
-  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember });
+  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember, placed: (serverId, places) => hearthLeague.derbyPlaced(serverId, places) });
 
   // ---- messages: reading, sending, editing, reacting and deleting ----
 
@@ -1811,6 +1844,12 @@ export function createApp(opts: AppOptions): Server {
     serverSummary, wakeAt: (...a) => wakeAt(...a),
   });
 
+  // ---- time capsules (capsules.ts)
+  const { capsulesIn } = capsules({
+    can, canSee, channelById, db, inVoice, notTooFast, now, postMessage, postProblem: (...a) => postProblem(...a), removeFiles, route,
+    sendServerUpdate, sendTo, serverKind, userById, usersInVoice,
+  });
+
   // ---- the calendar feed (calendar.ts)
   const { remindEvents, sendCalendar } = calendarFeed({
     canSee, channelById, db, isMember, now, opts, route, sendTo,
@@ -1899,6 +1938,7 @@ export function createApp(opts: AppOptions): Server {
     friendIds: (...a) => friendIds(...a),
     friendState: (...a) => friendState(...a),
     pendingIds: (...a) => pendingIds(...a),
+    trophies: (userId, viewerId) => hearthLeague.trophies(userId, viewerId),
   });
 
   // ---- friends and blocking -----------------------------------------------
