@@ -40,6 +40,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>Peiskos uses your camera when you turn it on in a voice room, or to take a photo to send.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>When you share your location for an event, Peiskos shows the people going how far away you are. Only while Peiskos is open.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Peiskos uses your microphone when you join a voice room or record a voice message.</string>
 	<!-- A voice call shows on the lock screen and in the Dynamic Island (CallActivity/). -->

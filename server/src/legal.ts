@@ -116,6 +116,7 @@ export function privacyPage(o: LegalOptions) {
     <ul>
       <li>Voice calls, video and screen shares aren't recorded, except for clips everyone at the fire agreed to (above). They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
       <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire, unless the hearth's host chose to keep that fire's chat.</li>
+      <li>Your location, when you share it on the way to an event (meet-up). Your device sends it only while Peiskos is open, and only after you tap Share. The server keeps the latest one in memory and never saves it. The others going see how far you are from the meeting place and in which direction, not where you are. It's dropped when you stop, when you arrive, after 15 minutes without an update, and 3 hours after the event starts.</li>
       <li>The server doesn't keep a record of the pages you open or what you do in the app beyond what's listed above.</li>
     </ul>
     <p>Text messages and files are not end-to-end encrypted. They're stored on the server so they're there on all your devices, which means ${runBy} could technically read them. They won't, except to deal with a report or a legal obligation.</p>

@@ -369,6 +369,11 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
       CREATE INDEX movies_by_server ON movies(server_id);
     `),
   },
+  // A real place to meet for an event, so people going can share where they are on the way (meetup.ts).
+  {
+    why: 'Meeting places for events',
+    run: (db) => db.exec('ALTER TABLE events ADD COLUMN place_name TEXT; ALTER TABLE events ADD COLUMN place_lat REAL; ALTER TABLE events ADD COLUMN place_lng REAL;'),
+  },
   // Joint fires (joint-fires.ts). On the host: the codes a fire was opened to other groups with
   // (only their hash), and the guests who came through each. On the other side: the fires a
   // hearth joined, with the code it presents to the host.
