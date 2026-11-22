@@ -226,6 +226,11 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
+  // A real place to meet for an event, so people going can share where they are on the way (meetup.ts).
+  {
+    why: 'Meeting places for events',
+    run: (db) => db.exec('ALTER TABLE events ADD COLUMN place_name TEXT; ALTER TABLE events ADD COLUMN place_lat REAL; ALTER TABLE events ADD COLUMN place_lng REAL;'),
+  },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */

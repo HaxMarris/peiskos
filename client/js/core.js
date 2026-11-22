@@ -1112,6 +1112,9 @@ function handleEvent(ev) {
     case 'event_reminder':
       showEventReminder(ev);
       break;
+    case 'meetup':
+      onMeetup(ev);
+      break;
   }
 }
 
