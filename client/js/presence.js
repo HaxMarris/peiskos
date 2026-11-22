@@ -596,7 +596,9 @@ function applyServerMute(muted) {
 function voiceRoomSettings(c) {
   return `<label>Seats<select id="room-seats">${SEAT_CHOICES.map((n) => `<option value="${n}" ${n === (c.userLimit ?? 0) ? 'selected' : ''}>${n ? `${n} people` : 'No limit'}</option>`).join('')}</select>
       <span class="small muted">When it's full, only people who manage voice can sit down, or move others in.</span></label>
-    <label class="check"><input type="checkbox" id="room-keep-chat" ${c.keepChat ? 'checked' : ''} /> Keep the fireside chat after everyone leaves</label>`;
+    <label class="check"><input type="checkbox" id="room-keep-chat" ${c.keepChat ? 'checked' : ''} /> Keep the fireside chat after everyone leaves</label>
+    <label class="check"><input type="checkbox" id="room-spatial" aria-describedby="room-spatial-note" ${c.spatialSound ? 'checked' : ''} /> Spatial sound</label>
+    <span class="small muted" id="room-spatial-note">Voices come from where people sit: to your left or right, and quieter across the fire. Anyone can turn it off for themselves in voice settings.</span>`;
 }
 
 function afkSettings(s) {

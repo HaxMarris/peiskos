@@ -21,6 +21,9 @@ const Peiskos = (() => {
     /** What the host's game needs to carry on if the page reloads (moving to its own window). */
     snapshot(data) { post({ kind: 'snapshot', data }); },
     busy(on) { post({ kind: 'busy', on }); },
+    /** The host says how a game ended, for the hearth league: [{ id, score }], higher is better. All
+        the same score (a game nobody wins) is a point each for playing. */
+    result(scores) { if (self.isHost) post({ kind: 'result', scores }); },
     /** Saves a file through Peiskos (a game's frame can't download or share on every phone). */
     save(blob, name) { post({ kind: 'save', blob, name }); },
     /** Asks Peiskos's server (only the few things games may ask for). */

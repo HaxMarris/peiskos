@@ -560,6 +560,7 @@ async function selectChannel(id, { around = null, present = false } = {}) {
   $('#send-btn').disabled = !ch;
   if (changing) loadDraft();
   renderScheduledNote();
+  renderCapsuleNote();
   state.messages = [];
   state.reachedStart = false;
   state.reachedEnd = true;

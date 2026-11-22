@@ -226,6 +226,58 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
+  // Only a setting: each listener's app does the mixing, and older apps just hear everyone as before.
+  { why: 'Spatial sound at a fire, off by default', run: (db) => db.exec('ALTER TABLE channels ADD COLUMN spatial_sound INTEGER NOT NULL DEFAULT 0') },
+  // Time capsules: text and files sealed until a day, then opened together at a fire (capsules.ts).
+  // Their files wait in attachments with no message, marked with the capsule so nothing clears them out.
+  {
+    why: 'Time capsules',
+    run: (db) => db.exec(`
+      CREATE TABLE capsules (
+        id         INTEGER PRIMARY KEY,
+        server_id  INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        channel_id INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        fire_id    INTEGER REFERENCES channels(id) ON DELETE SET NULL,
+        author_id  INTEGER NOT NULL REFERENCES users(id),
+        content    TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        opens_at   INTEGER NOT NULL,
+        opened_at  INTEGER,
+        opened_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        message_id INTEGER REFERENCES messages(id) ON DELETE SET NULL
+      );
+      CREATE INDEX capsules_by_server ON capsules(server_id, opened_at);
+      ALTER TABLE attachments ADD COLUMN capsule_id INTEGER REFERENCES capsules(id) ON DELETE CASCADE;
+      ALTER TABLE messages ADD COLUMN capsule TEXT;
+    `),
+  },
+  // The hearth league (league.ts): a season a month, and every point given in it.
+  { why: 'Hearth league seasons and points', run: (db) => db.exec(`
+    ALTER TABLE servers ADD COLUMN league_off INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE league_seasons (
+      server_id       INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      month           TEXT NOT NULL, -- YYYY-MM, Eastern
+      number          INTEGER NOT NULL,
+      champion_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      champion_points INTEGER,
+      settled         INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (server_id, month)
+    );
+    CREATE TABLE league_points (
+      id        INTEGER PRIMARY KEY,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      month     TEXT NOT NULL,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source    TEXT NOT NULL, -- games, fishing or casino
+      what      TEXT NOT NULL, -- the game, 'derby', 'slots'...
+      base      INTEGER NOT NULL, -- before championship night's doubling, which the daily cap counts
+      points    INTEGER NOT NULL,
+      day       TEXT NOT NULL,
+      at        INTEGER NOT NULL
+    );
+    CREATE INDEX league_points_season ON league_points (server_id, month, user_id);
+    CREATE INDEX league_points_day ON league_points (server_id, user_id, day);
+  `) },
   // Clips at the fire (tapes.ts): a time clips could be made at a fire (everyone said yes), its clips,
   // and each person's own audio: the last minute or so while it runs, and their part of each clip.
   {

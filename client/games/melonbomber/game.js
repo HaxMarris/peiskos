@@ -1377,7 +1377,11 @@ function hostStep(){
       if(game.winnerSlot !== null && game.winnerSlot !== undefined){
         lobbyScores[game.winnerSlot] = (lobbyScores[game.winnerSlot]||0) + 1;
       }
-      if(!game.localOnly){ broadcastToAll({type:'scores', scores:lobbyScores}); broadcastLobby(); }
+      if(!game.localOnly){
+        broadcastToAll({type:'scores', scores:lobbyScores}); broadcastLobby();
+        // The people in this match (not the bots) for the hearth league: the last one standing won.
+        Peiskos.result(lobbyPlayers.filter(p=>p.uid!=null && !p.isBot).map(p=>({id:p.uid, score: p.slot===game.winnerSlot ? 1 : 0})));
+      }
       else keepSnapshot();
     }
   }

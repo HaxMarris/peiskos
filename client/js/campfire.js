@@ -57,7 +57,28 @@ function updateStreamTools(t) {
   if (pip) {
     pip.classList.toggle('on', poppedOutKey() === t.key);
     pip.title = poppedOutKey() === t.key ? 'Put it back' : 'Pop out, to keep watching while you chat';
+    pip.setAttribute('aria-label', pip.title);
   }
+  showPoppedOut(t);
+}
+
+/** While a stream plays in its pop-out, its tile says so instead of playing it a second time. */
+function showPoppedOut(t) {
+  const out = !!t.track && poppedOutKey() === t.key && (!popWin || popWin.track === t.track);
+  t.el.classList.toggle('popped', out);
+  // The desktop window plays its own copy, so this one lets go of the video until it comes back.
+  // Picture-in-picture moves this same video element, so it stays attached.
+  const park = out && !!popWin;
+  if (park && !t.parked) { t.track.detach(t.media); t.parked = true; }
+  if (!park && t.parked) { if (t.track) t.track.attach(t.media); t.parked = false; }
+  if (!out) return t.popped?.remove();
+  if (!t.popped) {
+    t.popped = document.createElement('div');
+    t.popped.className = 'vtile-popped';
+    t.popped.innerHTML = `${PIP_ICON}<p>Popped out</p><button type="button" class="btn">Put it back</button>`;
+    t.popped.querySelector('button').onclick = (e) => { e.stopPropagation(); popOut(t); };
+  }
+  if (t.popped.parentNode !== t.el) t.el.append(t.popped);
 }
 
 // ---- pop out. In the desktop app a stream gets a window of its own, which goes behind other
@@ -717,7 +738,7 @@ function sizeRing(ring, total, anyoneSharing) {
   const face = Math.round(Math.min(phone ? 60 : 84, Math.max(40, H * (phone ? 0.1 : 0.13))) * (total > 8 ? 0.72 : 1));
   const below = (phone ? 50 : 56) + (anyoneSharing ? 38 : 0); // name, status and the watch button
   const labelW = phone ? 120 : 170;
-  const angle = (i) => (-90 + (180 + i * 360) / total) * (Math.PI / 180);
+  const angle = (i) => seatAngle(i, total);
   const sines = Array.from({ length: total }, (_, i) => Math.sin(angle(i)));
   const down = Math.max(...sines); // how far in front of the fire the nearest seats are
   // A bigger circle spreads out wider and deeper, so neighbours' names don't run into each other.
@@ -769,18 +790,16 @@ function renderFire() {
   const LK = window.LivekitClient;
   const room = voice.room;
   const ch = [...state.servers.values()].flatMap((s) => s.channels).find((c) => c.id === voice.channelId);
-  const ids = [...(ch?.voiceUsers ?? [])];
-  if (!ids.includes(state.me.id)) ids.push(state.me.id);
+  const { ids, total } = fireSeats(ch, state.me.id);
   const s = [...state.servers.values()].find((x) => x.channels.includes(ch));
   decorateFire(s);
   $('#stage-title').textContent = ch && s && !isDm(s) ? `${s.name}'s ${ch.name}` : ch ? fireName(ch) : 'Campfire';
   const streamer = ids.find((id) => id !== state.me.id && state.sharing.get(id)?.screen);
   $('#fire-count').textContent = (typeof status === 'string' ? status : !room ? 'Connecting…' : `${ids.length} gathered`)
-    + (streamer ? ` · ${nameOf(streamer)} is sharing` : '');
+    + (streamer ? ` · ${nameOf(streamer)} is sharing` : '')
+    + (room && spatialHere() ? ' · Spatial sound' : '');
 
-  // Seats are spread evenly around the fire, starting at the top. A small fire keeps a few open
-  // seats; one with a seat limit shows all of its seats (up to a dozen).
-  const total = Math.max(ch?.userLimit && ch.userLimit <= 12 ? ch.userLimit : 6, ids.length);
+  // Seats are spread evenly around the fire, starting at the top (see fireSeats).
   const ring = $('#fire-ring');
   const place = sizeRing(ring, total, ids.some((id) => state.sharing.get(id)?.screen));
   for (const [id, seat] of seats) {
@@ -880,6 +899,8 @@ function renderFire() {
   }
   anchorSeats(ring);
   fireEventScene(ring, s, ch, ids);
+  capsuleScene(ring, s, ch);
+  leagueBannerScene(ring, s);
 }
 
 // The fireside chat is in view: docked beside the fire on a wide screen, or opened over it.
