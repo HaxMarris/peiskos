@@ -111,6 +111,7 @@ export type Channel = {
   archivedAt: number | null;
   userLimit: number; // seats at a fire; 0 is no limit
   keepChat: number; // the fireside chat stays after everyone leaves
+  spatialSound: number; // voices at the fire pan and fade by seat (mixed by each listener's app)
 };
 
 export type PollInput = { question: string; options: string[]; multi: boolean; closesAt: number | null; times?: number[] };
@@ -375,6 +376,7 @@ export function createApp(opts: AppOptions): Server {
       .map(({ serverId: _, private: priv, parentId: __, announce, archivedAt, ...c }) => ({
         ...c,
         keepChat: !!c.keepChat,
+        spatialSound: !!c.spatialSound,
         private: !!priv,
         announce: !!announce,
         archived: archivedAt !== null,

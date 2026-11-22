@@ -226,6 +226,8 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
+  // Only a setting: each listener's app does the mixing, and older apps just hear everyone as before.
+  { why: 'Spatial sound at a fire, off by default', run: (db) => db.exec('ALTER TABLE channels ADD COLUMN spatial_sound INTEGER NOT NULL DEFAULT 0') },
   // Time capsules: text and files sealed until a day, then opened together at a fire (capsules.ts).
   // Their files wait in attachments with no message, marked with the capsule so nothing clears them out.
   {

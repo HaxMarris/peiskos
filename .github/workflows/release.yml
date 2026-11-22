@@ -5,8 +5,9 @@
 #    app into it.
 # 2. The iPhone app is always built. Unless you untick it, it goes to TestFlight and is sent for
 #    Apple's review.
-# 3. Once Apple approves, "Finish release" (release-finish.yml) publishes the draft. Without the
-#    iPhone app, it's published as soon as the builds are done.
+# 3. "Finish release" (release-finish.yml) checks with Apple every 5 minutes and publishes the
+#    draft once Apple approves. Without the iPhone app, it's published as soon as the builds are
+#    done.
 # 4. Publishing is the go signal: desktop apps offer the update, and a server with AUTO_UPDATE=releases
 #    installs it by itself within a few minutes (see "Updates" in the README).
 name: Start release
@@ -96,6 +97,9 @@ jobs:
     name: Publish or wait for Apple
     needs: [draft, desktop, mobile]
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: write # to start "Finish release" watching for Apple's answer
     steps:
       - env:
           GH_TOKEN: ${{ github.token }}
@@ -108,7 +112,8 @@ jobs:
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes "$notes
 
           <!-- waiting-for-apple: $BUILD -->"
-            echo "$TAG is built and waiting for Apple to approve the iPhone build. \"Finish release\" checks every 15 minutes and publishes it then. To release without waiting, run \"Finish release\" with this version and tick \"now\"." >> "$GITHUB_STEP_SUMMARY"
+            gh workflow run release-finish.yml --repo "$GITHUB_REPOSITORY" --ref "${{ github.event.repository.default_branch }}" -f watch=true -f version="$TAG"
+            echo "$TAG is built and waiting for Apple to approve the iPhone build. \"Finish release\" checks every 5 minutes and publishes it then. To release without waiting, run \"Finish release\" with this version and tick \"now\"." >> "$GITHUB_STEP_SUMMARY"
           else
             gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
             echo "$TAG is published." >> "$GITHUB_STEP_SUMMARY"
