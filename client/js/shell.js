@@ -292,6 +292,7 @@ function gameToReturnTo() {
   if (state.leftGame === 'game' && gamePlay) return { title: FIRE_GAMES[gamePlay.name]?.title ?? 'the game', open: showGame };
   if (state.leftGame === 'casino' && casino.channelId !== null) return { title: 'the casino', open: () => openCasino() };
   if (state.leftGame === 'fishing' && fishing.play) return { title: 'Fireside Angler', open: openFishing };
+  if (state.leftGame === 'theater' && theater.state) return { title: theater.state.movie.name, open: openTheater };
   return null;
 }
 function backToGame() {

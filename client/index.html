@@ -372,6 +372,14 @@
                 <ol id="listen-queue"></ol>
               </div>
             </section>
+            <section class="game-panel hidden" id="theater-panel" aria-label="Movie at the fire">
+              <span class="game-panel-icon" aria-hidden="true">🎬</span>
+              <div class="game-panel-info">
+                <b id="theater-panel-title"></b>
+                <span class="small muted" id="theater-panel-sub"></span>
+              </div>
+              <button class="btn" id="theater-panel-open">Watch</button>
+            </section>
             <section class="game-panel hidden" id="game-panel" aria-label="Game at the fire">
               <span class="game-panel-icon" id="game-panel-icon" aria-hidden="true">🍉</span>
               <div class="game-panel-info">
@@ -400,6 +408,7 @@
                 <span class="fc share"><button class="fire-btn" id="fire-screen"></button><span>Share</span></span>
                 <span class="fc board"><button class="fire-btn" id="fire-board" title="Soundboard" aria-label="Soundboard"></button><span>Sounds</span></span>
                 <span class="fc"><button class="fire-btn" id="fire-listen" title="Listen together" aria-label="Listen together"></button><span>Listen</span></span>
+                <span class="fc"><button class="fire-btn" id="fire-theater" title="Watch a movie together" aria-label="Watch a movie together"></button><span>Movie</span></span>
                 <span class="fc"><button class="fire-btn" id="fire-game" title="Play a game together" aria-label="Play a game together"></button><span>Games</span></span>
                 <span class="fc hidden"><button class="fire-btn" id="fire-flip" title="Flip camera" aria-label="Flip camera"></button><span>Flip</span></span>
                 <span class="fc"><button class="fire-btn" id="fire-settings" title="Microphone, speakers and camera" aria-label="Voice and video settings"></button><span>Settings</span></span>
@@ -445,6 +454,48 @@
             <button class="btn secondary" id="fishing-back">Back to the fire</button>
           </header>
           <div class="game-frame" id="fishing-frame"></div>
+        </div>
+        <!-- The movie theater (theater.js): the hearth's shelf of movies, and the one playing at the fire. -->
+        <div class="theater-view">
+          <header class="stage-head">
+            <h1 id="theater-title">Movie night</h1>
+            <button class="btn secondary" id="theater-back">Back to the fire</button>
+          </header>
+          <div class="cinema">
+            <div class="curtain left" aria-hidden="true"></div>
+            <div class="curtain right" aria-hidden="true"></div>
+            <div class="cinema-middle">
+              <div class="theater-screen" id="theater-screen">
+                <video id="theater-video" class="hidden" playsinline preload="auto"></video>
+                <button class="btn theater-tap hidden" id="theater-tap">Start the movie</button>
+                <section class="theater-shelf" id="theater-shelf" aria-labelledby="theater-shelf-head">
+                  <h2 id="theater-shelf-head">The shelf</h2>
+                  <p class="small" id="theater-shelf-note"></p>
+                  <ul class="theater-movies" id="theater-movies"></ul>
+                  <div class="theater-upload hidden" id="theater-upload">
+                    <div class="theater-upload-row"><b id="theater-upload-name"></b><button class="link-btn" id="theater-upload-cancel">Cancel</button></div>
+                    <progress id="theater-upload-bar" max="1" value="0" aria-labelledby="theater-upload-name"></progress>
+                    <span class="small" id="theater-upload-state" aria-live="polite"></span>
+                  </div>
+                  <button class="btn" id="theater-add">Add a movie</button>
+                  <p class="small muted" id="theater-add-hint"></p>
+                  <input type="file" id="theater-file" accept="video/mp4,.mp4,.m4v,.mov" hidden />
+                </section>
+              </div>
+              <div class="theater-controls hidden" id="theater-controls">
+                <button class="icon-btn" id="theater-back10" title="Back 10 seconds" aria-label="Back 10 seconds"><svg viewBox="0 0 24 24"><path d="M12 5V2L7 6l5 4V7a6 6 0 1 1-6 6H4a8 8 0 1 0 8-8Z"/></svg></button>
+                <button class="icon-btn theater-play" id="theater-toggle"></button>
+                <button class="icon-btn" id="theater-fwd10" title="Forward 10 seconds" aria-label="Forward 10 seconds"><svg viewBox="0 0 24 24"><path d="M12 5V2l5 4-5 4V7a6 6 0 1 0 6 6h2a8 8 0 1 1-8-8Z"/></svg></button>
+                <input type="range" class="theater-seek" id="theater-seek" min="0" max="1" step="1" value="0" aria-label="Where in the movie, for everyone" />
+                <span class="small theater-time" id="theater-time">0:00 / 0:00</span>
+                <input type="range" class="theater-volume" id="theater-volume" min="0" max="100" step="5" aria-label="Your volume for the movie" title="Your volume (only for you)" />
+                <button class="icon-btn" id="theater-full" title="Full screen" aria-label="Full screen"><svg viewBox="0 0 24 24"><path d="M4 4h6v2H6v4H4V4Zm10 0h6v6h-2V6h-4V4ZM4 14h2v4h4v2H4v-6Zm14 0h2v6h-6v-2h4v-4Z"/></svg></button>
+                <span class="small theater-by" id="theater-by"></span>
+                <button class="link-btn danger-link" id="theater-stop">Stop</button>
+              </div>
+              <div class="theater-seats" id="theater-seats" aria-label="At the fire"></div>
+            </div>
+          </div>
         </div>
         <div class="video-view">
           <header class="stage-head">
@@ -554,6 +605,7 @@
   <script src="js/casino-battles.js"></script>
   <script src="js/casino-trade.js"></script>
   <script src="js/fishing.js"></script>
+  <script src="js/theater.js"></script>
   <script src="js/game-popout.js"></script>
   <script src="js/reading.js"></script>
   <script src="js/chat-extras.js"></script>

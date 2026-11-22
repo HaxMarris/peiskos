@@ -392,6 +392,7 @@ function leaveVoice(quiet) {
   state.firesideOpen = false;
   renderFireside();
   stopListen();
+  stopTheater();
   stopGame();
   stopCasino();
   stopFishing();
@@ -528,7 +529,7 @@ function renderVoiceBar() {
   $('#fire-lock').classList.toggle('hidden', !!status || !sealed);
   // Direct-message calls have no soundboard (sounds belong to a burrow).
   $('#fire-board').parentElement.classList.toggle('hidden', !fireServer() || isDm(fireServer()));
-  for (const id of ['#fire-board', '#fire-listen']) $(id).disabled = !voice.room || !!status;
+  for (const id of ['#fire-board', '#fire-listen', '#fire-theater']) $(id).disabled = !voice.room || !!status;
   renderFire();
 }
 
@@ -824,7 +825,7 @@ function openStage() {
 function closeStage() {
   if (!state.stageOpen) return;
   state.stageOpen = false;
-  state.leftGame = ['game', 'casino', 'fishing'].includes(state.stageShow) ? state.stageShow : null;
+  state.leftGame = ['game', 'casino', 'fishing', 'theater'].includes(state.stageShow) ? state.stageShow : null;
   focusKey = null;
   state.firesideOpen = false;
   $('#stage').classList.add('hidden');
