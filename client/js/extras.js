@@ -1,5 +1,5 @@
 // The fun extras: the seasons around the fire, decorations unlocked by time at the fire, toasting
-// marshmallows, birthdays, each hearth's message of the day, and the year in review.
+// marshmallows, birthdays and each hearth's message of the day. The year in review is recap.js.
 // Part of Peiskos's client: plain scripts that index.html loads in order, sharing one global scope.
 'use strict';
 
@@ -354,6 +354,8 @@ async function openFireDecor() {
       <button type="button" class="decor-pick${mine.item || petOut ? '' : ' chosen'}" data-item="" aria-pressed="${!mine.item && !petOut}"><span class="decor-art">·</span><span>Nothing</span><span class="small muted">Just you</span></button>
       ${mine.items.map(item).join('')}
     </div>
+    ${state.voice && fireServer() && !isDm(fireServer()) ? `<div class="admin-row"><button type="button" class="btn secondary" id="decor-recap">Show ${recapYear()} at the fire</button>
+      <span class="small muted">Everyone here swipes through ${escapeHtml(fireServer().name)}'s year with you.</span></div>` : ''}
     <div class="admin-row"><button type="button" class="btn secondary" id="decor-toast" ${canToast && state.voice ? '' : 'disabled'}>🍡 Toast a marshmallow</button>
       <span class="small muted">${canToast ? (state.voice ? 'Or click the fire.' : 'Sit down at a fire first.') : `Marshmallows unlock after ${mine.marshmallowHours} hours at the fire.`}</span></div>
     ${pets ? `<h3>Premium pets</h3>
@@ -478,6 +480,7 @@ async function openFireDecor() {
     } catch (err) { alertError(err); }
   };
   $('#decor-toast').onclick = () => { closeModal(); toastMarshmallow(); };
+  $('#decor-recap')?.addEventListener('click', () => { closeModal(); openRecap(fireServer().id, recapYear(), { together: true }).then(() => recapState.together && recapSend()); });
 }
 $('#fire-decor').onclick = openFireDecor;
 
@@ -569,7 +572,7 @@ function renderToday(s) {
   const month = new Date().getMonth();
   if (month === 11 || month === 0) {
     const year = month === 11 ? new Date().getFullYear() : new Date().getFullYear() - 1;
-    parts.push(`<button type="button" class="today-review" data-year="${year}">✨ ${escapeHtml(s.name)}'s ${year} in review</button>`);
+    parts.push(`<button type="button" class="today-review" data-year="${year}">✨ ${escapeHtml(s.name)}: ${year} at the fire</button>`);
   }
   box.classList.toggle('hidden', !parts.length);
   box.innerHTML = parts.join('');
@@ -579,7 +582,7 @@ function renderToday(s) {
     const m = motd[dayNumber() % motd.length];
     window.open(state.serverUrl + m.picture, '_blank', 'noopener');
   });
-  box.querySelector('.today-review')?.addEventListener('click', (e) => openYearReview(s.id, Number(e.currentTarget.dataset.year)));
+  box.querySelector('.today-review')?.addEventListener('click', (e) => openRecap(s.id, Number(e.currentTarget.dataset.year)));
 }
 
 /** Goes to the hearth's welcome room (or the first room you can write in) with a wish ready to send. */
@@ -645,40 +648,6 @@ function openMotd(serverId) {
     if (text === null) return;
     try { done(await api(`/api/motd/${m.id}`, { method: 'PATCH', body: { text } })); } catch (err) { fail(err); }
   };
-}
-
-// ---------------------------------------------------------------- the year in review
-
-async function openYearReview(serverId, year = new Date().getFullYear()) {
-  const s = state.servers.get(serverId);
-  if (!s) return;
-  let r;
-  try { r = await api(`/api/servers/${serverId}/review/${year}`); } catch (err) { return alertError(err); }
-  const n = (x) => Number(x).toLocaleString();
-  const day = r.busiestDay ? new Date(`${r.busiestDay.day}T12:00:00Z`).toLocaleDateString(undefined, { day: 'numeric', month: 'long' }) : null;
-  const list = (items, line) => items.length ? `<ol class="review-list">${items.map(line).join('')}</ol>` : '<p class="small muted">Nothing yet.</p>';
-  const empty = !r.messages && r.fireHours < 0.05;
-  modal(`<div class="review-head">
-      <span class="review-kicker">${escapeHtml(s.name)}</span>
-      <h2>${year} in review</h2>
-      ${r.years.length > 1 ? `<select id="review-year" aria-label="Year">${r.years.map((y) => `<option ${y === year ? 'selected' : ''}>${y}</option>`).join('')}</select>` : ''}
-    </div>
-    ${empty ? '<p class="muted">Nothing to look back on yet.</p>' : `
-    <div class="review-stats">
-      <div><b>${n(r.messages)}</b><span>messages</span></div>
-      <div><b>${r.fireHours < 1 ? Math.round(r.fireHours * 60) : n(Math.round(r.fireHours))}</b><span>${r.fireHours < 1 ? 'minutes' : 'hours'} around the fire</span></div>
-      <div><b>${n(r.newPeople)}</b><span>new ${r.newPeople === 1 ? 'face' : 'faces'}</span></div>
-    </div>
-    <div class="review-grid">
-      <section><h3>Busiest rooms</h3>${list(r.topRooms, (x) => `<li><span>#${escapeHtml(x.name)}</span><span class="muted">${n(x.messages)}</span></li>`)}</section>
-      <section><h3>Favourite reactions</h3>${r.topReactions.length ? `<div class="review-emoji">${r.topReactions.map((x) => `<span title="${n(x.n)} times">${emojiHtml(x.emoji)}<small>${n(x.n)}</small></span>`).join('')}</div>` : '<p class="small muted">No reactions yet.</p>'}</section>
-      <section><h3>Most talkative</h3>${list(r.topPeople, (x) => `<li><span>${escapeHtml(x.name)}</span><span class="muted">${n(x.n)}</span></li>`)}</section>
-      <section><h3>Keepers of the fire</h3>${list(r.topFire, (x) => `<li><span>${escapeHtml(x.name)}</span><span class="muted">${hoursText(x.hours)}</span></li>`)}</section>
-    </div>
-    ${r.mostLoved ? `<section class="review-loved"><h3>Most loved message</h3><blockquote>${escapeHtml(r.mostLoved.content)}</blockquote><span class="small muted">${escapeHtml(r.mostLoved.author)} · ${n(r.mostLoved.reactions)} reactions</span></section>` : ''}
-    ${day ? `<p class="small muted">The busiest day was ${escapeHtml(day)}, with ${n(r.busiestDay.n)} messages.</p>` : ''}
-    <section class="review-you"><h3>You</h3><p>${n(r.you.messages)} messages, ${n(r.you.reactions)} reactions and ${hoursText(r.you.fireHours)} at the fire.</p></section>`}`, 'review-modal');
-  $('#review-year')?.addEventListener('change', (e) => openYearReview(serverId, Number(e.target.value)));
 }
 
 // ---------------------------------------------------------------- best of and the photo album
