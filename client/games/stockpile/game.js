@@ -137,6 +137,7 @@ function act(uid, a){
       G.winner = seat.uid;
       G.log = seat.name + ' emptied their stockpile';
       phase = 'over';
+      Peiskos.result(G.seats.map(s=>({id:s.uid, score: s.uid===G.winner ? 1 : 0})));
     } else if(a.src === 'hand' && !seat.hand.length){
       refill(seat);
     }

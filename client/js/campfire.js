@@ -899,6 +899,7 @@ function renderFire() {
   anchorSeats(ring);
   fireEventScene(ring, s, ch, ids);
   capsuleScene(ring, s, ch);
+  leagueBannerScene(ring, s);
 }
 
 // The fireside chat is in view: docked beside the fire on a wide screen, or opened over it.

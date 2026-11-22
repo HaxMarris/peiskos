@@ -1022,6 +1022,9 @@ function handleEvent(ev) {
     case 'game_msg':
       onGameMessage(ev);
       break;
+    case 'league_points':
+      onLeaguePoints(ev);
+      break;
     case 'fishing_dock':
       onFishingDock(ev);
       break;

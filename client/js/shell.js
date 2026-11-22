@@ -372,6 +372,7 @@ function openPerson(s, m) {
       ${isHost(s, m.id) ? '<span class="owner-badge">host</span>' : top ? `<span class="owner-badge role" style="--role:${escapeHtml(top.color)}">${escapeHtml(top.name)}</span>` : ''}
       <span class="person-facts" id="profile-extra"></span>
       <div class="achievements hidden" id="profile-badges"></div>
+      <div class="achievements hidden" id="profile-trophies"></div>
     </div>
     ${sharing?.screen || sharing?.camera ? `<button class="btn" id="person-watch">${sharing.screen ? 'Watch stream' : 'See camera'}</button>` : ''}
     ${inVoice && !me ? `<div class="person-sliders">
@@ -459,6 +460,10 @@ function openPerson(s, m) {
       $('#profile-badges').innerHTML = `<span class="small muted achievements-count">${me ? `${got} of ${badges.length} achievements` : `Achievements · ${got}`}</span>${badges.map((b) =>
         `<span class="achievement${b.earned ? '' : ' locked'}" tabindex="0" role="img" aria-label="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}" title="${escapeHtml(`${b.title}: ${b.how}${b.earned ? '' : ' (not yet)'}`)}">${emojiHtml(b.icon)}</span>`).join('')}`;
       $('#profile-badges').classList.remove('hidden');
+    }
+    if (p.trophies?.length && $('#profile-trophies')) {
+      $('#profile-trophies').innerHTML = trophiesHtml(p.trophies);
+      $('#profile-trophies').classList.remove('hidden');
     }
     redraw();
   }).catch(() => {});
