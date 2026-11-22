@@ -98,6 +98,7 @@ export function privacyPage(o: LegalOptions) {
       <li><b>Where you are:</b> the hearths and groups you're in, your roles and nicknames, your friends and the people you've blocked, and what you've read, which is how other people in a conversation can see you've seen a message.</li>
       <li><b>Logins:</b> for each device you're logged in on, a description of the browser or app, its IP address, and when it was last used, so you can see them under Login and security and log them out. Logins you don't use for 30 days end on their own. Passkeys and two-step login keep only what's needed to check them.</li>
       <li><b>Unsent messages:</b> a message you've started typing but not sent, one per room, so it's there on your other devices. It's deleted when you send it or clear the box.</li>
+      <li><b>Clips at the fire:</b> only if everyone at a fire says yes to clips, and only for people who said yes. While clips are on, your own app records your own voice and sends it to the server, which deletes it again within about a minute and a half unless someone presses "Clip that" to keep the last 30 seconds. Clips get a written-out version (transcript) made later on the server itself, by a program that runs there. Anyone who can see that fire can listen to its clips. They stay until someone who said yes, or a moderator, deletes them. You can take yourself out at any time, which cuts your voice out of the clips made while you were in.</li>
       <li><b>Time at the fire:</b> when you join and leave voice, which unlocks fire decorations, achievements and the year in review.</li>
       <li><b>Games:</b> in each hearth, your play chips, the items, pets, seats and backgrounds you've won or unlocked, the fish you've caught, your scores, and any trivia questions or words you add for your hearth's games. Drawings, clues and answers during a game are passed between the players and aren't saved.</li>
       <li><b>Achievements:</b> the badges on your profile, worked out from the things above.</li>
@@ -113,7 +114,7 @@ export function privacyPage(o: LegalOptions) {
 
     <h2>What Peiskos doesn't keep</h2>
     <ul>
-      <li>Voice calls, video and screen shares aren't recorded. They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
+      <li>Voice calls, video and screen shares aren't recorded, except for clips everyone at the fire agreed to (above). They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
       <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire, unless the hearth's host chose to keep that fire's chat.</li>
       <li>Your location, when you share it on the way to an event (meet-up). Your device sends it only while Peiskos is open, and only after you tap Share. The server keeps the latest one in memory and never saves it. The others going see how far you are from the meeting place and in which direction, not where you are. It's dropped when you stop, when you arrive, after 15 minutes without an update, and 3 hours after the event starts.</li>
       <li>The server doesn't keep a record of the pages you open or what you do in the app beyond what's listed above.</li>

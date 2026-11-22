@@ -21,6 +21,7 @@ go by.
 | `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |
 | `stockpile.test.mjs` | Two whole rounds of Stockpile |
 | `recap.test.mjs` | The year at the fire shown at a fire: the offer to watch, cards turning for both, stopping it |
+| `tapes.test.mjs` | Clips at the fire: asking everyone, Clip that, the clips list, a no keeping them off |
 | `casino.test.mjs` | Chips, blackjack, slots, cases, the poker table, a case battle |
 | `league.test.mjs` | The hearth league: last season's champion on a pennant at the fire, the standings it opens, turning the league off |
 
