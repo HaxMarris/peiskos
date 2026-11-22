@@ -8,6 +8,7 @@ import { closeRoom, openRooms, readWebhook, removeFromRoom, roomIdentities, type
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { WebSocket } from 'ws';
 import type { AppOptions, Channel, User } from './app.ts';
+import { isGuestIdentity } from './joint-fires.ts';
 
 export interface FiresContext {
   opts: AppOptions;
@@ -20,11 +21,15 @@ export interface FiresContext {
   userById: (id: number) => User | undefined;
   usersInVoice: (channelId: number) => number[];
   voiceSockets: Map<number, WebSocket>;
+  /** Guests from other servers that LiveKit has at a fire (joint-fires.ts checks and seats them). */
+  guestsHere: (channelId: number, identities: string[]) => void;
+  /** Someone here taken out of a fire that lives on another server: that server is told. */
+  jointKick: (userId: number, channelId: number) => void;
 }
 
 export function firesInLiveKit(ctx: FiresContext) {
   const {
-    opts, canSee, channelById, checkSeat, db, inVoice, setVoice, userById, usersInVoice, voiceSockets,
+    opts, canSee, channelById, checkSeat, db, inVoice, setVoice, userById, usersInVoice, voiceSockets, guestsHere, jointKick,
   } = ctx;
 
   // LiveKit only checks who may join when they join, so people who lose access are disconnected
@@ -49,9 +54,13 @@ export function firesInLiveKit(ctx: FiresContext) {
     if (channelId === undefined) return;
     if (inVoice.get(userId) === channelId) setVoice(userId, null);
     tellLiveKit(`take user ${userId} out of room-${channelId}`, (v) => removeFromRoom(v, `room-${channelId}`, String(userId)));
+    jointKick(userId, channelId);
   };
   const closeVoiceRoom = (channelId: number) => {
-    for (const [u, c] of inVoice) if (c === channelId) setVoice(u, null);
+    for (const [u, c] of inVoice) if (c === channelId) {
+      setVoice(u, null);
+      jointKick(u, channelId);
+    }
     tellLiveKit(`close room-${channelId}`, (v) => closeRoom(v, `room-${channelId}`));
   };
   const voiceRoomIds = (serverId: number) =>
@@ -77,7 +86,10 @@ export function firesInLiveKit(ctx: FiresContext) {
     liveKitQuiet = false;
     // The room may have been deleted while LiveKit answered (deleting it closes it there too).
     if (!channelById(channelId)) return;
+    // Guests from other servers are checked against their codes instead.
+    guestsHere(channelId, identities);
     for (const identity of identities) {
+      if (isGuestIdentity(identity)) continue;
       const userId = Number(identity);
       if (inVoice.get(userId) === channelId) continue;
       // Lost their place in the hearth after getting a pass: out of LiveKit too.

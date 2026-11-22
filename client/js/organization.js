@@ -194,6 +194,7 @@ function openRoomsMenu() {
     { label: 'New room', run: openNewRoom },
     { label: 'New heading', run: () => openHeadingEditor(s, null) },
     { label: 'Arrange rooms', run: () => openArrange(s.id) },
+    ...(state.jointFires?.join && can(s, 'burrow') ? [{ label: "Add another group's fire", run: openAddJointFire }] : []),
   ]);
 }
 

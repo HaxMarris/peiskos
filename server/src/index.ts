@@ -56,6 +56,11 @@ const app = createApp({
   fcm: process.env.FCM_SERVICE_ACCOUNT ? { serviceAccount: process.env.FCM_SERVICE_ACCOUNT } : undefined,
   legal: { name: process.env.LEGAL_NAME || undefined, contact: process.env.LEGAL_CONTACT || undefined },
   gifs: process.env.KLIPY_API_KEY ? { apiKey: process.env.KLIPY_API_KEY, rating: process.env.GIF_RATING || undefined } : undefined,
+  // Fires shared with other Peiskos servers: off unless the admin turns it on (see joint-fires.ts).
+  jointFires: {
+    host: process.env.JOINT_FIRES === 'on',
+    servers: (process.env.JOINT_FIRE_SERVERS ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  },
   voice:
     process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET
       ? {
@@ -80,4 +85,5 @@ app.listen(port, () => {
   if (!process.env.KLIPY_API_KEY) console.log('The GIF picker is off (set KLIPY_API_KEY to turn it on).');
   if (!process.env.SMTP_URL) console.log("Email is off, so people can't reset a forgotten password themselves (set SMTP_URL to turn it on).");
   if (!process.env.LIVEKIT_API_KEY) console.log('Voice rooms are off (set LIVEKIT_API_KEY and LIVEKIT_API_SECRET to turn them on).');
+  if (process.env.JOINT_FIRES === 'on' && !process.env.PUBLIC_URL) console.log("Joint fires are on, but can't be hosted until PUBLIC_URL is set.");
 });

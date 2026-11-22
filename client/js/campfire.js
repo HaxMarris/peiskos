@@ -251,7 +251,7 @@ async function onRoomData(voice, payload, participant) {
     const opened = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: payload.slice(1, 13) }, key, payload.slice(13));
     msg = JSON.parse(new TextDecoder().decode(opened));
   } catch { return; }
-  const from = Number(participant.identity);
+  const from = pidOf(participant.identity);
   if (msg.t === 'watch' && Array.isArray(msg.ids)) {
     watchersOf(voice).set(from, new Set(msg.ids.map(Number)));
     renderStage();
@@ -288,7 +288,7 @@ async function reportWatching() {
 function viewersOf(id) {
   const voice = state.voice;
   if (!voice) return [];
-  const here = new Set([...(voice.room?.remoteParticipants.keys() ?? [])].map(Number));
+  const here = new Set([...(voice.room?.remoteParticipants.keys() ?? [])].map(pidOf));
   const ids = [...watchersOf(voice)].filter(([who, set]) => here.has(who) && set.has(id)).map(([who]) => who);
   if (id !== state.me.id && [...tiles.values()].some((t) => t.kind === 'screen' && t.id === id && t.track)) ids.push(state.me.id);
   return ids;
@@ -540,7 +540,7 @@ function startClips(t, quiet = false) {
   const type = clipType();
   if (!t.track || !type) return toast("This browser can't record clips.");
   if (!clipLimit()) return toast("Your roles can't share files here, so there's nowhere to post a clip.");
-  const p = state.voice?.room?.remoteParticipants.get(String(t.id));
+  const p = state.voice?.room?.remoteParticipants.get(identityOf(t.id));
   const sound = p?.getTrackPublication(LK.Track.Source.ScreenShareAudio)?.track?.mediaStreamTrack;
   const stream = new MediaStream([t.track.mediaStreamTrack, ...(sound ? [sound] : [])]);
   // A bit rate that keeps the longest clip under the upload limit.
@@ -801,7 +801,7 @@ function renderFire() {
       ring.append(el);
     }
     place(seat.el, i);
-    const participant = !room ? null : me ? room.localParticipant : room.remoteParticipants.get(String(id));
+    const participant = !room ? null : me ? room.localParticipant : room.remoteParticipants.get(identityOf(id));
     const camPub = participant && LK ? participant.getTrackPublication(LK.Track.Source.Camera) : null;
     const camTrack = camPub && !camPub.isMuted ? camPub.track ?? null : null;
     const sharing = state.sharing.get(id);
@@ -846,6 +846,9 @@ function renderFire() {
     if (sharing?.screen) wrap.insertAdjacentHTML('beforeend', '<span class="seat-live">LIVE</span>');
     seat.el.className = 'seat' + (me ? ' me' : '') + (speaking ? ' speaking' : '') + (camTrack ? ' has-video' : '');
     seat.el.querySelector('.seat-name').textContent = me ? `${name} (you)` : name;
+    // Someone from another server's group: which one, under their name.
+    const from = visitorTag(id);
+    if (from) seat.el.querySelector('.seat-name').append(' ', from);
     const v = me ? 1 : volumeFor(id);
     const statusText = modMuted ? 'Muted by a moderator' : deafened ? 'Deafened' : muted ? 'Muted' : speaking ? 'Talking' : camTrack ? 'Camera on' : v !== 1 ? `${Math.round(v * 100)}% volume` : '';
     const statusEl = seat.el.querySelector('.seat-status');
@@ -961,7 +964,7 @@ function setStreamVolume(userId, value) {
   if (value === 0) delete streamVolumes[userId];
   else streamVolumes[userId] = value;
   store.set('streamVolumes', JSON.stringify(streamVolumes));
-  const p = state.voice?.room?.remoteParticipants.get(String(userId));
+  const p = state.voice?.room?.remoteParticipants.get(identityOf(userId));
   if (p) applyVolume(p, window.LivekitClient.Track.Source.ScreenShareAudio, value);
 }
 
@@ -983,7 +986,7 @@ const heard = (value) => (state.voice?.deafened ? 0 : value * voicePrefs.outputV
 function applyAllVolumes() {
   const LK = window.LivekitClient;
   for (const p of state.voice?.room?.remoteParticipants.values() ?? []) {
-    const id = Number(p.identity);
+    const id = pidOf(p.identity);
     applyVolume(p, LK.Track.Source.Microphone, volumeFor(id));
     applyVolume(p, LK.Track.Source.ScreenShareAudio, streamVolumeFor(id));
   }
@@ -1182,7 +1185,8 @@ function keysChanged(voice) {
     const index = (vc.index + 1) % KEYRING_SIZE;
     const members = new Set(voiceServer()?.members.map((m) => String(m.id)) ?? []);
     for (const [identity, pub] of vc.pubs) {
-      if (!members.has(identity)) continue; // removed from the burrow: no more keys, even if still connected
+      // Removed from the burrow: no more keys, even if still connected. (Guests at a joint fire aren't members.)
+      if (!members.has(identity) && !jointKeyOk(voice, identity)) continue;
       const iv = crypto.getRandomValues(new Uint8Array(12));
       const sealed = await crypto.subtle.encrypt(
         { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(`${index}:${identity}`) },
@@ -1242,7 +1246,7 @@ function setVolume(userId, value) {
   if (value === 1) delete volumes[userId];
   else volumes[userId] = value;
   store.set('volumes', JSON.stringify(volumes));
-  const p = state.voice?.room?.remoteParticipants.get(String(userId));
+  const p = state.voice?.room?.remoteParticipants.get(identityOf(userId));
   if (p) applyVolume(p, window.LivekitClient.Track.Source.Microphone, value);
 }
 
@@ -1258,6 +1262,7 @@ function openVolume(anchor, userId, name, s = null, c = null) {
     <div class="volume-foot"><span class="small muted">Only changes it for you</span><button class="link-btn" id="volume-reset">Reset</button></div>`;
   pop.onclick = (e) => e.stopPropagation();
   voiceModTools(pop, s, c, userId, name);
+  guestModTools(pop, s, c, userId);
   document.body.append(pop);
   const r = anchor.getBoundingClientRect();
   pop.style.left = `${Math.min(r.left, window.innerWidth - pop.offsetWidth - 8)}px`;

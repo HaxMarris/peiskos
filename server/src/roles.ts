@@ -19,6 +19,8 @@ export interface RolesContext {
   closeVoiceRoom: (channelId: number) => void;
   db: Db;
   dmBlockCheck: (serverId: number, userId: number) => void;
+  /** A pass to a fire joined from another server (joint-fires.ts), or null for this server's own fires. */
+  jointPass: (channel: Channel, user: User, canSpeak: boolean) => Promise<Json | null>;
   fireside: Map<number, Json[]>;
   groupIn: (serverId: number, id: unknown) => number;
   isBotUser: (id: number) => boolean;
@@ -47,7 +49,7 @@ export interface RolesContext {
 export function customRoles(ctx: RolesContext) {
   const {
     accessChanged, accessList, allowed, audit, can, channelById, checkSeat, cleanName, cleanUploadMb,
-    closeVoiceRoom, db, dmBlockCheck, fireside, groupIn, isBotUser, isMember, manageableThread, now, opts,
+    closeVoiceRoom, db, dmBlockCheck, fireside, groupIn, jointPass, isBotUser, isMember, manageableThread, now, opts,
     removeBot, removeFiles, removeMember, renameThread, roleList, roleName, route, sendServerUpdate, sendTo,
     serverMuted, serverSummary, setAccess, standing, threadDeleted, visibleRoom, voiceTokens,
   } = ctx;
@@ -308,13 +310,16 @@ export function customRoles(ctx: RolesContext) {
     return { ok: true };
   });
 
-  route('POST', '/api/channels/:id/voice', ({ user, params }) => {
+  route('POST', '/api/channels/:id/voice', async ({ user, params }) => {
     const channel = visibleRoom(Number(params[0]), user.id);
     if (channel.kind !== 'voice') throw new HttpError(400, "That's not a fire");
     if (!opts.voice) throw new HttpError(503, "Fires aren't set up on this server yet. Tell whoever runs it.");
     dmBlockCheck(channel.serverId, user.id);
     checkSeat(channel, user.id);
     const canSpeak = !serverMuted(channel.serverId, user.id);
+    // Another server's fire, joined from here: the pass comes from that server.
+    const joint = await jointPass(channel, user, canSpeak);
+    if (joint) return joint;
     voiceTokens.set(user.id, { channelId: channel.id, at: Date.now() });
     return { url: opts.voice.url ?? null, token: voiceToken(opts.voice, user, `room-${channel.id}`, undefined, canSpeak), canSpeak };
   });

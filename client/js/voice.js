@@ -56,8 +56,11 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
   if (!rejoin) goToVoice(); // sit down at the fire
   try {
     const LK = await loadLivekit();
-    const { url, token, canSpeak = true } = await api(`/api/channels/${channelId}/voice`, { method: 'POST', timeout: 15000 });
+    const { url, token, canSpeak = true, joint = null } = await api(`/api/channels/${channelId}/voice`, { method: 'POST', timeout: 15000 });
     if (state.voice !== voice) return;
+    // Another server's fire: the call is on its LiveKit, where we have a guest's identity.
+    voice.joint = joint;
+    applyJointLimits();
     if (!LK.isE2EESupported()) throw new Error("this app can't encrypt voice. Update Peiskos or use a current browser.");
     // Muted for everyone by a moderator: your mic stays off until they let you speak.
     voice.serverMuted = !canSpeak;
@@ -86,7 +89,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     room
       .on(LK.RoomEvent.TrackSubscribed, (track, pub, participant) => {
         if (track.kind !== 'audio') return renderStage();
-        const id = Number(participant.identity);
+        const id = pidOf(participant.identity);
         const volume = heard(pub.source === LK.Track.Source.ScreenShareAudio ? streamVolumeFor(id) : volumeFor(id));
         if (volume === 0) pub.setSubscribed(false); // muted by you
         else {
@@ -134,7 +137,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       .on(LK.RoomEvent.ActiveSpeakersChanged, (speakers) => {
         // The voice server's view, which runs most of a second behind; only used for anyone we
         // can't hear ourselves (see watchTalking).
-        voice.serverSpeakers = new Set(speakers.map((p) => Number(p.identity)));
+        voice.serverSpeakers = new Set(speakers.map((p) => pidOf(p.identity)));
         updateSpeaking(voice);
       })
       .on(LK.RoomEvent.TrackMuted, (pub, p) => (pub.kind === 'audio' && pub.source === LK.Track.Source.Microphone ? setMuted(p, true) : renderStage()))
@@ -170,15 +173,15 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
       .on(LK.RoomEvent.DataReceived, (payload, participant, kind, topic) => (topic === ROOM_TOPIC ? onRoomData(voice, payload, participant) : onCryptoMessage(voice, payload, participant, topic)))
       .on(LK.RoomEvent.ParticipantDisconnected, (p) => {
         vc.pubs.delete(p.identity);
-        voice.weak.delete(Number(p.identity));
-        watchersOf(voice).delete(Number(p.identity));
-        thumbsOf(voice).delete(Number(p.identity));
+        voice.weak.delete(pidOf(p.identity));
+        watchersOf(voice).delete(pidOf(p.identity));
+        thumbsOf(voice).delete(pidOf(p.identity));
         keysChanged(voice);
         renderStage();
       })
       // How well each person's call is getting through, as the voice server measures it.
       .on(LK.RoomEvent.ConnectionQualityChanged, (quality, p) => {
-        const id = Number(p.identity);
+        const id = pidOf(p.identity);
         const weak = quality === LK.ConnectionQuality.Poor || quality === LK.ConnectionQuality.Lost;
         if (weak === voice.weak.has(id)) return;
         if (weak) voice.weak.add(id);
@@ -325,7 +328,7 @@ function watchTalking(voice) {
     const now = performance.now();
     const present = new Set();
     for (const p of [room.localParticipant, ...room.remoteParticipants.values()]) {
-      const id = Number(p.identity);
+      const id = pidOf(p.identity);
       const track = micOf(p);
       let m = meters.get(id);
       if (m && m.track !== track) {
@@ -370,7 +373,7 @@ function updateSpeaking(voice) {
 }
 
 function setMuted(participant, muted) {
-  const id = Number(participant.identity);
+  const id = pidOf(participant.identity);
   if (muted) state.mutedInVoice.add(id);
   else state.mutedInVoice.delete(id);
   renderChannels();
@@ -382,6 +385,7 @@ function leaveVoice(quiet) {
   const voice = state.voice;
   if (!voice) return;
   state.voice = null;
+  applyJointLimits();
   // A try at getting back in that failed: still getting back in, between tries.
   voicePhase.to(state.rejoin ? 'rejoining' : 'idle');
   if (quiet !== true) playSound('leave');
@@ -515,7 +519,7 @@ function renderVoiceBar() {
   // Only while the camera's on, and only where there's a second camera to turn to.
   $('#fire-flip').parentElement.classList.toggle('hidden', !camera || !canFlipCamera);
   $('#voice-screen').title = screen ? 'Stop sharing your screen' : 'Share your screen';
-  for (const id of ['#voice-camera', '#voice-screen', '#voice-watch']) $(id).disabled = !voice.room || !!status;
+  for (const id of ['#voice-camera', '#voice-screen', '#voice-watch']) $(id).disabled = !voice.room || !!status || !!voice.joint;
   // The same buttons under the fire.
   for (const name of ['mute', 'deafen', 'camera', 'screen']) {
     const from = $(`#voice-${name}`), to = $(`#fire-${name}`);
@@ -612,7 +616,7 @@ function nameOf(userId, fallback = '?') {
     const m = s.members.find((m) => m.id === userId);
     if (m) return m.displayName || m.username;
   }
-  return fallback;
+  return visitorOf(userId)?.name ?? fallback;
 }
 
 function mediaError(err, what) {
@@ -861,7 +865,7 @@ function renderStage() {
   const sharing = new Map();
   for (const p of people) {
     const camera = !!showing(p, LK.Track.Source.Camera), screen = !!showing(p, LK.Track.Source.ScreenShare);
-    if (camera || screen) sharing.set(Number(p.identity), { camera, screen });
+    if (camera || screen) sharing.set(pidOf(p.identity), { camera, screen });
   }
   const others = [...sharing.keys()].some((id) => id !== state.me?.id);
   $('#voice-watch').classList.toggle('has-video', others && !state.stageOpen);
@@ -893,7 +897,7 @@ function renderStage() {
     const ch = [...state.servers.values()].flatMap((s) => s.channels).find((c) => c.id === state.voice.channelId);
     $('#video-title').textContent = ch?.name ?? 'Voice';
     for (const p of people) {
-      const id = Number(p.identity);
+      const id = pidOf(p.identity);
       const me = p === room.localParticipant;
       const name = nameOf(id, p.name || '?');
       const screen = showing(p, LK.Track.Source.ScreenShare);
