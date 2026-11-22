@@ -810,6 +810,7 @@ html.tile-full, html.tile-full body { overflow: hidden; }
 .stage[data-show="game"] .video-view, .stage[data-show="game"] .fire-space, .stage:not([data-show="game"]) .game-view { display: none; }
 .stage[data-show="casino"] .video-view, .stage[data-show="casino"] .fire-space, .stage:not([data-show="casino"]) .casino-view { display: none; }
 .stage[data-show="fishing"] .video-view, .stage[data-show="fishing"] .fire-space, .stage:not([data-show="fishing"]) .fishing-view { display: none; }
+.stage[data-show="theater"] .video-view, .stage[data-show="theater"] .fire-space, .stage:not([data-show="theater"]) .theater-view { display: none; }
 .video-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .fire-space { --camp: color-mix(in srgb, var(--bg) 95%, #000); flex: 1; min-height: 0; display: flex; position: relative; }
 .fire-main { flex: 1; min-width: 0; display: flex; flex-direction: column; background: radial-gradient(ellipse 60% 55% at 50% 58%, color-mix(in srgb, var(--ember) 16%, transparent), transparent 70%), var(--camp); }
@@ -2631,3 +2632,86 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .lantern-list .lantern-steps li { display: list-item; padding: 0; background: none; border-radius: 0; }
 .lantern-list input[type="radio"], .lantern-list input[type="checkbox"] { accent-color: var(--accent); }
 .lantern-list .btn.secondary { background: var(--surface); }
+
+/* ---- the movie theater at the fire (theater.js): always a dark house, whatever the theme, with
+   velvet curtains framing the screen. */
+.theater-view {
+  --house: #1a0f0c; --velvet: #7a1d29; --velvet-deep: #3d0b14; --brass: #d0a95e; --screen-light: #fff1d6; --house-ink: #f4e9dc; --house-muted: #c9b5a4;
+  flex: 1; min-height: 0; display: flex; flex-direction: column; background: var(--house); color: var(--house-ink);
+}
+.theater-view .stage-head { border-bottom: 1px solid rgba(208, 169, 94, .25); }
+.theater-view .stage-head h1 { margin-right: auto; color: var(--house-ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-variation-settings: "SOFT" 100; letter-spacing: .01em; }
+.theater-view .btn.secondary { background: rgba(255, 241, 214, .08); color: var(--house-ink); border-color: rgba(208, 169, 94, .4); }
+.cinema {
+  position: relative; flex: 1; min-height: 0; display: flex; justify-content: center; overflow: hidden;
+  /* the valance: a scalloped pelmet along the top */
+  background:
+    radial-gradient(ellipse 44px 22px at 50% 0, var(--velvet) 96%, transparent 100%) 0 0 / 88px 26px repeat-x,
+    linear-gradient(var(--velvet-deep), var(--velvet-deep)) 0 0 / 100% 12px no-repeat,
+    radial-gradient(ellipse at 50% 38%, #2c1812 0%, var(--house) 70%);
+}
+.curtain {
+  position: absolute; top: 0; bottom: 0; width: clamp(28px, 9vw, 120px); z-index: 1;
+  background: repeating-linear-gradient(90deg, var(--velvet-deep) 0, var(--velvet) 14px, #9b2a36 22px, var(--velvet) 30px, var(--velvet-deep) 44px);
+  box-shadow: inset 0 -60px 60px -30px rgba(0, 0, 0, .55);
+}
+.curtain.left { left: 0; border-bottom-right-radius: 60% 18%; }
+.curtain.right { right: 0; border-bottom-left-radius: 60% 18%; }
+.cinema-middle {
+  position: relative; z-index: 2; width: 100%; max-width: 1100px; min-height: 0; display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 34px calc(clamp(28px, 9vw, 120px) + 12px) 14px; overflow-y: auto;
+}
+.theater-screen {
+  position: relative; width: 100%; max-height: 62vh; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center;
+  background: #000; border-radius: 6px; border: 1px solid rgba(255, 241, 214, .12);
+}
+.theater-view.showing .theater-screen { box-shadow: 0 0 60px 6px rgba(255, 241, 214, .12), 0 30px 80px -20px rgba(255, 241, 214, .18); }
+.theater-view:not(.showing) .theater-screen { aspect-ratio: auto; max-height: none; min-height: 260px; background: linear-gradient(#241612, #1d110d); align-items: flex-start; }
+.theater-screen video { width: 100%; height: 100%; object-fit: contain; border-radius: 6px; background: #000; }
+.theater-screen:fullscreen { max-height: none; border-radius: 0; }
+.theater-tap { position: absolute; }
+.theater-shelf { width: 100%; max-width: 560px; padding: 22px 20px; display: flex; flex-direction: column; gap: 10px; }
+.theater-shelf.hidden { display: none; }
+.theater-shelf h2 { margin: 0; font-family: var(--font-head); font-size: 26px; font-weight: 600; color: var(--screen-light); }
+.theater-shelf p { margin: 0; color: var(--house-muted); }
+.theater-shelf .muted { color: var(--house-muted); }
+.theater-shelf #theater-add { align-self: flex-start; }
+.theater-movies { list-style: none; margin: 4px 0; padding: 0; display: flex; flex-direction: column; }
+.theater-movies li { display: flex; align-items: center; gap: 10px; border-top: 1px solid rgba(208, 169, 94, .2); }
+.theater-movies li:last-child { border-bottom: 1px solid rgba(208, 169, 94, .2); }
+.theater-movie { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 4px; background: none; border: 0; color: inherit; text-align: left; cursor: pointer; font: inherit; }
+.theater-movie b { font-size: 16px; color: var(--screen-light); max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theater-movie:hover b, .theater-movie:focus-visible b { color: var(--brass); }
+.theater-movie:focus-visible, .theater-view :is(button, input):focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+.theater-view .danger-link { color: #f08a7a; }
+.theater-upload { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(255, 241, 214, .06); }
+.theater-upload.hidden { display: none; }
+.theater-upload-row { display: flex; justify-content: space-between; gap: 10px; }
+.theater-upload-row b { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.theater-upload progress { width: 100%; height: 6px; accent-color: var(--brass); }
+.theater-controls { width: 100%; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-radius: var(--radius-md); background: rgba(255, 241, 214, .05); }
+.theater-controls.hidden { display: none; }
+.theater-controls .icon-btn { color: var(--house-ink); }
+.theater-controls .icon-btn svg { width: 22px; height: 22px; fill: currentColor; }
+.theater-controls .theater-play { background: var(--brass); color: var(--house); border-radius: 50%; width: 40px; height: 40px; }
+.theater-seek { flex: 1 1 200px; accent-color: var(--brass); min-width: 120px; }
+.theater-volume { width: 90px; accent-color: var(--brass); }
+.theater-time { font-variant-numeric: tabular-nums; color: var(--house-muted); }
+.theater-by { margin-left: auto; color: var(--house-muted); }
+.theater-view .link-btn:not(.danger-link) { color: var(--house-ink); }
+/* the front row: everyone at the fire, in velvet seats */
+.theater-seats { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; padding-top: 4px; }
+.theater-seat { width: 44px; height: 40px; display: flex; align-items: flex-start; justify-content: center; border-radius: 18px 18px 6px 6px; background: linear-gradient(var(--velvet), var(--velvet-deep)); box-shadow: inset 0 -6px 0 rgba(0, 0, 0, .3); }
+.theater-seat .avatar { width: 28px; height: 28px; margin-top: -10px; font-size: 13px; box-shadow: 0 0 0 2px var(--house); }
+@media (max-width: 760px) {
+  .cinema-middle { padding: 26px 34px 12px; }
+  .curtain { width: 24px; }
+  .theater-by { margin-left: 0; width: 100%; }
+  .theater-volume { width: 70px; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .theater-view.showing .curtain.left { animation: curtain-open-l .9s ease-out; }
+  .theater-view.showing .curtain.right { animation: curtain-open-r .9s ease-out; }
+}
+@keyframes curtain-open-l { from { width: 50%; } }
+@keyframes curtain-open-r { from { width: 50%; } }

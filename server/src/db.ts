@@ -350,6 +350,25 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
       CREATE INDEX tape_audio_tape ON tape_audio(tape_id);
     `),
   },
+  // The movie theater at the fire (theater.ts): each hearth's shelf of movies, the files in uploads/movies.
+  {
+    why: 'Movies on a hearth\'s shelf',
+    run: (db) => db.exec(`
+      CREATE TABLE movies (
+        id           TEXT PRIMARY KEY,
+        server_id    INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        uploader_id  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        name         TEXT NOT NULL,
+        size         INTEGER NOT NULL,
+        duration     REAL NOT NULL,
+        width        INTEGER NOT NULL,
+        height       INTEGER NOT NULL,
+        created_at   INTEGER NOT NULL,
+        last_used_at INTEGER NOT NULL
+      );
+      CREATE INDEX movies_by_server ON movies(server_id);
+    `),
+  },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */
