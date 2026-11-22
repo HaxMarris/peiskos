@@ -30,6 +30,7 @@ const voicePrefs = (() => {
     fx: 'off', // voice changer
     music: false, // stereo, no filters, higher bitrate
     soundboard: true, soundboardVolume: 0.6, listenVolume: 0.6, movieVolume: 0.8,
+    fullVolume: false, // hear everyone as if beside you, even at a fire with spatial sound
     background: 'off', // camera background: 'off', 'blur' or 'picture'
     keys: { ptt: { code: 'Backquote' }, mute: { code: 'KeyM', ctrl: true, shift: true }, deafen: { code: 'KeyD', ctrl: true, shift: true } },
   };
@@ -817,6 +818,8 @@ function voiceSettings() {
         <input type="range" id="vs-out" min="0" max="200" step="5" value="${pct(voicePrefs.outputVolume)}" /></label>
       <button type="button" class="link-btn" id="vs-chime">Play a test sound</button>
       <label class="check"><input type="checkbox" id="vs-board" ${voicePrefs.soundboard ? 'checked' : ''} /> Play soundboard sounds</label>
+      <label class="check"><input type="checkbox" id="vs-full" aria-describedby="vs-full-note" ${voicePrefs.fullVolume ? 'checked' : ''} /> Hear everyone at full volume</label>
+      <span class="small muted" id="vs-full-note">At fires with spatial sound, everyone sounds as if they're beside you, in both ears.</span>
       <div class="vs-group">
         <span class="vs-label">Hotkeys</span>
         <div class="key-row"><span>Mute</span><button type="button" class="btn secondary key-btn" id="vs-key-mute">${escapeHtml(keyLabel(voicePrefs.keys.mute))}</button></div>
@@ -900,6 +903,7 @@ function wireVoiceSettings() {
   $('#vs-chime').onclick = () => playSound('join', true);
   if ($('#vs-pick-output')) $('#vs-pick-output').onclick = () => pickOutput();
   $('#vs-board').onchange = (e) => { voicePrefs.soundboard = e.target.checked; saveVoicePrefs(); };
+  $('#vs-full').onchange = (e) => { voicePrefs.fullVolume = e.target.checked; saveVoicePrefs(); updateSpatial(); renderFire(); };
   for (const r of document.querySelectorAll('#modal-card [name="vs-mode"]')) r.onchange = () => {
     voicePrefs.mode = r.value;
     saveVoicePrefs();

@@ -258,6 +258,8 @@ export function customRoles(ctx: RolesContext) {
         if (limit < 0 || limit > 99) throw new HttpError(400, 'A fire can have up to 99 seats');
         db.prepare('UPDATE channels SET user_limit = ? WHERE id = ?').run(limit, channel.id);
       }
+      if (body.spatialSound !== undefined && channel.kind === 'voice')
+        db.prepare('UPDATE channels SET spatial_sound = ? WHERE id = ?').run(body.spatialSound ? 1 : 0, channel.id);
       if (body.keepChat !== undefined && channel.kind === 'voice') {
         db.prepare('UPDATE channels SET keep_chat = ? WHERE id = ?').run(body.keepChat ? 1 : 0, channel.id);
         // Turned off: what was kept goes, and the chat now lives only while people are at the fire.

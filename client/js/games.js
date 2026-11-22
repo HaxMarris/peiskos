@@ -260,6 +260,8 @@ window.addEventListener('message', (e) => {
     for (const q of gamePlay.queue.splice(0)) postToGame(q);
   } else if (m.kind === 'send') {
     if (m.to === 'all' || Number.isInteger(m.to)) sendGame({ action: 'send', to: m.to, data: m.data });
+  } else if (m.kind === 'result') {
+    if (Array.isArray(m.scores)) sendGame({ action: 'result', standings: m.scores.slice(0, 16).map((r) => ({ id: Number(r?.id), score: Number(r?.score) })) });
   } else if (m.kind === 'leave') {
     leaveFireGame();
   } else if (m.kind === 'snapshot') {

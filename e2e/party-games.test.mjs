@@ -14,7 +14,7 @@ const scores = async (seat) => Object.fromEntries((await seat.game().locator('.s
 }));
 
 test('Same Page: answers stay secret until the reveal, matching ones score, and the clock moves it on', async (t) => {
-  const { seats } = await fireWith(t, server.base, ['Maya', 'Theo', 'Ines']);
+  const { hearth, seats } = await fireWith(t, server.base, ['Maya', 'Theo', 'Ines']);
   const [maya, theo, ines] = seats;
   const answer = async (seat, text) => {
     await seat.game().locator('#answer').fill(text);
@@ -102,6 +102,14 @@ test('Same Page: answers stay secret until the reveal, matching ones score, and 
   for (const s of seats) await sees(panel(s), 'Final scores');
   await sees(panel(theo), 'Maya can start another game.');
   assert.deepEqual(await scores(theo), { Maya: 4, Theo: 4, Ines: 2 });
+  // Maya's copy sent the result to the hearth league: two tied for first, Ines second.
+  const league = await until(async () => {
+    const l = await call(server.base, `/api/servers/${hearth.id}/league`, { token: hearth.people[0].token });
+    return l.standings.length === 3 && l;
+  }, 'the league standings');
+  const x = league.season.finalNight ? 2 : 1;
+  const byName = Object.fromEntries(hearth.people.map((p) => [p.id, p.name]));
+  assert.deepEqual(Object.fromEntries(league.standings.map((r) => [byName[r.userId], r.games])), { Maya: 3 * x, Theo: 3 * x, Ines: 2 * x });
   await maya.game().getByRole('button', { name: 'Back to the lobby' }).click();
   for (const s of seats) await sees(panel(s), 'A prompt comes up and everyone answers in secret');
   noErrors(seats);

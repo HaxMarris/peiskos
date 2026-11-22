@@ -121,6 +121,8 @@ export interface FishingContext {
   fail: (status: number, message: string) => Error;
   isMember: (serverId: number, userId: number) => boolean;
   now?: () => number;
+  /** A derby week is settled: everyone's place in it (the league's points). */
+  placed?: (serverId: number, places: { userId: number; place: number }[]) => void;
 }
 
 type Row = { data: string; rev: number; savedAt: number };
@@ -258,8 +260,10 @@ export function fishing(ctx: FishingContext) {
   const settle = (h: number, week: string) => {
     const open = db.prepare('SELECT week FROM fishing_derby WHERE server_id = ? AND settled = 0 AND week < ?').all(h, week) as { week: string }[];
     for (const d of open) {
-      entriesOf(h, d.week).forEach((e, i) => db.prepare('UPDATE fishing_derby_entries SET place = ? WHERE server_id = ? AND week = ? AND user_id = ?').run(i + 1, h, d.week, e.userId));
+      const entries = entriesOf(h, d.week);
+      entries.forEach((e, i) => db.prepare('UPDATE fishing_derby_entries SET place = ? WHERE server_id = ? AND week = ? AND user_id = ?').run(i + 1, h, d.week, e.userId));
       db.prepare('UPDATE fishing_derby SET settled = 1 WHERE server_id = ? AND week = ?').run(h, d.week);
+      ctx.placed?.(h, entries.map((e, i) => ({ userId: e.userId, place: i + 1 })));
     }
   };
   /** This week's derby, picked the first time anyone asks. */

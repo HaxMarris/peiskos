@@ -1515,6 +1515,13 @@ body.game-pop :is(#game-view-back, #casino-back, #fishing-back) { display: none;
 .vtile-tool.tool-clip.on { background: #c4473e; color: #fff; }
 .vtile-tool svg { width: 18px; height: 18px; fill: currentColor; }
 .vtile.no-video .vtile-tools { display: none; }
+.vtile-popped { position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 12px; background: #0d0907; color: #fbf4ec; text-align: center; }
+.vtile-popped svg { width: 30px; height: 30px; fill: currentColor; opacity: .7; }
+.vtile-popped p { margin: 0; font-weight: 700; }
+.vtile-popped .btn { padding: 7px 16px; }
+.stage-grid.focused .vtile:not(.focus) .vtile-popped p, .stage-grid.focused .vtile:not(.focus) .vtile-popped svg { display: none; }
+.stage-grid.focused .vtile:not(.focus) .vtile-popped .btn { padding: 5px 10px; font-size: 12px; }
+.vtile.popped .tool-draw, .vtile.popped .tool-chat, .vtile.popped .tool-flip, .vtile.popped .vtile-full, .vtile.popped .vtile-draw { display: none; }
 /* The chat button only does something on a big or full screen video. */
 .vtile:not(.focus):not(:fullscreen):not(.app-full) .tool-chat { display: none; }
 @media (hover: none) { .vtile-tools { opacity: 1; } }
@@ -2345,6 +2352,109 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { .event-dot { animation: none; } }
 [data-motion="reduce"] .event-dot { animation: none; }
 .event-row .event-where { color: var(--accent-text); font-weight: 700; }
+
+/* ---- time capsules (capsules.js): a walnut chest with a wax seal, beside its fire and in the room */
+.capsule-note.ready { color: var(--accent-text); }
+.capsule-chest { position: absolute; z-index: 7; translate: -50% -100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  border: 0; background: none; padding: 4px; cursor: pointer; color: #fff3e3; border-radius: 10px; }
+.capsule-chest .capsule-svg { width: 52px; height: auto; display: block; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .35)); }
+.capsule-chest-label { font-size: 11.5px; font-weight: 800; line-height: 1.1; padding: 2px 7px; border-radius: 999px; background: rgba(30, 18, 10, .72); white-space: nowrap; }
+.capsule-chest-count:empty { display: none; }
+.capsule-chest-count { position: absolute; top: 0; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #a8322d; color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; }
+.capsule-chest.ready .capsule-svg { animation: capsule-warm 2.4s ease-in-out infinite alternate; }
+.capsule-chest.ready .capsule-chest-label { background: #a8322d; }
+.capsule-chest:hover .capsule-svg { translate: 0 -2px; }
+.capsule-chest:focus-visible { outline: 3px solid #ffd27a; outline-offset: 2px; }
+@keyframes capsule-warm { from { filter: drop-shadow(0 0 2px rgba(255, 196, 110, .35)); } to { filter: drop-shadow(0 0 12px rgba(255, 196, 110, .9)); } }
+@media (max-width: 760px) { .capsule-chest .capsule-svg { width: 40px; } .capsule-chest-label { font-size: 10.5px; } }
+@media (prefers-reduced-motion: reduce) { .capsule-chest.ready .capsule-svg { animation: none; filter: drop-shadow(0 0 8px rgba(255, 196, 110, .8)); } }
+
+.capsule-form textarea { width: 100%; resize: vertical; }
+.capsule-files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0 12px; }
+.capsule-files:not(:has(*:not(:empty))) { display: none; }
+.capsule-when { border: 0; padding: 0; margin: 0 0 12px; }
+.capsule-when legend { font-weight: 700; font-size: 13px; margin-bottom: 6px; padding: 0; }
+.capsule-when .quick-times { margin-bottom: 8px; }
+
+.capsule-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.capsule-row.ready { border-color: var(--accent); }
+.capsule-row-chest .capsule-svg { width: 42px; display: block; }
+.capsule-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.capsule-row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+@media (max-width: 520px) { .capsule-row { flex-wrap: wrap; } .capsule-row-actions { width: 100%; } }
+
+.capsule-banner { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.capsule-banner-chest .capsule-svg { width: 22px; display: block; }
+
+/* Opening: the seal splits, the lid lifts, light comes out, then what was inside. Once, for everyone at the fire. */
+.capsule-open-card { max-width: 560px; }
+.capsule-open { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.capsule-open-chest { position: relative; width: 150px; margin: 30px 0 10px; }
+.capsule-open-chest .capsule-svg { width: 100%; display: block; position: relative; z-index: 1; overflow: visible; }
+.capsule-glow { position: absolute; left: 50%; top: 38%; width: 220px; height: 220px; translate: -50% -50%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 214, 140, .9), rgba(255, 170, 80, .35) 55%, transparent); opacity: 0; scale: .3; }
+.capsule-open .capsule-lid { transform-box: fill-box; transform-origin: 0% 100%; animation: capsule-lid .9s cubic-bezier(.3, 1.4, .5, 1) .75s both; }
+.capsule-open .seal-l { animation: capsule-seal-l .5s ease-in .3s both; }
+.capsule-open .seal-r { animation: capsule-seal-r .5s ease-in .3s both; }
+.capsule-open .capsule-seal circle { animation: capsule-fade .3s ease-in .3s both; }
+.capsule-open .capsule-glow { animation: capsule-glow 1.2s ease-out .8s both; }
+.capsule-open-body { width: 100%; animation: capsule-rise .6s ease-out 1.5s both; }
+.capsule-open-body h2 { margin: 0 0 2px; }
+.capsule-open-when { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.capsule-open-content { text-align: left; font-size: 16px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 10px; }
+.capsule-open-body .attachments { justify-content: center; }
+@keyframes capsule-lid { to { transform: translate(-1px, -5px) rotate(-20deg); } }
+@keyframes capsule-seal-l { to { transform: translate(-7px, 10px) rotate(-30deg); opacity: 0; } }
+@keyframes capsule-seal-r { to { transform: translate(7px, 10px) rotate(30deg); opacity: 0; } }
+@keyframes capsule-fade { to { opacity: 0; } }
+@keyframes capsule-glow { 0% { opacity: 0; scale: .3; } 40% { opacity: 1; } 100% { opacity: .55; scale: 1; } }
+@keyframes capsule-rise { from { opacity: 0; translate: 0 12px; } }
+.capsule-open.still .capsule-lid { animation: none; transform: translate(-1px, -5px) rotate(-20deg); }
+.capsule-open.still :is(.seal-l, .seal-r, .capsule-seal circle) { animation: none; opacity: 0; }
+.capsule-open.still .capsule-glow { animation: none; opacity: .55; scale: 1; }
+.capsule-open.still .capsule-open-body { animation: none; }
+/* The hearth league (league.js). */
+.league-season { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 2px 0 10px; }
+.league-season-name { font-family: var(--font-head); font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--text-strong); }
+.league-season p { width: 100%; margin: 0; }
+.league-final { color: var(--accent-text); font-weight: 800; }
+.league-off { padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-weight: 700; }
+.league-standings li.me { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.league-standings .leader-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.league-standings .leader-name > .league-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; }
+.league-part { display: block; min-width: 4px; }
+.league-part.games { background: var(--ember); }
+.league-part.fishing { background: #2f7f8f; }
+.league-part.casino { background: #b8901c; }
+.league-key { display: flex; gap: 14px; margin: 8px 0 0; }
+.league-key span { display: inline-flex; align-items: center; gap: 5px; }
+.league-key i { width: 10px; height: 10px; border-radius: 3px; }
+.league-rules { margin: 14px 0 0; }
+.league-rules summary { cursor: pointer; font-weight: 800; }
+.league-rules ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.league-modal h3 { margin: 18px 0 6px; font-size: 15px; }
+.league-past, .trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.league-past li, .trophies li { display: flex; align-items: center; gap: 8px; }
+.league-past li > span { display: flex; flex-direction: column; line-height: 1.2; }
+.trophy-icon { flex: none; color: #b8901c; }
+.league-toggle { margin-top: 16px; }
+.profile-modal .trophies { width: 100%; }
+.trophies li { font-size: 13.5px; font-weight: 700; }
+
+/* Last season's champion: a felt pennant on a pole at the top left of the circle, above the backdrop. */
+.league-pennant { position: absolute; z-index: 3; left: 14px; top: 10px; display: flex; align-items: flex-start; padding: 0; border: 0; background: none; cursor: pointer; color: #fff6e6; }
+.league-pole { width: 4px; height: 92px; border-radius: 2px; background: linear-gradient(90deg, #8a5a34, #5a361e); box-shadow: 1px 2px 3px rgba(0, 0, 0, .35); }
+.league-pole::before { content: ''; display: block; width: 8px; height: 8px; margin: -4px 0 0 -2px; border-radius: 50%; background: #e7b54a; }
+.league-cloth { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; max-width: 190px; margin-top: 6px; padding: 7px 26px 9px 10px;
+  background: #2c5843; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 50%, 100% 100%, 0 100%); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); text-align: left; }
+.league-cloth .trophy-icon { grid-row: 1 / 3; color: #f0c45a; }
+.league-cloth b { font-family: var(--font-head); font-size: 15px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.league-cloth small { font-size: 11px; font-weight: 700; color: #cfe3d4; white-space: nowrap; }
+.league-pennant:hover .league-cloth { background: #346851; }
+.league-pennant:focus-visible { outline: 3px solid #f0c45a; outline-offset: 3px; border-radius: 4px; }
+.league-pennant.final .league-cloth { background: #7a580e; }
+.league-pennant.final small { color: #fde9b8; }
+@media (max-width: 760px) { .league-pennant { scale: .82; transform-origin: 0 0; left: 8px; top: 6px; } .league-pole { height: 76px; } }
 
 /* ---- the movie theater at the fire (theater.js): always a dark house, whatever the theme, with
    velvet curtains framing the screen. */
