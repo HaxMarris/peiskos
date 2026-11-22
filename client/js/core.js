@@ -615,6 +615,7 @@ async function enterAppNow() {
   $('#mic-btn').classList.toggle('hidden', !state.maxUploadBytes || !navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined');
   state.gifsEnabled = !!config.gifs;
   state.emailEnabled = !!config.email;
+  state.tapesEnabled = !!config.tapes;
   $('#gif-btn').classList.toggle('hidden', !state.gifsEnabled);
   nudgeForEmail();
   renderMyStatus();
@@ -1020,6 +1021,18 @@ function handleEvent(ev) {
       break;
     case 'listen_state':
       onListenState(ev);
+      break;
+    case 'tape_state':
+      onTapeState(ev);
+      break;
+    case 'tape_note':
+      onTapeNote(ev);
+      break;
+    case 'tape_clip':
+      onTapeClip(ev);
+      break;
+    case 'tape_ready':
+      onTapeReady(ev);
       break;
     case 'game_state':
       onGameState(ev);

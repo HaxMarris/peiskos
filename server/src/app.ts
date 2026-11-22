@@ -51,6 +51,7 @@ import { friendships } from './friends.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
+import { fireTapes, type TapeOptions } from './tapes.ts';
 import { fishing, fishingDock } from './fishing.ts';
 import { league } from './league.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
@@ -95,6 +96,8 @@ export interface AppOptions {
   hosting?: HostingOptions;
   /** Who runs this server and how to reach them, for the privacy policy and terms (see legal.ts). */
   legal?: { name?: string; contact?: string };
+  /** Clips at the fire (see tapes.ts): on with voice and uploads, unless this is false. */
+  tapes?: TapeOptions | false;
   /** Fires shared with other Peiskos servers (see joint-fires.ts); off without it. */
   jointFires?: JointFireOptions;
   /** Tests make the casino's poker table quicker, and stack its decks. */
@@ -566,6 +569,7 @@ export function createApp(opts: AppOptions): Server {
       lamps.fireChanged(prev);
       listen.left(prev);
       games.left(prev, userId);
+      tapes?.left(prev, userId);
       dock.left(userId);
       casinoTables.left(prev, userId);
     }
@@ -578,6 +582,7 @@ export function createApp(opts: AppOptions): Server {
       sendTo([userId], { type: 'fireside_history', channelId, messages: firesideHistory(channel) });
       listen.joined(channelId);
       games.joined(channelId, userId);
+      tapes?.joined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
       lamps.fireChanged(channelId);
       if (usersInVoice(channelId).length === 2) nudgeGathered(channel);
@@ -856,6 +861,7 @@ export function createApp(opts: AppOptions): Server {
       maxUploadBytes: opts.uploadDir ? maxUpload : 0,
       gifs: !!gifs,
       email: !!opts.mail,
+      tapes: !!tapes,
       jointFires: joint_.config,
     }),
     false,
@@ -1289,6 +1295,19 @@ export function createApp(opts: AppOptions): Server {
   });
 
   // ---- listen together
+
+  // ---- clips at the fire: only with everyone's yes, recorded by each person's own app
+  const tapes = opts.voice && opts.uploadDir && opts.tapes !== false
+    ? fireTapes({
+        db, dir: join(opts.uploadDir, 'tapes'), options: opts.tapes ?? {}, minFreeDisk: opts.minFreeDiskBytes ?? 2 * 1024 ** 3,
+        route, canSee, channelById, usersInVoice, inVoice, sendTo, nameIn, userByToken: (t) => userByToken(t),
+        isBoss: (channelId, userId) => {
+          const channel = channelById(channelId);
+          return !!channel && serverKind(channel.serverId) === 'burrow' && !!standing(channel.serverId, userId)?.perms.has('voice');
+        },
+        isHearth: (serverId) => serverKind(serverId) === 'burrow',
+      })
+    : null;
 
   const listen = listenTogether({
     inVoice, usersInVoice, sendTo,
@@ -2036,6 +2055,7 @@ export function createApp(opts: AppOptions): Server {
       const file = (req.method === 'GET' || req.method === 'HEAD') && url.pathname.match(/^\/api\/attachments\/([\w-]+)(\/|$)/);
       if (file) return await serveAttachment(req, res, file[1]);
       if (req.method === 'POST' && url.pathname === '/api/livekit/webhook') return await handleLiveKitWebhook(req, res);
+      if (tapes && url.pathname.startsWith('/api/tape') && (await tapes.handleRaw(req, res, url))) return;
       if (req.method === 'POST' && url.pathname === '/api/me/avatar') return await handleAvatarUpload(req, res);
       if (req.method === 'POST' && url.pathname === '/api/me/banner') return await handleBannerUpload(req, res);
       if (req.method === 'GET' && url.pathname === '/api/me/export') return await handleExport(req, res);
@@ -2225,6 +2245,9 @@ export function createApp(opts: AppOptions): Server {
           if (inVoice.has(user.id)) lastActive.set(user.id, Date.now());
         } else if (msg.type === 'soundboard') {
           playSound(user, Number(msg.soundId));
+        } else if (msg.type === 'tape') {
+          if (!tapes) throw new HttpError(404, "This server doesn't tape fires.");
+          tapes.handle(user, msg).catch((err) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' })));
         } else if (msg.type === 'listen') {
           listen.handle(user, msg);
         } else if (msg.type === 'game') {
@@ -2274,13 +2297,14 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // Tests set a due time in the past and then check the clock, rather than waiting for it.
-  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire });
+  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, tapes });
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
     clearInterval(fireSweepTimer);
     for (const t of fireTimers) clearTimeout(t);
     casinoTables.stop();
+    tapes?.stop();
     lamps.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);

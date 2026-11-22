@@ -216,6 +216,42 @@ it first. Everything people at a fire tell each other for these is sealed with t
 A hearth's *Overview* can pick a room for go-live posts: sharing your screen then posts that you're live there, with a
 **Join and watch** button, and the post says when it ended.
 
+### Clips at the fire
+
+Anyone at a fire in a hearth can turn on clips with **Clips** in the fire's buttons. Everyone at the
+fire is asked, and clips go on only once they all say yes; one "no", or nobody answering within a
+minute, and they stay off. Someone who sits down while clips are on is asked too, and nothing of
+theirs is kept unless they say yes. A red dot marks the seats of people who can be clipped. While
+clips are on, anyone who said yes can press **Clip that** to keep the last 30 seconds. Nothing else
+is kept: the fire itself is never recorded. Anyone who said yes can turn clips off, or take
+themselves out, which cuts their voice out of the clips made while they were on. Clips turn off
+by themselves after `TAPE_MAX_MINUTES` (3 hours), or when nobody who said yes is at the fire.
+
+Voice is end-to-end encrypted, so LiveKit can't record it. Instead each person's own app records
+their own microphone while clips are on and sends it to Peiskos every few seconds, starting a new
+piece every 45 seconds. Peiskos deletes each piece about a minute and a half after it ends, so it
+never holds more than the last minute and a half or so of anyone's voice. When someone presses
+Clip that, Peiskos cuts the last 30 seconds out of that and mixes it with ffmpeg (in the Docker
+image; without Docker, install ffmpeg or clips stay off). Anyone who can see the fire can listen:
+hold or right-click the fire and pick **Clips**, or **Past clips** from the Clips button. Clips stay
+until someone who said yes, or a moderator, deletes them. They're kept in `uploads/tapes`, so
+off-site backups copy them too, and new clips stop once they take up `TAPE_STORAGE_MB` (10 GB). People
+need an app version with clips to answer; one without it can't say yes, so clips stay off.
+
+**Transcripts** of clips are made on the server itself, at night, by [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
+in its own container at low priority. Nothing is sent to any other service. Each person's part of a
+clip is written out separately, so the transcript says who said what. It needs about 1 GB of memory
+while it works, so turn it on with 4 GB or more:
+
+1. In `.env`, add `,transcripts` to `COMPOSE_PROFILES`, and set `WHISPER_URL=http://whisper:8080`
+   and your time zone, like `TZ=Europe/Oslo`.
+2. `docker compose up -d --build`. The first build compiles whisper.cpp and downloads its model
+   (about 150 MB), which takes several minutes.
+
+Transcripts are made between 1 and 7 at night (`TAPE_TRANSCRIBE_HOURS=1-7`, or `always`). A clip takes
+the `base` model a few seconds per person on two processors. `TAPE_LANGUAGE` is `auto`, or a
+language code like `no` or `en`. `WHISPER_MODEL=small` is more accurate and needs about 1 GB more memory.
+
 ### GIFs
 
 The **GIF** button in the message box searches [KLIPY](https://klipy.com), a free GIF library (Google shut down Tenor's API in June 2026). It needs a free key:

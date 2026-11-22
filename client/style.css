@@ -1352,6 +1352,46 @@ img.emoji { width: 1.25em; height: 1.25em; vertical-align: -.25em; }
 .listen-queue .link-btn { font-size: 12px; }
 .danger-link { color: var(--berry); }
 #fire-listen.on { background: var(--accent); color: var(--accent-ink); }
+/* Clips at the fire: asking everyone, then clips on, above the fire's buttons. */
+.tape-panel { flex: none; display: flex; align-items: center; gap: 12px; width: min(640px, calc(100% - 24px)); align-self: center; margin: 0 12px 10px; padding: 10px 12px; border-radius: var(--radius-lg); background: var(--surface); border: 1px solid var(--line); }
+.tape-panel.hidden { display: none; }
+.tape-panel[data-phase="taping"], .tape-panel[data-phase="asked"] { border-color: color-mix(in srgb, var(--berry) 45%, var(--line)); }
+.tape-reel { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: var(--surface-2); color: var(--text-strong); }
+.tape-reel svg { width: 24px; height: 24px; fill: currentColor; }
+.tape-dot { flex: none; width: 14px; height: 14px; margin: 0 6px; border-radius: 50%; background: var(--berry); box-shadow: 0 0 0 4px color-mix(in srgb, var(--berry) 22%, transparent); animation: tape-dot 1.6s ease-in-out infinite; }
+@keyframes tape-dot { 50% { opacity: .45; } }
+@media (prefers-reduced-motion: reduce) { .tape-dot { animation: none; } }
+.tape-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.tape-info b { color: var(--text-strong); }
+.tape-time { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--berry); }
+.tape-actions { flex: none; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.tape-actions .btn { padding: 8px 16px; }
+.tape-actions .link-btn { font-size: 13px; }
+#fire-tape.on { background: var(--berry); color: var(--accent-ink); }
+.seat-rec { position: absolute; top: 2px; right: 2px; width: 12px; height: 12px; border-radius: 50%; background: var(--berry); border: 2px solid var(--surface); }
+@media (max-width: 760px) {
+  .tape-panel { flex-wrap: wrap; }
+  .tape-actions { width: 100%; justify-content: flex-start; }
+}
+.tape-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; max-height: min(70vh, 640px); overflow-y: auto; }
+.tape-item { padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); display: flex; flex-direction: column; gap: 8px; }
+.tape-item-head { display: flex; flex-direction: column; gap: 2px; }
+.tape-item-head b { color: var(--text-strong); }
+.tape-item audio { width: 100%; height: 36px; }
+.tape-clips { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.tape-clips:empty { display: none; }
+.tape-clip { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 10px; align-items: center; padding: 8px 10px; border-radius: var(--radius-md); background: var(--surface-2); }
+.tape-clip audio { grid-column: 1 / -1; }
+.tape-clip-tools { grid-row: 1; grid-column: 2; display: flex; gap: 10px; }
+.tape-clip .tape-transcript { grid-column: 1 / -1; }
+.tape-item-actions { display: flex; gap: 14px; flex-wrap: wrap; }
+.tape-item-actions:empty { display: none; }
+.tape-transcript { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; font-size: 14px; }
+.tape-transcript.hidden { display: none; }
+.tape-line { display: grid; grid-template-columns: 52px auto minmax(0, 1fr); gap: 8px; text-align: left; background: none; border: 0; padding: 4px 6px; border-radius: var(--radius-sm); color: var(--text); }
+.tape-line:hover, .tape-line:focus-visible { background: var(--surface-2); }
+.tape-at { color: var(--muted); font-variant-numeric: tabular-nums; }
+.tape-line b { color: var(--text-strong); }
 /* Games at the fire: the game fills the stage, and the fire shows who's playing. */
 #fire-game.on { background: var(--accent); color: var(--accent-ink); }
 .game-view, .fishing-view { flex: 1; min-height: 0; display: flex; flex-direction: column; }

@@ -301,6 +301,55 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
       CREATE INDEX lanterns_by_user ON lanterns(user_id);
     `),
   },
+  // Clips at the fire (tapes.ts): a time clips could be made at a fire (everyone said yes), its clips,
+  // and each person's own audio: the last minute or so while it runs, and their part of each clip.
+  {
+    why: 'Clips at the fire',
+    run: (db) => db.exec(`
+      CREATE TABLE tapes (
+        id          INTEGER PRIMARY KEY,
+        server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+        channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
+        started_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        state       TEXT NOT NULL,             -- 'taping', 'mixing', 'ready', 'empty', 'failed'
+        started_at  INTEGER NOT NULL,
+        ended_at    INTEGER,
+        duration_ms INTEGER
+      );
+      CREATE INDEX tapes_channel ON tapes(channel_id, started_at);
+      -- Who said yes to being on a tape.
+      CREATE TABLE tape_people (
+        tape_id INTEGER NOT NULL REFERENCES tapes(id) ON DELETE CASCADE,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        PRIMARY KEY (tape_id, user_id)
+      );
+      CREATE TABLE tape_clips (
+        id         INTEGER PRIMARY KEY,
+        tape_id    INTEGER NOT NULL REFERENCES tapes(id) ON DELETE CASCADE,
+        made_by    INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        start_ms   INTEGER NOT NULL,           -- from the start of the tape
+        end_ms     INTEGER NOT NULL,
+        state      TEXT NOT NULL,              -- 'cutting', 'ready', 'empty', 'failed'
+        file       TEXT,
+        created_at INTEGER NOT NULL
+      );
+      CREATE INDEX tape_clips_tape ON tape_clips(tape_id);
+      -- One person's own audio: a stretch their app recorded (clip_id null, deleted within minutes),
+      -- or their part of a clip, transcribed one at a time overnight.
+      CREATE TABLE tape_audio (
+        id             INTEGER PRIMARY KEY,
+        tape_id        INTEGER NOT NULL REFERENCES tapes(id) ON DELETE CASCADE,
+        clip_id        INTEGER REFERENCES tape_clips(id) ON DELETE CASCADE,
+        user_id        INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        file           TEXT NOT NULL,
+        start_ms       INTEGER NOT NULL,       -- from the start of the tape, or of the clip
+        bytes          INTEGER NOT NULL DEFAULT 0,
+        transcript     TEXT,                   -- JSON [{ s, e, t }] in ms from start_ms; null until transcribed
+        transcribe_tries INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX tape_audio_tape ON tape_audio(tape_id);
+    `),
+  },
   // Joint fires (joint-fires.ts). On the host: the codes a fire was opened to other groups with
   // (only their hash), and the guests who came through each. On the other side: the fires a
   // hearth joined, with the code it presents to the host.
