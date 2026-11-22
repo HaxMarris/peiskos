@@ -156,11 +156,16 @@ test('who is talking shows outside the fire, and quiet people are moved to the A
   const b = await socket(bob.token);
   b.send({ type: 'voice_join', channelId: fire });
   await h.next((e) => e.type === 'voice_state' && e.userIds.includes(bob.user.id));
+  // Talking isn't sent to everyone in the hearth as it happens (lanterns hear it), but a fresh
+  // look at the hearth shows it.
+  const talkingNow = async () => (await call('/api/servers', { token: host.token })).data.find((s: any) => s.id === server.id).channels.find((c: any) => c.id === fire).voiceSpeaking;
   b.send({ type: 'voice_speaking', speaking: true });
-  assert.deepEqual(await h.next((e) => e.type === 'voice_speaking'), { type: 'voice_speaking', channelId: fire, userId: bob.user.id, speaking: true });
-  assert.deepEqual((await call('/api/servers', { token: host.token })).data.find((s: any) => s.id === server.id).channels.find((c: any) => c.id === fire).voiceSpeaking, [bob.user.id]);
+  for (let i = 0; i < 50 && !(await talkingNow()).length; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(await talkingNow(), [bob.user.id]);
+  assert.ok(!h.events.some((e) => e.type === 'voice_speaking'));
   b.send({ type: 'voice_speaking', speaking: false });
-  await h.next((e) => e.type === 'voice_speaking' && !e.speaking);
+  for (let i = 0; i < 50 && (await talkingNow()).length; i++) await new Promise((r) => setTimeout(r, 20));
+  assert.deepEqual(await talkingNow(), []);
 
   const set = await call(`/api/servers/${server.id}`, { method: 'PATCH', body: { afkChannelId: porch, afkMinutes: 5 }, token: host.token });
   assert.deepEqual([set.data.afkChannelId, set.data.afkMinutes], [porch, 5]);

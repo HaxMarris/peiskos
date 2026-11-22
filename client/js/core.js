@@ -712,7 +712,10 @@ function connect() {
     // Dropping off took you out of any game at the fire (and ended it, if it was yours).
     gameConnectionLost();
     // The server forgets who's in voice when we drop off, so tell it again.
-    if (state.voice) ws.send(JSON.stringify({ type: 'voice_join', channelId: state.voice.channelId, ...voiceFlags() }));
+    if (state.voice) {
+      ws.send(JSON.stringify({ type: 'voice_join', channelId: state.voice.channelId, ...voiceFlags() }));
+      state.voice.toldTalking = undefined; // sitting down again starts out quiet
+    }
     casinoReconnected();
     // Dropping off ended your "is live" post; still sharing, it picks back up.
     if (state.voice?.room?.localParticipant?.isScreenShareEnabled) ws.send(JSON.stringify({ type: 'voice_live', live: true }));
