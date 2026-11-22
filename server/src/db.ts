@@ -232,6 +232,31 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // only ever kept in memory; a person's look is theirs on every hearth's map.
   { why: 'Hearth map, off by default', run: (db) => db.exec('ALTER TABLE servers ADD COLUMN hearthland INTEGER NOT NULL DEFAULT 0') },
   { why: 'Character look for hearth maps', run: (db) => db.exec('ALTER TABLE users ADD COLUMN look TEXT') },
+  // The camp grows (camp.ts): how many builds a hearth's camp has (they stay up once built),
+  // the games and fish its people add, and each season's shared goal.
+  { why: 'Camp builds, activity and season goals', run: (db) => db.exec(`
+    ALTER TABLE servers ADD COLUMN camp_stage INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE camp_activity (
+      id        INTEGER PRIMARY KEY,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      kind      TEXT NOT NULL, -- game or fish
+      n         INTEGER NOT NULL,
+      at        INTEGER NOT NULL
+    );
+    CREATE INDEX camp_activity_by_hearth ON camp_activity (server_id, kind, at);
+    -- Fish caught before the camp existed count toward its builds (at 0, so in no season's goal).
+    INSERT INTO camp_activity (server_id, kind, n, at)
+      SELECT f.server_id, 'fish', MIN(100000, MAX(0, CAST(json_extract(f.data, '$.stats.caught') AS INTEGER))), 0
+      FROM fishing_saves f JOIN servers s ON s.id = f.server_id
+      WHERE s.kind = 'burrow' AND json_valid(f.data) AND CAST(json_extract(f.data, '$.stats.caught') AS INTEGER) > 0;
+    CREATE TABLE camp_seasons (
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      season    TEXT NOT NULL, -- 2026-winter
+      goal      INTEGER NOT NULL,
+      met_at    INTEGER,
+      PRIMARY KEY (server_id, season)
+    );
+  `) },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */

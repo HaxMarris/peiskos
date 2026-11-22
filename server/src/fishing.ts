@@ -121,6 +121,8 @@ export interface FishingContext {
   fail: (status: number, message: string) => Error;
   isMember: (serverId: number, userId: number) => boolean;
   now?: () => number;
+  /** A save came in, with the one it replaced (the camp counts the catches it adds). */
+  saved?: (serverId: number, before: unknown, after: unknown) => void;
 }
 
 type Row = { data: string; rev: number; savedAt: number };
@@ -185,6 +187,11 @@ export function fishing(ctx: FishingContext) {
     const now = Date.now();
     if (row) db.prepare('UPDATE fishing_saves SET data = ?, rev = rev + 1, saved_at = ? WHERE user_id = ? AND server_id = ?').run(json, now, user.id, h);
     else db.prepare('INSERT INTO fishing_saves (user_id, server_id, data, rev, saved_at) VALUES (?, ?, ?, 1, ?)').run(user.id, h, json, now);
+    if (ctx.saved) {
+      let before: unknown = null;
+      try { before = row ? JSON.parse(row.data) : null; } catch { /* an old save that doesn't read adds nothing */ }
+      ctx.saved(h, before, data);
+    }
     return { conflict: false, rev: rev + 1, savedAt: now };
   });
 

@@ -979,6 +979,9 @@ function handleEvent(ev) {
     case 'map_elsewhere':
       onMapEvent(ev);
       break;
+    case 'camp':
+      onCampEvent(ev);
+      break;
     case 'voice_elsewhere':
       // Sat down at a fire on another device, so this one gets up.
       if (state.voice) {

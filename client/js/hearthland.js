@@ -131,8 +131,8 @@ function hlPixText(g, text, x, y, c) {
   for (const ch of text) { const f = HL_FONT[ch]; f.forEach((row, ry) => [...row].forEach((b, rx) => b === '1' && hlPx(g, c, cx + rx, y + ry))); cx += f[0].length + 1; }
 }
 
-/** The ground, trees and buildings for a map with `fires` fires: drawn once, then reused every frame. */
-function hlBuildWorld(fires) {
+/** The ground, trees and buildings for a map with `fires` fires and its camp (camp.js): drawn once, then reused every frame. */
+function hlBuildWorld(fires, camp = null) {
   const T = HL_T, W = HL_W, H = HL_H;
   const tiles = new Uint8Array(W * H);
   const at = (x, y) => (x < 0 || y < 0 || x >= W || y >= H ? HL_TREE : tiles[y * W + x]);
@@ -159,14 +159,16 @@ function hlBuildWorld(fires) {
   for (let y = C.y0; y < C.y0 + C.h; y++) for (let x = C.x0; x < C.x0 + C.w; x++) set(x, y, HL_BLOCK);
   set(9, 23, HL_CARPET); set(9, 24, HL_CARPET);
   for (const s of spots) set(Math.floor(s.x), Math.floor(s.y), HL_BLOCK); // the fire itself
-  const clear = [...HL_SPOTS.map((s) => [s.x, s.y, s.r + 1.4]), [9.5, 7.5, 4.6], [9.5, 24, 4.6], [17.5, 20.6, 1.5]];
+  const clear = [...HL_SPOTS.map((s) => [s.x, s.y, s.r + 1.4]), [9.5, 7.5, 4.6], [9.5, 24, 4.6], [17.5, 20.6, 1.5], ...campClearings()];
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     if (at(x, y) !== HL_G) continue;
     const border = x < 2 || y < 2 || x > W - 3 || y > H - 3;
     const inClear = clear.some(([cx, cy, r]) => Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < r);
     if (border || (!inClear && rnd() < 0.2)) set(x, y, rnd() < 0.62 ? HL_PINE : HL_TREE);
   }
-  const solid = (tx, ty) => { const v = at(tx, ty); return v === HL_TREE || v === HL_PINE || v === HL_WATER || v === HL_BLOCK; };
+  // The camp's builds are kept apart from the tiles: setting them there would change the trees and flowers drawn after.
+  const built = campBlocked(camp, W);
+  const solid = (tx, ty) => { const v = at(tx, ty); return v === HL_TREE || v === HL_PINE || v === HL_WATER || v === HL_BLOCK || built.has(ty * W + tx); };
 
   const ground = document.createElement('canvas');
   ground.width = W * T; ground.height = H * T;
@@ -296,6 +298,8 @@ function hlBuildWorld(fires) {
     for (const lx of [X - 6, X + w + 4]) { px('rgba(0,0,0,.2)', lx - 2, Y + h + 4, 6, 2); px('#2a2226', lx, Y + h - 18, 2, 22); px('#2a2226', lx - 2, Y + h - 20, 6, 2); }
   }
 
+  campDrawGround(gg, camp);
+
   // Each fire's stone ring and log seats.
   const ring = (cx, cy, r) => {
     for (let a = 0; a < 18; a++) {
@@ -320,7 +324,7 @@ function hlBuildWorld(fires) {
   view.width = W * T; view.height = H * T;
   const light = document.createElement('canvas');
   light.width = W * T; light.height = H * T;
-  return { fires, spots, solid, ground, view, light, marquee, marqueeBulbs, sparkles, doorX };
+  return { fires, camp: campKey(camp), spots, solid, ground, view, light, marquee, marqueeBulbs, sparkles, doorX };
 }
 
 /** Seats round a fire spot, in pixels: `n` of them on an oval inside the ring, from the top clockwise. */
@@ -404,6 +408,7 @@ function openMap(serverId = state.serverId) {
   if (hl.serverId !== serverId) { hl.walkers.clear(); hl.world = null; hl.backAt = null; }
   hl.serverId = serverId;
   hl.open = true;
+  loadCamp(serverId);
   hl.returnToMap = false;
   // Back at the fire you're in, the casino door or the dock, or else on the path below the first fire.
   const fires = hlMapFires();
@@ -629,6 +634,8 @@ function hlContext() {
   if (near(HL_DOCK, 1.8)) return { key: `dock${!!here}`, html: `<b>The dock</b> · Fish with Fireside Angler.${joinNote}`, label: 'Start fishing', run: () => hlAtAFire(openFishing) };
   if (near(HL_DOOR, 1.6)) return { key: `casino${!!here}`, html: `<b>Casino</b> · Hold 'em, blackjack, slots and cases.${joinNote}`, label: 'Go inside', run: () => hlAtAFire(() => openCasino()) };
   if (near({ x: 9.5, y: 25.5 }, 3.2)) return { key: 'casino-near', html: '<b>Casino</b> · Walk up the red carpet to go in.' };
+  const site = campContext(campState.get(hl.serverId), hl.me.x / HL_T, hl.me.y / HL_T);
+  if (site) return site;
   const more = (s?.channels ?? []).filter((c) => c.kind === 'voice').length - fires.length;
   return { key: `path${more}`, html: `Walk into a fire's ring to join its call.${more > 0 ? ` ${more === 1 ? 'One more fire is' : `${more} more fires are`} in the list.` : ''}` };
 }
@@ -637,6 +644,7 @@ $('#map-act').onclick = () => hl.current?.run?.();
 $('#map-back').onclick = () => { closeMap(); showView('rooms'); };
 $('#map-close').onclick = () => closeMap();
 $('#map-look').onclick = () => openLookEditor();
+$('#map-camp').onclick = () => openCampPanel(hl.serverId);
 $('#map-night').onchange = (e) => { hl.night = e.target.checked; };
 $('#map-distance').onchange = (e) => { voicePrefs.fullVolume = !e.target.checked; saveVoicePrefs(); updateSpatial(); };
 $('#map-first').onchange = (e) => store.set(hlPrefKey, e.target.checked ? 'map' : 'list');
@@ -651,7 +659,12 @@ function hlFrame(now) {
   hl.last = now;
   const t = now / 1000;
   const fires = hlMapFires();
-  if (!hl.world || hl.world.fires !== fires.length) hl.world = hlBuildWorld(fires.length);
+  const camp = campState.get(hl.serverId) ?? null;
+  if (!hl.world || hl.world.fires !== fires.length || hl.world.camp !== campKey(camp)) {
+    hl.world = hlBuildWorld(fires.length, camp);
+    // Something was just built where you stand: step back onto the path.
+    if (hlFeetBlocked(hl.me.x, hl.me.y)) { hl.me.x = HL_START.x * HL_T; hl.me.y = HL_START.y * HL_T; hl.route = []; }
+  }
   const w = hl.world, T = HL_T, me = hl.me;
 
   // You.
@@ -724,6 +737,7 @@ function hlFrame(now) {
   const C = HL_CASINO;
   for (const lx of [C.x0 * T - 6, (C.x0 + C.w) * T + 4]) { hlPx(wg, '#ffe9a0', lx - 1, (C.y0 + C.h) * T - 23, 4, 3); hlPx(wg, '#c9953a', lx - 2, (C.y0 + C.h) * T - 24, 6, 1); }
   hlPx(wg, '#5b3a22', 33.6 * T, 11 * T - 6, 1, 8); hlPx(wg, '#2a2226', 33.6 * T - 2, 11 * T - 11, 5, 1); hlPx(wg, '#ffd35a', 33.6 * T - 1, 11 * T - 10, 3, 3);
+  campDrawFrame(wg, camp, t);
 
   // People, back to front.
   const people = [{ id: state.me.id, x: me.x, y: me.y, moving: me.moving, me: true }];
@@ -746,7 +760,9 @@ function hlFrame(now) {
     glow(C.x0 * T - 5, (C.y0 + C.h) * T - 22, 26); glow((C.x0 + C.w) * T + 5, (C.y0 + C.h) * T - 22, 26);
     glow(33.6 * T, 10.5 * T, 26);
     glow(me.x, me.y - 8, 30);
+    campGlows(glow, camp, t);
     wg.drawImage(w.light, 0, 0);
+    campNightLights(wg, camp);
     hlPx(wg, 'rgba(255,196,107,.85)', 6 * T + 10, 3 * T + 26, 12, 10); hlPx(wg, 'rgba(255,196,107,.85)', 6 * T + 58, 3 * T + 26, 12, 10);
     hlPixText(wg, 'CASINO', Math.round(m.x + (m.w - 27) / 2), m.y + 6, '#ffe28a');
     w.marqueeBulbs.forEach(([bx, by], i) => (i + chase) % 3 && hlPx(wg, '#ffd35a', bx, by, 1, 1));

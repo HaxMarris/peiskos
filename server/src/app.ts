@@ -49,6 +49,7 @@ import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
 import { fishing, fishingDock } from './fishing.ts';
 import { hearthland, readLook } from './hearthland.ts';
+import { camp } from './camp.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 export type { Perm } from './common.ts';
 
@@ -1264,7 +1265,13 @@ export function createApp(opts: AppOptions): Server {
 
   // ---- games at the fire
 
-  const games = fireGames({ inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message) });
+  const games = fireGames({
+    inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message),
+    ended: (channelId, players, ms) => {
+      const serverId = channelById(channelId)?.serverId;
+      if (serverId !== undefined) camping.gameEnded(serverId, players, ms);
+    },
+  });
   const dock = fishingDock({ inVoice, usersInVoice, sendTo });
 
   // ---- the casino (casino.ts): chips, blackjack, slots, cases, and a hold 'em table at each fire
@@ -1278,11 +1285,18 @@ export function createApp(opts: AppOptions): Server {
 
   // ---- Fireside Angler (fishing.ts): the fishing game's save, per person per hearth
 
-  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember });
+  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember, saved: (...a) => camping.fishSaved(...a) });
 
   // ---- Hearthland (hearthland.ts): the hearth as a map, with everyone's look and where they stand
 
   const hearthMap = hearthland({ db, route, isMember, sendTo, userChanged: (...a) => userChanged(...a) });
+
+  // ---- The camp grows (camp.ts): builds on the hearth map from time at the fires, games and fish
+
+  const camping = camp({
+    db, route, isMember, serverMemberIds, sendTo,
+    busyHearths: () => [...new Set(inVoice.values())].map((c) => channelById(c)?.serverId).filter((id): id is number => id !== undefined),
+  });
 
   // ---- messages: reading, sending, editing, reacting and deleting ----
 
@@ -2213,13 +2227,14 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // Tests set a due time in the past and then check the clock, rather than waiting for it.
-  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire });
+  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, checkCamp: camping.check });
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
     clearInterval(fireSweepTimer);
     for (const t of fireTimers) clearTimeout(t);
     casinoTables.stop();
+    camping.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);
   });
