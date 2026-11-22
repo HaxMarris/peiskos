@@ -51,6 +51,22 @@ const PHASES = {
     failed: ['preparing', 'cancelled'],
     cancelled: [],
   },
+  // The movie at the fire on this device (theater.js). loading: fetching the movie, or waiting
+  // for more of it. blocked: the browser won't start it until you tap.
+  theater: {
+    off: ['loading'],
+    loading: ['playing', 'paused', 'blocked', 'off'],
+    playing: ['paused', 'loading', 'blocked', 'off'],
+    paused: ['playing', 'loading', 'blocked', 'off'],
+    blocked: ['playing', 'paused', 'loading', 'off'],
+  },
+  // Adding a movie to the shelf (theater.js). checking: seeing that this browser plays the file.
+  movieUpload: {
+    idle: ['checking'],
+    checking: ['uploading', 'failed', 'idle'],
+    uploading: ['failed', 'idle'],
+    failed: ['checking', 'idle'],
+  },
   // The login screen (core.js). reset and resetCode: "Forgot your password?" before and after
   // the code was emailed. resetLink: a reset link from whoever runs the server. in: logged in.
   auth: {
