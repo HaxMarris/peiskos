@@ -369,6 +369,11 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
       CREATE INDEX movies_by_server ON movies(server_id);
     `),
   },
+  // A real place to meet for an event, so people going can share where they are on the way (meetup.ts).
+  {
+    why: 'Meeting places for events',
+    run: (db) => db.exec('ALTER TABLE events ADD COLUMN place_name TEXT; ALTER TABLE events ADD COLUMN place_lat REAL; ALTER TABLE events ADD COLUMN place_lng REAL;'),
+  },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */

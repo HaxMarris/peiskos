@@ -790,6 +790,10 @@ function openEvent(serverId, eventId) {
   modal(`<h2>${escapeHtml(e.title)}</h2>
     <p class="event-when">${CALENDAR_ICON}<span>${escapeHtml(new Date(e.startsAt).toLocaleString([], { weekday: 'long', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit' }))} · ${e.startsAt <= Date.now() ? 'happening now' : escapeHtml(countdown(e.startsAt))}</span></p>
     ${room ? `<p class="small">Where: <button type="button" class="link-btn" id="ev-room">${room.kind === 'voice' ? escapeHtml(room.name) : '#' + escapeHtml(room.name)}</button></p>` : ''}
+    ${e.placeName || e.placeLat != null ? `<p class="small meetup-place">${MAP_PIN_ICON}<span>${escapeHtml(e.placeName || 'Meeting place')}</span>${e.placeLat != null ? `<a href="${escapeHtml(mapsLink(e))}" target="_blank" rel="noopener">Open in Maps</a>` : ''}</p>` : ''}
+    ${e.placeLat != null && (mine === 'going' || mine === 'maybe') ? `<div class="meetup-cta">${meetupOpen(e)
+    ? `<button type="button" class="btn" id="ev-meetup">${meetState.eventId === e.id ? 'Sharing your location' : 'Meet up'}</button><span class="small muted" id="ev-meetup-count">See who's on the way</span>`
+    : `<span class="small muted">${Date.now() < e.startsAt ? 'Meet-up opens 2 hours before the start: share where you are on the way.' : 'The meet-up is over.'}</span>`}</div>` : ''}
     ${e.details ? `<div class="event-details">${formatContent(e.details)}</div>` : ''}
     <p class="small muted">Planned by ${escapeHtml(nameOf(e.createdBy, 'someone'))}</p>
     <div class="rsvp-row">${Object.entries(RSVP_LABELS).map(([k, l]) => `<button class="btn ${mine === k ? '' : 'secondary'}" data-rsvp="${k}" aria-pressed="${mine === k}">${l}${k !== 'no' ? ` · ${names(k).length}` : ''}</button>`).join('')}</div>
@@ -820,6 +824,12 @@ function openEvent(serverId, eventId) {
     else selectServer(serverId, false, { channelId: room.id }).then(() => showView('chat'));
   });
   $('#ev-edit')?.addEventListener('click', () => openEventEditor(serverId, e));
+  $('#ev-meetup')?.addEventListener('click', () => openMeetup(serverId, e.id));
+  if ($('#ev-meetup-count')) api(`/api/events/${e.id}/meetup`).then((r) => {
+    meetState.people.set(e.id, r.people);
+    const n = r.people.length;
+    if ($('#ev-meetup-count')) $('#ev-meetup-count').textContent = n ? `${n} sharing where they are` : 'No one is sharing yet';
+  }).catch(() => {});
   $('#ev-delete')?.addEventListener('click', async () => {
     if (!(await askConfirm(`Cancel ${e.title}?`))) return;
     try { handleEvent({ type: 'server_updated', server: await api(`/api/events/${e.id}`, { method: 'DELETE' }) }); closeModal(); }
@@ -889,17 +899,40 @@ function openEventEditor(serverId, e) {
       <label>What<input id="ev-title" maxlength="100" required placeholder="e.g. Game night" value="${escapeHtml(e?.title ?? '')}" /></label>
       <label>When<input type="datetime-local" id="ev-when" required value="${localInputValue(start)}" min="${localInputValue(Date.now())}" /></label>
       <label>Where<select id="ev-room"><option value="">Nowhere in particular</option>${rooms.map((c) => `<option value="${c.id}" ${c.id === e?.channelId ? 'selected' : ''}>${c.kind === 'voice' ? escapeHtml(c.name) + ' (voice)' : '#' + escapeHtml(c.name)}</option>`).join('')}</select></label>
+      <fieldset class="ev-place"><legend>Meeting place <span class="muted">(optional)</span></legend>
+        <label>Name<input id="ev-place-name" maxlength="100" placeholder="e.g. The pier café" value="${escapeHtml(e?.placeName ?? '')}" /></label>
+        <label for="ev-place-at">Where on the map</label>
+        <div class="ev-place-row"><input id="ev-place-at" placeholder="Paste a maps link or coordinates" aria-describedby="ev-place-help" value="${e?.placeLat != null ? `${e.placeLat}, ${e.placeLng}` : ''}" />${canShareLocation() ? '<button type="button" class="btn secondary" id="ev-place-here">Use where I am</button>' : ''}</div>
+        <p class="small muted" id="ev-place-help">With a place on the map, people going can share where they are on the way.</p>
+      </fieldset>
       <label>Details<textarea id="ev-details" maxlength="1000" rows="3" placeholder="Anything people should know">${escapeHtml(e?.details ?? '')}</textarea></label>
       <div class="error" id="modal-error"></div>
       <div class="modal-row"><button type="button" class="btn secondary" data-close>Cancel</button><button type="submit" class="btn">${e ? 'Save' : 'Plan it'}</button></div>
     </form>`);
+  $('#ev-place-here')?.addEventListener('click', (ev) => {
+    const b = ev.currentTarget;
+    b.disabled = true;
+    const stop = watchLocation((c) => {
+      stop();
+      b.disabled = false;
+      $('#ev-place-at').value = `${c.latitude.toFixed(5)}, ${c.longitude.toFixed(5)}`;
+    }, (err) => { stop(); b.disabled = false; $('#modal-error').textContent = locationError(err); });
+  });
   $('#event-form').onsubmit = async (ev) => {
     ev.preventDefault();
+    const place = parsePlace($('#ev-place-at').value);
+    if (place === undefined) {
+      $('#modal-error').textContent = "That place isn't on the map. Paste a full maps link, or coordinates like 59.91, 10.75.";
+      return $('#ev-place-at').focus();
+    }
     const body = {
       title: $('#ev-title').value,
       startsAt: new Date($('#ev-when').value).getTime(),
       channelId: $('#ev-room').value ? Number($('#ev-room').value) : null,
       details: $('#ev-details').value,
+      placeName: $('#ev-place-name').value,
+      placeLat: place?.lat ?? null,
+      placeLng: place?.lng ?? null,
     };
     try {
       const updated = await api(e ? `/api/events/${e.id}` : `/api/servers/${serverId}/events`, { method: e ? 'PATCH' : 'POST', body });

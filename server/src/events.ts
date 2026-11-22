@@ -14,6 +14,8 @@ export interface EventsContext {
   cleanName: (value: unknown, field: string, max?: number) => string;
   db: Db;
   isMember: (serverId: number, userId: number) => boolean;
+  /** An event changed in a way meet-up cares about: who's going, its place or time, or it's gone. */
+  meetupChanged: (eventId: number) => void;
   notTooFast: (userId: number) => void;
   now: () => number;
   route: (method: string, path: string, handler: Handler, auth?: boolean) => unknown;
@@ -25,7 +27,7 @@ export interface EventsContext {
 
 export function hearthEvents(ctx: EventsContext) {
   const {
-    allowed, canSee, channelById, cleanName, db, isMember, notTooFast, now, route, sendServerUpdate, serverKind,
+    allowed, canSee, channelById, cleanName, db, isMember, meetupChanged, notTooFast, now, route, sendServerUpdate, serverKind,
     serverSummary, wakeAt,
   } = ctx;
 
@@ -33,7 +35,8 @@ export function hearthEvents(ctx: EventsContext) {
   const eventsIn = (serverId: number, viewerId: number) => {
     const rows = db
       .prepare(
-        `SELECT id, title, details, starts_at AS startsAt, channel_id AS channelId, created_by AS createdBy FROM events
+        `SELECT id, title, details, starts_at AS startsAt, channel_id AS channelId, created_by AS createdBy,
+                place_name AS placeName, place_lat AS placeLat, place_lng AS placeLng FROM events
          WHERE server_id = ? AND starts_at > ? ORDER BY starts_at LIMIT 50`,
       )
       .all(serverId, now() - 3 * 3600_000) as Json[];
@@ -72,6 +75,20 @@ export function hearthEvents(ctx: EventsContext) {
       if (c && (c.serverId !== serverId || !canSee(c, user.id))) throw new HttpError(400, "That room isn't in this hearth");
       out.channel_id = c?.id ?? null;
     }
+    // A real place to meet: a name, and where it is (from a maps link or "Use where I am").
+    if (!partial || body.placeName !== undefined) {
+      const name = typeof body.placeName === 'string' ? body.placeName.trim() : '';
+      if (name.length > 100) throw new HttpError(400, 'The meeting place can be at most 100 characters');
+      out.place_name = name || null;
+    }
+    if (!partial || body.placeLat !== undefined || body.placeLng !== undefined) {
+      const none = body.placeLat == null && body.placeLng == null;
+      const lat = Number(body.placeLat), lng = Number(body.placeLng);
+      if (!none && !(Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180))
+        throw new HttpError(400, "That place isn't on the map. Paste a maps link or coordinates like 59.91, 10.75.");
+      out.place_lat = none ? null : Math.round(lat * 1e6) / 1e6;
+      out.place_lng = none ? null : Math.round(lng * 1e6) / 1e6;
+    }
     return out;
   };
   /** The event, if you made it or can edit the burrow. */
@@ -90,8 +107,14 @@ export function hearthEvents(ctx: EventsContext) {
     if (upcoming >= 50) throw new HttpError(400, 'This hearth has 50 events coming up already');
     const e = cleanEvent(serverId, user, body);
     const r = db
-      .prepare('INSERT INTO events (server_id, channel_id, title, details, starts_at, created_by, created_at, reminded) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(serverId, e.channel_id as number | null, e.title as string, e.details as string, e.starts_at as number, user.id, now(), e.reminded as number);
+      .prepare(
+        `INSERT INTO events (server_id, channel_id, title, details, starts_at, created_by, created_at, reminded, place_name, place_lat, place_lng)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        serverId, e.channel_id as number | null, e.title as string, e.details as string, e.starts_at as number, user.id, now(),
+        e.reminded as number, e.place_name as string | null, e.place_lat as number | null, e.place_lng as number | null,
+      );
     // Whoever plans it is going.
     db.prepare("INSERT INTO event_rsvps (event_id, user_id, status) VALUES (?, ?, 'going')").run(Number(r.lastInsertRowid), user.id);
     wakeAt((e.starts_at as number) - EVENT_REMIND_MS);
@@ -105,6 +128,7 @@ export function hearthEvents(ctx: EventsContext) {
     for (const [col, value] of Object.entries(e)) db.prepare(`UPDATE events SET ${col} = ? WHERE id = ?`).run(value as string | number | null, ev.id);
     if (e.starts_at) wakeAt((e.starts_at as number) - EVENT_REMIND_MS);
     sendServerUpdate(ev.serverId);
+    meetupChanged(ev.id);
     return serverSummary(ev.serverId, user.id);
   });
 
@@ -112,6 +136,7 @@ export function hearthEvents(ctx: EventsContext) {
     const ev = ownEvent(Number(params[0]), user);
     db.prepare('DELETE FROM events WHERE id = ?').run(ev.id);
     sendServerUpdate(ev.serverId);
+    meetupChanged(ev.id);
     return serverSummary(ev.serverId, user.id);
   });
 
@@ -127,6 +152,7 @@ export function hearthEvents(ctx: EventsContext) {
       ).run(ev.id, user.id, body.status as string);
     else db.prepare('DELETE FROM event_rsvps WHERE event_id = ? AND user_id = ?').run(ev.id, user.id);
     sendServerUpdate(ev.serverId);
+    meetupChanged(ev.id);
     return serverSummary(ev.serverId, user.id);
   });
 

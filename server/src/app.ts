@@ -47,6 +47,7 @@ import { threads } from './threads.ts';
 import { login } from './login.ts';
 import { capsules } from './capsules.ts';
 import { EVENT_REMIND_MS, hearthEvents } from './events.ts';
+import { meetup } from './meetup.ts';
 import { friendships } from './friends.ts';
 import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
@@ -1863,8 +1864,8 @@ export function createApp(opts: AppOptions): Server {
   const {
     eventsIn,
   } = hearthEvents({
-    allowed, canSee, channelById, cleanName, db, isMember, notTooFast, now, route, sendServerUpdate, serverKind,
-    serverSummary, wakeAt: (...a) => wakeAt(...a),
+    allowed, canSee, channelById, cleanName, db, isMember, meetupChanged: (...a) => meetupChanged(...a), notTooFast, now, route,
+    sendServerUpdate, serverKind, serverSummary, wakeAt: (...a) => wakeAt(...a),
   });
 
   // ---- time capsules (capsules.ts)
@@ -1872,6 +1873,9 @@ export function createApp(opts: AppOptions): Server {
     can, canSee, channelById, db, inVoice, notTooFast, now, postMessage, postProblem: (...a) => postProblem(...a), removeFiles, route,
     sendServerUpdate, sendTo, serverKind, userById, usersInVoice,
   });
+
+  // ---- meet-up: where people going to an event are on the way there (meetup.ts)
+  const { meetupChanged, sweepMeetups, stopMeetups } = meetup({ db, isMember, now, route, sendTo });
 
   // ---- the calendar feed (calendar.ts)
   const { remindEvents, sendCalendar } = calendarFeed({
@@ -2011,7 +2015,7 @@ export function createApp(opts: AppOptions): Server {
       const game = url.pathname.startsWith('/games/');
       res.setHeader('content-security-policy', game ? APP_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'") : APP_CSP);
       res.setHeader('x-frame-options', game ? 'SAMEORIGIN' : 'DENY');
-      res.setHeader('permissions-policy', 'camera=(self), display-capture=(self), geolocation=(), microphone=(self)');
+      res.setHeader('permissions-policy', 'camera=(self), display-capture=(self), geolocation=(self), microphone=(self)');
       // Invite links open the app, which shows the burrow before joining.
       const invite = url.pathname.match(/^\/invite\/([\w-]{1,32})\/?$/);
       if (invite) return sendInvitePage(req, res, invite[1]);
@@ -2296,7 +2300,7 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // Tests set a due time in the past and then check the clock, rather than waiting for it.
-  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, tapes });
+  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, tapes, sweepMeetups });
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
@@ -2305,6 +2309,7 @@ export function createApp(opts: AppOptions): Server {
     casinoTables.stop();
     tapes?.stop();
     lamps.stop();
+    stopMeetups();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);
   });
