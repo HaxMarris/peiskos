@@ -111,26 +111,26 @@ async function sendAudio(person: any, tapeId: number, part: string, bytes = audi
 }
 const tapeState = (s: any, pred: (tape: any) => boolean) => s.next((e: any) => e.type === 'tape_state' && pred(e.tape));
 
-test('a fire is taped only once everyone there says yes', async () => {
+test('clips are on only once everyone at the fire says yes', async () => {
   const [host, bob] = await people('host', 'bob');
   const { fire } = await fireWith(host, bob);
   const h = await sitDown(host, fire);
   const b = await sitDown(bob, fire);
 
-  h.send({ type: 'tape', action: 'ask', keep: 'all' });
+  h.send({ type: 'tape', action: 'ask' });
   const asked = await tapeState(b, (t) => t?.phase === 'asking');
   assert.deepEqual(asked.tape.yes, [host.user.id]);
   b.send({ type: 'tape', action: 'answer', yes: false });
-  assert.match((await h.next((e) => e.type === 'tape_note')).text, /said no, so nothing is taped/);
+  assert.match((await h.next((e) => e.type === 'tape_note')).text, /said no, so clips stay off/);
   await tapeState(h, (t) => t === null);
 
   // Asked again, and nobody answers in time.
-  h.send({ type: 'tape', action: 'ask', keep: 'all' });
+  h.send({ type: 'tape', action: 'ask' });
   await tapeState(b, (t) => t?.phase === 'asking');
   assert.match((await h.next((e) => e.type === 'tape_note' && /answered/.test(e.text))).text, /Not everyone answered/);
 
   // Nothing can be sent to a tape that isn't running.
-  h.send({ type: 'tape', action: 'ask', keep: 'all' });
+  h.send({ type: 'tape', action: 'ask' });
   await tapeState(b, (t) => t?.phase === 'asking');
   b.send({ type: 'tape', action: 'answer', yes: true });
   const taping = await tapeState(h, (t) => t?.phase === 'taping');
@@ -141,12 +141,12 @@ test('a fire is taped only once everyone there says yes', async () => {
   b.ws.close();
 });
 
-test('people on the tape send their own audio; clips cut the last 30 seconds; the tape is mixed when it stops', async () => {
+test('people who said yes send their own audio, and Clip that cuts the last 30 seconds', async () => {
   const [host, bob, carol] = await people('host', 'bob', 'carol');
   const { fire } = await fireWith(host, bob, carol);
   const h = await sitDown(host, fire);
   const b = await sitDown(bob, fire);
-  h.send({ type: 'tape', action: 'ask', keep: 'all' });
+  h.send({ type: 'tape', action: 'ask' });
   await tapeState(b, (t) => t?.phase === 'asking');
   b.send({ type: 'tape', action: 'answer', yes: true });
   const { tape } = await tapeState(h, (t) => t?.phase === 'taping');
@@ -157,7 +157,7 @@ test('people on the tape send their own audio; clips cut the last 30 seconds; th
   const seen = await tapeState(c, (t) => t?.phase === 'taping');
   assert.equal(seen.tape.yes.includes(carol.user.id), false);
   c.send({ type: 'tape', action: 'answer', yes: false });
-  assert.match((await h.next((e) => e.type === 'tape_note' && /isn't on the tape/.test(e.text))).text, /carol\d+ isn't on the tape/);
+  assert.match((await h.next((e) => e.type === 'tape_note' && /said no to clips/.test(e.text))).text, /carol\d+ said no to clips/);
   assert.deepEqual(await sendAudio(carol, tape.id, 'carol-part'), [403, 403, 403, 403]);
 
   // Bob's app sends his voice; a piece sent twice is taken once, and a part can't start midway.
@@ -172,9 +172,10 @@ test('people on the tape send their own audio; clips cut the last 30 seconds; th
   });
   assert.equal(wrongType.status, 415);
 
-  // Clip that: only people on the tape can.
+  // Clip that: only people who said yes can.
   c.send({ type: 'tape', action: 'clip' });
-  assert.match((await c.next((e) => e.type === 'error')).error, /not on this tape/);
+  assert.match((await c.next((e) => e.type === 'error')).error, /didn't say yes/);
+  await new Promise((r) => setTimeout(r, 1500)); // a clip of a second and a half at least
   b.send({ type: 'tape', action: 'clip' });
   assert.match((await h.next((e) => e.type === 'tape_note' && /clipped/.test(e.text))).text, /bob\d+ clipped that/);
   const { clip } = await b.next((e) => e.type === 'tape_clip');
@@ -185,52 +186,49 @@ test('people on the tape send their own audio; clips cut the last 30 seconds; th
   assert.ok((await clipFile.arrayBuffer()).byteLength > 2048);
 
   h.send({ type: 'tape', action: 'stop' });
-  assert.match((await c.next((e) => e.type === 'tape_note' && /stopped/.test(e.text))).text, /host\d+ stopped the tape/);
+  assert.match((await c.next((e) => e.type === 'tape_note' && /turned clips off/.test(e.text))).text, /host\d+ turned clips off/);
   const ready = await b.next((e) => e.type === 'tape_ready');
   assert.equal(ready.state, 'ready');
-  // Carol wasn't on it, so she isn't told; she can still see it, as anyone who can see the fire can.
+  await app.tapes.settled();
+  // Carol said no, so she isn't told; she can still listen, as anyone who can see the fire can.
   assert.equal(c.events.some((e) => e.type === 'tape_ready'), false);
   const list = (await call(`/api/channels/${fire}/tapes`, { token: carol.token })).data;
   const t = list.tapes.find((x: any) => x.id === tape.id);
   assert.equal(t.state, 'ready');
+  assert.equal(t.url, undefined);
   assert.deepEqual(t.people.map((p: any) => p.id).sort(), [host.user.id, bob.user.id].sort());
   assert.equal(t.clips.length, 1);
   assert.equal(t.canDelete, false);
-  const whole = await fetch(base + t.url, { headers: { range: 'bytes=0-99' } });
-  assert.equal(whole.status, 206);
-  assert.equal((await whole.arrayBuffer()).byteLength, 100);
+  const part = await fetch(base + clip.url, { headers: { range: 'bytes=0-99' } });
+  assert.equal(part.status, 206);
+  assert.equal((await part.arrayBuffer()).byteLength, 100);
+  // Only the clip (and each person's part of it) is left: nobody's whole recording.
+  assert.equal(readdirSync(join(uploadDir, 'tapes')).filter((f) => f.endsWith('.webm')).length, 0);
 
-  // Overnight, each person's own audio gets its words; whisper's quiet markers are left out.
-  assert.equal((await call(`/api/tapes/${tape.id}`, { token: bob.token })).data.transcript.state, 'waiting');
+  // Overnight, each person's part of the clip gets its words; whisper's quiet markers are left out.
+  assert.equal((await call(`/api/tape-clips/${clip.id}`, { token: bob.token })).data.transcript.state, 'waiting');
   while (await app.tapes.transcribeNext(true)) { /* next */ }
   assert.equal(whisperCalls, 1);
-  const read = (await call(`/api/tapes/${tape.id}`, { token: bob.token })).data.transcript;
+  const read = (await call(`/api/tape-clips/${clip.id}`, { token: carol.token })).data.transcript;
   assert.equal(read.state, 'ready');
-  assert.equal(read.lines.length, 1);
-  assert.equal(read.lines[0].userId, bob.user.id);
-  assert.equal(read.lines[0].text, 'hello by the fire');
-  const clipRead = (await call(`/api/tape-clips/${clip.id}`, { token: carol.token })).data.transcript;
-  const inClip = read.lines[0].end > clip.startMs && read.lines[0].at < clip.endMs;
-  assert.equal(clipRead.lines.length, inClip ? 1 : 0);
+  assert.deepEqual(read.lines.map((l: any) => [l.userId, l.text]), [[bob.user.id, 'hello by the fire']]);
 
-  // Only people on it (or who manage voice) can delete it.
+  // Only people who said yes (or who manage voice) can delete them.
   assert.equal((await call(`/api/tapes/${tape.id}`, { method: 'DELETE', token: carol.token })).status, 403);
   assert.equal((await call(`/api/tapes/${tape.id}`, { method: 'DELETE', token: bob.token })).status, 200);
-  assert.equal((await fetch(base + t.url)).status, 404);
   assert.equal((await fetch(base + clip.url)).status, 404);
   for (const s of [h, b, c]) s.ws.close();
 });
 
-test('a tape that keeps only clips loses everything else when it stops, and anyone can take themselves off', async () => {
+test('anyone can take themselves out of the clips, and their voice is cut out of them', async () => {
   const [host, bob] = await people('host', 'bob');
   const { fire } = await fireWith(host, bob);
   const h = await sitDown(host, fire);
   const b = await sitDown(bob, fire);
-  h.send({ type: 'tape', action: 'ask', keep: 'clips' });
+  h.send({ type: 'tape', action: 'ask' });
   await tapeState(b, (t) => t?.phase === 'asking');
   b.send({ type: 'tape', action: 'answer', yes: true });
   const { tape } = await tapeState(h, (t) => t?.phase === 'taping');
-  assert.equal(tape.keep, 'clips');
   await sendAudio(bob, tape.id, 'bob-only-clips');
   await sendAudio(host, tape.id, 'host-only-clips');
   await new Promise((r) => setTimeout(r, 1500)); // a clip of a second and a half
@@ -242,7 +240,6 @@ test('a tape that keeps only clips loses everything else when it stops, and anyo
   await app.tapes.settled();
 
   const t = (await call(`/api/tapes/${tape.id}`, { token: host.token })).data.tape;
-  assert.equal(t.url, null);
   assert.equal(t.clips[0].state, 'ready');
   // Left: the clip, and each person's part of it (for the transcript). Their whole recordings are gone.
   assert.equal(readdirSync(join(uploadDir, 'tapes')).filter((f) => f.endsWith('.webm')).length, 0);
@@ -262,18 +259,18 @@ test('a tape that keeps only clips loses everything else when it stops, and anyo
   b.ws.close();
 });
 
-test('the tape stops when nobody on it is left at the fire, and the asker leaving calls it off', async () => {
+test('clips turn off when nobody who said yes is left at the fire, and the asker leaving calls it off', async () => {
   const [host, bob] = await people('host', 'bob');
   const { fire } = await fireWith(host, bob);
   const h = await sitDown(host, fire);
   const b = await sitDown(bob, fire);
-  h.send({ type: 'tape', action: 'ask', keep: 'all' });
+  h.send({ type: 'tape', action: 'ask' });
   await tapeState(b, (t) => t?.phase === 'asking');
   h.send({ type: 'voice_leave' });
   assert.match((await b.next((e) => e.type === 'tape_note')).text, /called off/);
 
   // Alone at the fire, asking starts it straight away.
-  b.send({ type: 'tape', action: 'ask', keep: 'all' });
+  b.send({ type: 'tape', action: 'ask' });
   const { tape } = await tapeState(b, (t) => t?.phase === 'taping');
   b.send({ type: 'voice_leave' });
   await app.tapes.settled();
@@ -284,4 +281,39 @@ test('the tape stops when nobody on it is left at the fire, and the asker leavin
   assert.equal(t.state, 'empty');
   h.ws.close();
   b.ws.close();
+});
+
+test("while clips are on, nobody's voice is kept past the last minute and a half", async () => {
+  // A server of its own, where "a minute and a half" is a fifth of a second.
+  const quick = createApp({
+    db: openDb(':memory:'), publicDir: '/nonexistent', voice, uploadDir: join(work, 'quick-uploads'),
+    tapes: { timing: { askMs: 3000, clipDelayMs: 100, endGraceMs: 200, askAgainMs: 0, keepBackMs: 200 } },
+  });
+  await new Promise<void>((r) => quick.listen(0, r));
+  const was = base;
+  base = `http://localhost:${(quick.address() as AddressInfo).port}`;
+  try {
+    const [host] = await people('host');
+    const { fire } = await fireWith(host);
+    const h = await sitDown(host, fire);
+    h.send({ type: 'tape', action: 'ask' });
+    const { tape } = await tapeState(h, (t) => t?.phase === 'taping');
+    const dir = join(work, 'quick-uploads', 'tapes');
+    const webm = () => readdirSync(dir).filter((f) => f.endsWith('.webm')).length;
+    await sendAudio(host, tape.id, 'first-part');
+    assert.equal(webm(), 1);
+    await new Promise((r) => setTimeout(r, 400));
+    // The next part comes in: the first, long done, is let go of.
+    await sendAudio(host, tape.id, 'second-part', audio, 1);
+    await new Promise((r) => setTimeout(r, 50));
+    assert.equal(webm(), 1);
+    h.send({ type: 'tape', action: 'stop' });
+    await h.next((e) => e.type === 'tape_ready');
+    assert.equal(webm(), 0);
+    h.ws.close();
+  } finally {
+    base = was;
+    quick.closeAllConnections();
+    quick.close();
+  }
 });

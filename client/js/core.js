@@ -615,7 +615,6 @@ async function enterAppNow() {
   state.gifsEnabled = !!config.gifs;
   state.emailEnabled = !!config.email;
   state.tapesEnabled = !!config.tapes;
-  state.tapeKeepDays = config.tapeKeepDays || 30;
   $('#gif-btn').classList.toggle('hidden', !state.gifsEnabled);
   nudgeForEmail();
   renderMyStatus();

@@ -23,7 +23,7 @@ const uploadDir = process.env.UPLOAD_DIR ?? join(dirname(dbFile), 'uploads');
 const offsite = s3FromEnv();
 if (backupKeep > 0) scheduleBackups(db, backupDir, backupKeep, offsite ? { cfg: offsite, uploadDir } : undefined);
 
-// Fire tapes mix people's audio with ffmpeg, so they're on wherever it's installed (it is in Docker).
+// Clips at the fire are cut and mixed with ffmpeg, so they're on wherever it's installed (it is in Docker).
 const tapesOn = process.env.TAPES !== 'off' && spawnSync('ffmpeg', ['-version'], { stdio: 'ignore' }).status === 0;
 /** TAPE_TRANSCRIBE_HOURS: "1-7" (from 1 to 7 at night, server time), or "always". */
 function nightHours(text: string | undefined): [number, number] | undefined {
@@ -69,7 +69,6 @@ const app = createApp({
   tapes: tapesOn
     ? {
         maxMinutes: Number(process.env.TAPE_MAX_MINUTES ?? 180),
-        keepDays: Number(process.env.TAPE_KEEP_DAYS ?? 30),
         storageBytes: Number(process.env.TAPE_STORAGE_MB ?? 10240) * 1024 * 1024,
         whisperUrl: process.env.WHISPER_URL || undefined,
         language: process.env.TAPE_LANGUAGE || undefined,
@@ -99,7 +98,7 @@ app.listen(port, () => {
     console.log('Warning: REGISTRATION_CODE is not set, so anyone who can reach this server can sign up.');
   if (!process.env.KLIPY_API_KEY) console.log('The GIF picker is off (set KLIPY_API_KEY to turn it on).');
   if (!process.env.SMTP_URL) console.log("Email is off, so people can't reset a forgotten password themselves (set SMTP_URL to turn it on).");
-  if (process.env.LIVEKIT_API_KEY && process.env.TAPES !== 'off' && !tapesOn) console.log("Fire tapes are off: install ffmpeg to turn them on.");
-  if (tapesOn && !process.env.WHISPER_URL) console.log('Tapes have no transcripts (set WHISPER_URL to turn them on; see README).');
+  if (process.env.LIVEKIT_API_KEY && process.env.TAPES !== 'off' && !tapesOn) console.log("Clips at the fire are off: install ffmpeg to turn them on.");
+  if (tapesOn && !process.env.WHISPER_URL) console.log('Clips have no transcripts (set WHISPER_URL to turn them on; see README).');
   if (!process.env.LIVEKIT_API_KEY) console.log('Voice rooms are off (set LIVEKIT_API_KEY and LIVEKIT_API_SECRET to turn them on).');
 });

@@ -413,9 +413,9 @@ function drawChannels() {
     }
     if (i > 0) li.firstChild.append(pinFireButton(s, c));
     if (can(s, 'rooms')) li.firstChild.append(roomSettingsButton(c));
-    // Held or right-clicked: the fire's tapes, and its settings for whoever manages rooms.
+    // Held or right-clicked: the fire's clips, and its settings for whoever manages rooms.
     const fireMenu = [
-      state.tapesEnabled && !isDm(s) && { label: 'Tapes', run: () => openTapes(c.id) },
+      state.tapesEnabled && !isDm(s) && { label: 'Clips', run: () => openTapes(c.id) },
       can(s, 'rooms') && { label: 'Fire settings', run: () => openRoomSettings(c) },
     ].filter(Boolean);
     if (fireMenu.length) onHold(li, () => (fireMenu.length > 1 ? openMenu(li, fireMenu) : fireMenu[0].run()));

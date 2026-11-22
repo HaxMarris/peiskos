@@ -6,7 +6,7 @@ COPY server/src ./server/src
 COPY server/trivia ./server/trivia
 COPY client ./client
 ENV PORT=3000 DB_FILE=/data/chat.db NODE_ENV=production
-# Fire tapes mix everyone's audio with ffmpeg.
+# Clips at the fire are cut and mixed with ffmpeg.
 RUN apk add --no-cache ffmpeg
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data

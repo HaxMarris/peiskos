@@ -28,7 +28,7 @@ jobs:
           cache-dependency-path: server/package-lock.json
       - run: npm ci
         working-directory: server
-      # Fire tapes are mixed with ffmpeg, and their tests mix real audio.
+      # Clips at the fire are cut with ffmpeg, and their tests cut real audio.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
       - run: npm run typecheck
         working-directory: server
@@ -116,7 +116,7 @@ jobs:
           # Just the browser, as in the screens check above: system libraries only if it won't start.
           npx playwright install chromium
           node -e "require('playwright').chromium.launch().then((b) => b.close())" || npx playwright install-deps chromium
-      # Fire tapes are only on where ffmpeg is.
+      # Clips at the fire are only on where ffmpeg is.
       - run: sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
       - run: npm test
         working-directory: e2e

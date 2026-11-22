@@ -54,9 +54,8 @@ services:
       HEARTBEAT_URL: ${HEARTBEAT_URL:-}
       # Fire decorations and marshmallows: all unlocked unless this is "hours" (see README).
       FIRE_UNLOCKS: ${FIRE_UNLOCKS:-}
-      # Fire tapes (see README). "off" turns them off.
+      # Clips at the fire (see README). "off" turns them off.
       TAPES: ${TAPES:-}
-      TAPE_KEEP_DAYS: ${TAPE_KEEP_DAYS:-30}
       TAPE_STORAGE_MB: ${TAPE_STORAGE_MB:-10240}
       TAPE_MAX_MINUTES: ${TAPE_MAX_MINUTES:-180}
       # Transcripts, from the whisper service below: http://whisper:8080 when it's on.
@@ -104,7 +103,7 @@ services:
         logging:
           level: info
 
-  # Writes out what was said on fire tapes, at night, on this machine (whisper.cpp). It only starts
+  # Writes out what was said in clips at the fire, at night, on this machine (whisper.cpp). It only starts
   # when .env's COMPOSE_PROFILES includes "transcripts", and Peiskos uses it once WHISPER_URL is set.
   whisper:
     build:

@@ -91,7 +91,7 @@ export interface AppOptions {
   hosting?: HostingOptions;
   /** Who runs this server and how to reach them, for the privacy policy and terms (see legal.ts). */
   legal?: { name?: string; contact?: string };
-  /** Fire tapes (see tapes.ts): on with voice and uploads, unless this is false. */
+  /** Clips at the fire (see tapes.ts): on with voice and uploads, unless this is false. */
   tapes?: TapeOptions | false;
   /** Tests make the casino's poker table quicker, and stack its decks. */
   casino?: Pick<CasinoContext, 'timing' | 'deck'>;
@@ -829,7 +829,6 @@ export function createApp(opts: AppOptions): Server {
       gifs: !!gifs,
       email: !!opts.mail,
       tapes: !!tapes,
-      tapeKeepDays: tapes ? (opts.tapes || {}).keepDays ?? 30 : undefined,
     }),
     false,
   );
@@ -1249,7 +1248,7 @@ export function createApp(opts: AppOptions): Server {
 
   // ---- listen together
 
-  // ---- fire tapes: only with everyone's yes, recorded by each person's own app
+  // ---- clips at the fire: only with everyone's yes, recorded by each person's own app
   const tapes = opts.voice && opts.uploadDir && opts.tapes !== false
     ? fireTapes({
         db, dir: join(opts.uploadDir, 'tapes'), options: opts.tapes ?? {}, minFreeDisk: opts.minFreeDiskBytes ?? 2 * 1024 ** 3,

@@ -226,20 +226,19 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
-  // Fire tapes (tapes.ts): a fire taped with everyone's yes, its clips, and each person's own audio.
+  // Clips at the fire (tapes.ts): a time clips could be made at a fire (everyone said yes), its clips,
+  // and each person's own audio: the last minute or so while it runs, and their part of each clip.
   {
-    why: 'Fire tapes and clips',
+    why: 'Clips at the fire',
     run: (db) => db.exec(`
       CREATE TABLE tapes (
         id          INTEGER PRIMARY KEY,
         server_id   INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
         channel_id  INTEGER NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
         started_by  INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        keep        TEXT NOT NULL,             -- 'all', or 'clips': only the clips are kept
         state       TEXT NOT NULL,             -- 'taping', 'mixing', 'ready', 'empty', 'failed'
         started_at  INTEGER NOT NULL,
         ended_at    INTEGER,
-        file        TEXT,                      -- the whole fire mixed together (none for 'clips', or once cleared)
         duration_ms INTEGER
       );
       CREATE INDEX tapes_channel ON tapes(channel_id, started_at);
@@ -260,8 +259,8 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
         created_at INTEGER NOT NULL
       );
       CREATE INDEX tape_clips_tape ON tape_clips(tape_id);
-      -- One person's own audio: a stretch their app recorded (clip_id null), or their part of a clip
-      -- on a tape that keeps only clips. Transcribed one at a time, overnight.
+      -- One person's own audio: a stretch their app recorded (clip_id null, deleted within minutes),
+      -- or their part of a clip, transcribed one at a time overnight.
       CREATE TABLE tape_audio (
         id             INTEGER PRIMARY KEY,
         tape_id        INTEGER NOT NULL REFERENCES tapes(id) ON DELETE CASCADE,

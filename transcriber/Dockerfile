@@ -1,5 +1,6 @@
-# whisper.cpp's server, which writes out what was said on fire tapes. Peiskos sends it one person's
-# audio at a time, overnight; nothing leaves this machine. See "Fire tapes" in the README.
+# whisper.cpp's server, which writes out what was said in clips at the fire. Peiskos sends it one
+# person's part of a clip at a time, overnight; nothing leaves this machine. See "Clips at the fire"
+# in the README.
 FROM debian:bookworm-slim AS build
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential cmake git ca-certificates curl \
   && rm -rf /var/lib/apt/lists/*

@@ -1,10 +1,12 @@
-// Fire tapes: a fire recorded, only once everyone at it says yes, with "Clip that" for the last
-// 30 seconds, and transcripts made overnight on this server.
+// Clips at the fire: once everyone at a fire says yes, anyone there can press "Clip that" to keep
+// the last 30 seconds. Nothing else is kept: the server only ever holds the last minute and a half
+// or so of anyone's voice, and clips get transcripts made overnight on this server.
 //
 // Voice is end-to-end encrypted, so LiveKit only ever has scrambled audio and can't record it.
-// Instead each person's own app records their own microphone, only while they're on the tape,
-// and sends it here a few seconds at a time. Peiskos keeps each person's audio apart (which is
-// also how the transcript knows who said what) and mixes it with ffmpeg for listening.
+// Instead each person's own app records their own microphone, only while they said yes, and sends
+// it here a few seconds at a time. Peiskos keeps each person's audio apart (which is also how the
+// transcript knows who said what) and mixes a clip from it with ffmpeg.
+// (In the code and database a time clips are on at a fire is a "tape".)
 import { randomBytes } from 'node:crypto';
 import { createReadStream, openAsBlob } from 'node:fs';
 import { appendFile, mkdir, readdir, rename, stat, statfs, unlink } from 'node:fs/promises';
@@ -19,8 +21,6 @@ import { bearer, HttpError, type Json, readLimited, send } from './http.ts';
 export interface TapeOptions {
   /** Longest a tape runs before it stops by itself (default 3 hours). */
   maxMinutes?: number;
-  /** Whole tapes are cleared this long after they end; their clips stay (default 30). */
-  keepDays?: number;
   /** All tapes and clips together stop new tapes past this (default 10 GB). */
   storageBytes?: number;
   /** whisper.cpp's server (see transcriber/); no transcripts without it. */
@@ -31,7 +31,7 @@ export interface TapeOptions {
   nightHours?: [number, number];
   ffmpeg?: string;
   /** Tests make it all quicker. */
-  timing?: { askMs?: number; clipDelayMs?: number; endGraceMs?: number; askAgainMs?: number };
+  timing?: { askMs?: number; clipDelayMs?: number; endGraceMs?: number; askAgainMs?: number; keepBackMs?: number };
 }
 
 export interface TapesContext {
@@ -54,19 +54,17 @@ export interface TapesContext {
   userByToken: (raw: string | undefined) => User | undefined;
 }
 
-type Keep = 'all' | 'clips';
 /** A fire being asked, or being taped, right now. */
 type Live = {
   channelId: number;
   phase: 'asking' | 'taping';
   by: number;
-  keep: Keep;
   answers: Map<number, boolean>; // yes or no, from everyone asked
   tapeId: number | null;
   startedAt: number;
   timer: NodeJS.Timeout | null; // the ask running out, or the tape's longest
 };
-type Part = { rowId: number; file: string; next: number; chain: Promise<unknown>; bytes: number };
+type Part = { rowId: number; file: string; next: number; chain: Promise<unknown>; bytes: number; lastAt: number };
 type AudioRow = { id: number; tape_id: number; clip_id: number | null; user_id: number | null; file: string; start_ms: number; bytes: number; transcript: string | null };
 
 export const CLIP_MS = 30_000;
@@ -83,13 +81,15 @@ export function fireTapes(ctx: TapesContext) {
   const { db, dir, options, route, canSee, channelById, usersInVoice, sendTo, nameIn, isBoss, isHearth } = ctx;
   const ffmpeg = options.ffmpeg ?? 'ffmpeg';
   const maxMs = (options.maxMinutes ?? 180) * 60_000;
-  const keepMs = (options.keepDays ?? 30) * 86_400_000;
   const storage = options.storageBytes ?? 10 * 1024 ** 3;
   const [nightFrom, nightTo] = options.nightHours ?? [1, 7];
   const ASK_MS = options.timing?.askMs ?? 60_000;
   const CLIP_DELAY_MS = options.timing?.clipDelayMs ?? 6_000; // the app sends every 3 seconds
   const END_GRACE_MS = options.timing?.endGraceMs ?? 8_000;
   const ASK_AGAIN_MS = options.timing?.askAgainMs ?? 30_000;
+  // How far back anyone's voice is kept while clips are on: the last 30 seconds a clip takes, and
+  // a minute more for a part (apps start a new one every 45 seconds) that began before that.
+  const KEEP_BACK_MS = options.timing?.keepBackMs ?? CLIP_MS + 60_000;
 
   const live = new Map<number, Live>(); // voice channel id -> what's going on there
   const parts = new Map<string, Part>(); // `${tapeId}:${userId}:${part}` -> where that recording goes
@@ -156,8 +156,8 @@ export function fireTapes(ctx: TapesContext) {
 
   // ---- what the fire is told
   const tapeOf = (id: number) =>
-    db.prepare('SELECT id, server_id, channel_id, started_by, keep, state, started_at, ended_at, file, duration_ms FROM tapes WHERE id = ?').get(id) as
-      | { id: number; server_id: number; channel_id: number; started_by: number | null; keep: Keep; state: string; started_at: number; ended_at: number | null; file: string | null; duration_ms: number | null }
+    db.prepare('SELECT id, server_id, channel_id, started_by, state, started_at, ended_at, duration_ms FROM tapes WHERE id = ?').get(id) as
+      | { id: number; server_id: number; channel_id: number; started_by: number | null; state: string; started_at: number; ended_at: number | null; duration_ms: number | null }
       | undefined;
   const peopleOn = (tapeId: number) =>
     (db.prepare('SELECT user_id FROM tape_people WHERE tape_id = ?').all(tapeId) as { user_id: number }[]).map((r) => r.user_id);
@@ -176,7 +176,6 @@ export function fireTapes(ctx: TapesContext) {
         phase: l.phase,
         id: l.tapeId,
         by: l.by,
-        keep: l.keep,
         startedAt: l.startedAt,
         now: Date.now(),
         // While asking: who said yes. While taping: who is on it (said yes), and who said no.
@@ -202,20 +201,20 @@ export function fireTapes(ctx: TapesContext) {
     return (await usedBytes()) < storage;
   };
 
-  const ask = async (user: User, channelId: number, keep: Keep) => {
+  const ask = async (user: User, channelId: number) => {
     const channel = channelById(channelId)!;
-    if (!isHearth(channel.serverId)) throw new HttpError(400, 'Tapes are for fires in a hearth.');
-    if (live.has(channelId)) throw new HttpError(409, live.get(channelId)!.phase === 'taping' ? 'This fire is already being taped.' : 'Everyone is being asked already.');
+    if (!isHearth(channel.serverId)) throw new HttpError(400, 'Clips are for fires in a hearth.');
+    if (live.has(channelId)) throw new HttpError(409, live.get(channelId)!.phase === 'taping' ? 'Clips are already on at this fire.' : 'Everyone is being asked already.');
     const since = lastNo.get(channelId);
     if (since && Date.now() - since < ASK_AGAIN_MS) throw new HttpError(429, 'Wait a little before asking again.');
     await mkdir(dir, { recursive: true });
-    if (!(await roomForTapes())) throw new HttpError(507, "This server has no room for more tapes. Delete some old ones, or tell whoever runs it.");
+    if (!(await roomForTapes())) throw new HttpError(507, "This server has no room for more clips. Delete some old ones, or tell whoever runs it.");
     if (live.has(channelId) || ctx.inVoice.get(user.id) !== channelId) return;
-    const l: Live = { channelId, phase: 'asking', by: user.id, keep, answers: new Map([[user.id, true]]), tapeId: null, startedAt: Date.now(), timer: null };
+    const l: Live = { channelId, phase: 'asking', by: user.id, answers: new Map([[user.id, true]]), tapeId: null, startedAt: Date.now(), timer: null };
     live.set(channelId, l);
     l.timer = later(ASK_MS, () => {
       if (live.get(channelId) !== l || l.phase !== 'asking') return;
-      endAsk(l, 'Not everyone answered, so nothing is taped.');
+      endAsk(l, 'Not everyone answered, so clips stay off.');
     });
     tellFire(channelId);
     settle(l);
@@ -231,19 +230,19 @@ export function fireTapes(ctx: TapesContext) {
   const settle = (l: Live) => {
     if (l.phase !== 'asking') return;
     const here = usersInVoice(l.channelId);
-    if (!here.length) return endAsk(l, 'Everyone left, so nothing is taped.');
+    if (!here.length) return endAsk(l, 'Everyone left, so clips stay off.');
     if (!here.every((id) => l.answers.get(id) === true)) return;
     if (l.timer) clearTimeout(l.timer);
     const channel = channelById(l.channelId);
     if (!channel) return void live.delete(l.channelId);
     const t = Date.now();
-    const tapeId = Number(db.prepare("INSERT INTO tapes (server_id, channel_id, started_by, keep, state, started_at) VALUES (?, ?, ?, ?, 'taping', ?)")
-      .run(channel.serverId, channel.id, l.by, l.keep, t).lastInsertRowid);
+    const tapeId = Number(db.prepare("INSERT INTO tapes (server_id, channel_id, started_by, state, started_at) VALUES (?, ?, ?, 'taping', ?)")
+      .run(channel.serverId, channel.id, l.by, t).lastInsertRowid);
     const add = db.prepare('INSERT OR IGNORE INTO tape_people (tape_id, user_id) VALUES (?, ?)');
     for (const id of here) add.run(tapeId, id);
     Object.assign(l, { phase: 'taping', tapeId, startedAt: t });
     l.answers = new Map(here.map((id) => [id, true]));
-    l.timer = later(maxMs, () => { if (live.get(l.channelId) === l) stop(l, `The tape stopped after ${Math.round(maxMs / 3600_000 * 10) / 10} hours, the longest one can run.`); });
+    l.timer = later(maxMs, () => { if (live.get(l.channelId) === l) stop(l, `Clips turned off after ${Math.round(maxMs / 3600_000 * 10) / 10} hours, the longest they stay on.`); });
     tellFire(l.channelId);
   };
 
@@ -252,13 +251,13 @@ export function fireTapes(ctx: TapesContext) {
     l.answers.set(user.id, yes);
     const channel = channelById(l.channelId)!;
     if (l.phase === 'asking') {
-      if (!yes) return endAsk(l, `${nameIn(channel.serverId, user.id)} said no, so nothing is taped.`);
+      if (!yes) return endAsk(l, `${nameIn(channel.serverId, user.id)} said no, so clips stay off.`);
       tellFire(l.channelId);
       return settle(l);
     }
     // Arrived while it was being taped. Yes puts them on it from now; no leaves them off it.
     if (yes) db.prepare('INSERT OR IGNORE INTO tape_people (tape_id, user_id) VALUES (?, ?)').run(l.tapeId, user.id);
-    else note(l.channelId, `${nameIn(channel.serverId, user.id)} isn't on the tape.`);
+    else note(l.channelId, `${nameIn(channel.serverId, user.id)} said no to clips. Nothing of theirs is kept.`);
     tellFire(l.channelId);
   };
 
@@ -279,37 +278,25 @@ export function fireTapes(ctx: TapesContext) {
     const tape = tapeOf(tapeId);
     if (!tape || tape.state !== 'mixing') return;
     for (const key of parts.keys()) if (key.startsWith(`${tapeId}:`)) parts.delete(key);
-    const audio = db.prepare('SELECT id, file, start_ms FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').all(tapeId) as { id: number; file: string; start_ms: number }[];
+    const audio = db.prepare('SELECT id, file FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').all(tapeId) as { id: number; file: string }[];
     const length = (tape.ended_at ?? Date.now()) - tape.started_at;
-    let state = 'ready';
-    let file: string | null = null;
-    try {
-      if (tape.keep === 'all') {
-        file = newName('m4a');
-        if (!(await mixWindow(audio, 0, length, file))) file = null;
-      } else {
-        // Only the clips are kept: everything else anyone said goes now.
-        for (const a of audio) remove(a.file);
-        db.prepare('DELETE FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').run(tapeId);
-      }
-      const readyClips = (db.prepare("SELECT COUNT(*) AS n FROM tape_clips WHERE tape_id = ? AND state = 'ready'").get(tapeId) as { n: number }).n;
-      if (tape.keep === 'all' ? !file : !readyClips) state = 'empty';
-    } catch (err) {
-      console.warn(`Couldn't mix tape ${tapeId}: ${(err as Error).message}`);
-      state = 'failed';
-    }
-    if (!tapeOf(tapeId)) return remove(file); // deleted while it was mixing
-    db.prepare('UPDATE tapes SET state = ?, file = ?, duration_ms = ? WHERE id = ?').run(state, file, length, tapeId);
+    // Only the clips are kept: everything else anyone said goes now.
+    for (const a of audio) remove(a.file);
+    db.prepare('DELETE FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').run(tapeId);
+    const readyClips = (db.prepare("SELECT COUNT(*) AS n FROM tape_clips WHERE tape_id = ? AND state = 'ready'").get(tapeId) as { n: number }).n;
+    const state = readyClips ? 'ready' : 'empty';
+    if (!tapeOf(tapeId)) return; // deleted meanwhile
+    db.prepare('UPDATE tapes SET state = ?, duration_ms = ? WHERE id = ?').run(state, length, tapeId);
     const channel = channelById(tape.channel_id);
     if (channel) sendTo(peopleOn(tapeId), { type: 'tape_ready', tapeId, channelId: channel.id, fire: channel.name, state });
   };
 
   // ---- "Clip that": the last 30 seconds
   const clip = (user: User, l: Live) => {
-    if (l.phase !== 'taping' || !l.tapeId || !isOn(l.tapeId, user.id)) throw new HttpError(403, "You're not on this tape.");
+    if (l.phase !== 'taping' || !l.tapeId || !isOn(l.tapeId, user.id)) throw new HttpError(403, "You didn't say yes to clips here.");
     const t = Date.now();
     if (t - (lastClip.get(user.id) ?? 0) < 3000) return;
-    if (clipCount(l.tapeId) >= CLIPS_MAX) throw new HttpError(429, `A tape can have ${CLIPS_MAX} clips at most.`);
+    if (clipCount(l.tapeId) >= CLIPS_MAX) throw new HttpError(429, `That's ${CLIPS_MAX} clips, the most for one time.`);
     lastClip.set(user.id, t);
     const end = t - l.startedAt;
     const start = Math.max(0, end - CLIP_MS);
@@ -335,8 +322,8 @@ export function fireTapes(ctx: TapesContext) {
     let state = 'ready';
     const file = newName('m4a');
     const slices: { user_id: number | null; file: string }[] = [];
-    // A finished tape that kept only clips has just each person's part of the clip left to cut from.
-    if (!audio.length && tape.keep === 'clips') {
+    // A finished tape has just each person's part of the clip left to cut from.
+    if (!audio.length) {
       const kept = db.prepare('SELECT file, start_ms FROM tape_audio WHERE clip_id = ?').all(clipId) as { file: string; start_ms: number }[];
       try {
         if (!(await mixWindow(kept, 0, c.end_ms - c.start_ms, file))) state = 'empty';
@@ -352,9 +339,9 @@ export function fireTapes(ctx: TapesContext) {
     }
     try {
       if (!(await mixWindow(audio, c.start_ms, c.end_ms, file))) state = 'empty';
-      // A tape that keeps only clips loses everyone's own audio when it ends, so each person's
-      // part of the clip is kept apart too, for the transcript to say who said what.
-      else if (tape.keep === 'clips') {
+      // Everyone's own audio goes soon, so each person's part of the clip is kept apart too, for
+      // the transcript to say who said what (and to cut them out if they take themselves off).
+      else {
         for (const userId of new Set(audio.map((a) => a.user_id))) {
           const slice = newName('m4a');
           if (await mixWindow(audio.filter((a) => a.user_id === userId), c.start_ms, c.end_ms, slice)) slices.push({ user_id: userId, file: slice });
@@ -391,12 +378,6 @@ export function fireTapes(ctx: TapesContext) {
     const recut = Promise.all(clipIds.map((id) => cut(id)));
     clipsCutting.set(tapeId, Promise.all([clipsCutting.get(tapeId), recut]));
     await recut;
-    // A finished tape is mixed again without them.
-    if (tape.keep === 'all' && (tape.state === 'ready' || tape.state === 'empty')) {
-      db.prepare("UPDATE tapes SET state = 'mixing' WHERE id = ?").run(tapeId);
-      remove(tape.file);
-      await finish(tapeId);
-    }
   };
 
   // ---- what people's apps send while they're on a tape
@@ -409,10 +390,10 @@ export function fireTapes(ctx: TapesContext) {
     const part = url.searchParams.get('part') ?? '';
     const seq = Number(url.searchParams.get('seq'));
     const elapsed = Number(url.searchParams.get('elapsed'));
-    if (!/^[\w-]{4,32}$/.test(part) || !Number.isInteger(seq) || seq < 0 || !(elapsed >= 0 && elapsed < maxMs + 60_000)) throw new HttpError(400, "That isn't a piece of a tape.");
+    if (!/^[\w-]{4,32}$/.test(part) || !Number.isInteger(seq) || seq < 0 || !(elapsed >= 0 && elapsed < maxMs + 60_000)) throw new HttpError(400, "That isn't a piece of a clip.");
     // Still taping, or just stopped: the last pieces are on their way.
     const open = tape && (tape.state === 'taping' || (tape.state === 'mixing' && Date.now() < (tape.ended_at ?? 0) + END_GRACE_MS));
-    if (!tape || !open || !isOn(tapeId, user.id)) throw new HttpError(403, "You're not on a tape that's running.");
+    if (!tape || !open || !isOn(tapeId, user.id)) throw new HttpError(403, "Clips aren't on for you here.");
     const body = await readLimited(req, CHUNK_MAX, new HttpError(413, 'Send the audio in smaller pieces.'));
     const key = `${tapeId}:${user.id}:${part}`;
     let p = parts.get(key);
@@ -420,33 +401,50 @@ export function fireTapes(ctx: TapesContext) {
       // A part starts with its first piece; a later one means Peiskos restarted in between.
       if (seq !== 0) throw new HttpError(409, 'Start a new part.');
       const mine = db.prepare('SELECT COUNT(*) AS n, COALESCE(SUM(bytes), 0) AS b FROM tape_audio WHERE tape_id = ? AND user_id = ? AND clip_id IS NULL').get(tapeId, user.id) as { n: number; b: number };
-      if (mine.n >= 50 || mine.b > PERSON_MAX) throw new HttpError(429, "That's all this tape can take from you.");
+      if (mine.n >= 50 || mine.b > PERSON_MAX) throw new HttpError(429, "That's all the server can take from you for now.");
       const file = newName(ext);
       // When their app started this part, by this server's clock: now, less how long it's been going.
       const start = Math.max(0, Date.now() - elapsed - tape.started_at);
       const rowId = Number(db.prepare('INSERT INTO tape_audio (tape_id, user_id, file, start_ms) VALUES (?, ?, ?, ?)').run(tapeId, user.id, file, start).lastInsertRowid);
-      parts.set(key, (p = { rowId, file, next: 0, chain: Promise.resolve(), bytes: mine.b }));
+      parts.set(key, (p = { rowId, file, next: 0, chain: Promise.resolve(), bytes: mine.b, lastAt: start }));
     }
     const part0 = p;
     // Pieces go on in order. One sent twice (its answer was lost) is taken once.
     const write = part0.chain.then(async () => {
       if (seq < part0.next) return;
-      if (part0.bytes + body.length > PERSON_MAX) throw new HttpError(429, "That's all this tape can take from you.");
+      if (part0.bytes + body.length > PERSON_MAX) throw new HttpError(429, "That's all the server can take from you for now.");
       await appendFile(fileOf(part0.file), body);
       part0.next = seq + 1;
       part0.bytes += body.length;
       db.prepare('UPDATE tape_audio SET bytes = bytes + ? WHERE id = ?').run(body.length, part0.rowId);
+      part0.lastAt = Date.now() - tape.started_at;
     });
     part0.chain = write.catch(() => {});
     await write;
+    forgetOld(tapeId, tape.started_at);
     send(res, 200, { ok: true });
+  };
+
+  /**
+   * Only clips are kept, so nobody's voice stays on the server longer than a clip could need: apps
+   * start a new part every 45 seconds, and a part that ended more than a minute and a half ago
+   * (well past the last 30 seconds a clip takes) is deleted.
+   */
+  const forgetOld = (tapeId: number, startedAt: number) => {
+    const before = Date.now() - startedAt - KEEP_BACK_MS;
+    for (const [key, p] of parts) {
+      if (!key.startsWith(`${tapeId}:`) || p.lastAt >= before) continue;
+      parts.delete(key);
+      db.prepare('DELETE FROM tape_audio WHERE id = ?').run(p.rowId);
+      void p.chain.then(() => remove(p.file));
+    }
   };
 
   /** Tape and clip files, by their long random names, the same way shared files are. */
   const serveFile = async (req: IncomingMessage, res: ServerResponse, name: string) => {
-    const known = db.prepare('SELECT 1 FROM tapes WHERE file = ? UNION SELECT 1 FROM tape_clips WHERE file = ?').get(name, name);
+    const known = db.prepare('SELECT 1 FROM tape_clips WHERE file = ?').get(name);
     const info = known && (await stat(fileOf(name)).catch(() => null));
-    if (!info) throw new HttpError(404, 'That tape is gone. It may have been deleted.');
+    if (!info) throw new HttpError(404, 'That clip is gone. It may have been deleted.');
     const headers: Record<string, string | number> = {
       'content-type': 'audio/mp4',
       'content-security-policy': "default-src 'none'; sandbox",
@@ -483,15 +481,15 @@ export function fireTapes(ctx: TapesContext) {
     const l = live.get(channelId);
     switch (msg.action) {
       case 'ask':
-        return ask(user, channelId, msg.keep === 'clips' ? 'clips' : 'all');
+        return ask(user, channelId);
       case 'answer':
         if (l && (l.phase === 'asking' || !l.answers.has(user.id) || msg.yes === true)) answer(user, l, msg.yes === true);
         return;
       case 'cancel':
-        if (l?.phase === 'asking' && l.by === user.id) endAsk(l, 'The tape was called off.');
+        if (l?.phase === 'asking' && l.by === user.id) endAsk(l, 'Clips were called off.');
         return;
       case 'stop':
-        if (l?.phase === 'taping' && l.tapeId && isOn(l.tapeId, user.id)) stop(l, `${nameIn(channelById(channelId)!.serverId, user.id)} stopped the tape.`);
+        if (l?.phase === 'taping' && l.tapeId && isOn(l.tapeId, user.id)) stop(l, `${nameIn(channelById(channelId)!.serverId, user.id)} turned clips off.`);
         return;
       case 'clip':
         if (l) clip(user, l);
@@ -501,7 +499,7 @@ export function fireTapes(ctx: TapesContext) {
         if (l?.phase === 'taping' && l.tapeId && isOn(l.tapeId, user.id)) {
           l.answers.set(user.id, false);
           await leaveTape(l.tapeId, user.id);
-          note(channelId, `${nameIn(channelById(channelId)!.serverId, user.id)} took themselves off the tape.`);
+          note(channelId, `${nameIn(channelById(channelId)!.serverId, user.id)} took themselves out of the clips.`);
           if (live.get(channelId) === l && !usersInVoice(channelId).some((id) => isOn(l.tapeId!, id))) stop(l);
           else tellFire(channelId);
         }
@@ -523,12 +521,12 @@ export function fireTapes(ctx: TapesContext) {
     const l = live.get(channelId);
     if (!l) return;
     if (l.phase === 'asking') {
-      if (l.by === userId) return endAsk(l, 'The tape was called off.');
+      if (l.by === userId) return endAsk(l, 'Clips were called off.');
       l.answers.delete(userId);
       tellFire(channelId);
       return settle(l);
     }
-    if (!usersInVoice(channelId).some((id) => isOn(l.tapeId!, id))) stop(l, usersInVoice(channelId).length ? 'Nobody on the tape is here, so it stopped.' : undefined);
+    if (!usersInVoice(channelId).some((id) => isOn(l.tapeId!, id))) stop(l, usersInVoice(channelId).length ? 'Nobody who said yes is here, so clips turned off.' : undefined);
     else tellFire(channelId);
   };
 
@@ -543,7 +541,7 @@ export function fireTapes(ctx: TapesContext) {
   const visibleTape = (id: number, userId: number) => {
     const tape = tapeOf(id);
     const channel = tape && channelById(tape.channel_id);
-    if (!tape || !channel || !canSee(channel, userId)) throw new HttpError(404, "That tape is gone, or you can't see it.");
+    if (!tape || !channel || !canSee(channel, userId)) throw new HttpError(404, "Those clips are gone, or you can't see them.");
     return { tape, channel };
   };
   const tapeJson = (tape: NonNullable<ReturnType<typeof tapeOf>>, userId: number) => {
@@ -551,24 +549,19 @@ export function fireTapes(ctx: TapesContext) {
     const clips = (db.prepare('SELECT id, tape_id, made_by, start_ms, end_ms, state, file, created_at FROM tape_clips WHERE tape_id = ? ORDER BY start_ms').all(tape.id) as NonNullable<ReturnType<typeof clipOf>>[])
       .map((c) => clipJson(c, tape.server_id));
     return {
-      id: tape.id, channelId: tape.channel_id, by: tape.started_by, keep: tape.keep, state: tape.state, startedAt: tape.started_at, endedAt: tape.ended_at,
-      durationMs: tape.duration_ms, url: fileUrl(tape.file), cleared: tape.keep === 'all' && tape.state === 'ready' && !tape.file,
+      id: tape.id, channelId: tape.channel_id, by: tape.started_by, state: tape.state, startedAt: tape.started_at, endedAt: tape.ended_at,
+      durationMs: tape.duration_ms,
       people: people.map((id) => ({ id, name: nameIn(tape.server_id, id) })), clips, canDelete: canManage(tape, userId), onIt: people.includes(userId),
     };
   };
 
-  /** Who said what, in order: from each person's own audio, timed from the start of the tape (or clip). */
-  const transcriptOf = (tape: NonNullable<ReturnType<typeof tapeOf>>, clip?: NonNullable<ReturnType<typeof clipOf>>) => {
+  /** Who said what in a clip, in order: from each person's own part of it. */
+  const transcriptOf = (tape: NonNullable<ReturnType<typeof tapeOf>>, clip: NonNullable<ReturnType<typeof clipOf>>) => {
     if (!options.whisperUrl) return { state: 'off', lines: [] };
-    const fromSlices = !!clip && tape.keep === 'clips';
-    const rows = (fromSlices
-      ? db.prepare('SELECT user_id, start_ms, transcript FROM tape_audio WHERE clip_id = ?').all(clip.id)
-      : db.prepare('SELECT user_id, start_ms, transcript FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').all(tape.id)) as Pick<AudioRow, 'user_id' | 'start_ms' | 'transcript'>[];
-    if (!rows.length && !fromSlices && tape.file === null && tape.keep === 'all' && tape.state === 'ready') return { state: 'cleared', lines: [] };
-    const waiting = rows.some((r) => r.transcript === null) || tape.state === 'taping' || tape.state === 'mixing';
-    let lines = rows.flatMap((r) => (JSON.parse(r.transcript ?? '[]') as { s: number; e: number; t: string }[])
+    const rows = db.prepare('SELECT user_id, start_ms, transcript FROM tape_audio WHERE clip_id = ?').all(clip.id) as Pick<AudioRow, 'user_id' | 'start_ms' | 'transcript'>[];
+    const waiting = rows.some((r) => r.transcript === null) || clip.state === 'cutting';
+    const lines = rows.flatMap((r) => (JSON.parse(r.transcript ?? '[]') as { s: number; e: number; t: string }[])
       .map((seg) => ({ at: r.start_ms + seg.s, end: r.start_ms + seg.e, userId: r.user_id, name: r.user_id ? nameIn(tape.server_id, r.user_id) : 'Someone', text: seg.t })));
-    if (clip && !fromSlices) lines = lines.filter((x) => x.end > clip.start_ms && x.at < clip.end_ms).map((x) => ({ ...x, at: Math.max(0, x.at - clip.start_ms), end: x.end - clip.start_ms }));
     lines.sort((a, b) => a.at - b.at);
     return { state: waiting ? 'waiting' : 'ready', lines };
   };
@@ -581,7 +574,7 @@ export function fireTapes(ctx: TapesContext) {
   });
   route('GET', '/api/tapes/:id', ({ user, params }) => {
     const { tape } = visibleTape(Number(params[0]), user.id);
-    return { tape: tapeJson(tape, user.id), transcript: transcriptOf(tape) };
+    return { tape: tapeJson(tape, user.id) };
   });
   route('GET', '/api/tape-clips/:id', ({ user, params }) => {
     const c = clipOf(Number(params[0]));
@@ -591,8 +584,8 @@ export function fireTapes(ctx: TapesContext) {
   });
   route('DELETE', '/api/tapes/:id', ({ user, params }) => {
     const { tape } = visibleTape(Number(params[0]), user.id);
-    if (!canManage(tape, user.id)) throw new HttpError(403, 'Only people on the tape, and whoever manages voice, can delete it.');
-    if (tape.state === 'taping') throw new HttpError(409, 'Stop the tape first.');
+    if (!canManage(tape, user.id)) throw new HttpError(403, 'Only people who said yes, and whoever manages voice, can delete these clips.');
+    if (tape.state === 'taping') throw new HttpError(409, 'Turn clips off first.');
     deleteTape(tape.id);
     return { ok: true };
   });
@@ -600,7 +593,7 @@ export function fireTapes(ctx: TapesContext) {
     const c = clipOf(Number(params[0]));
     if (!c) return { ok: true };
     const { tape } = visibleTape(c.tape_id, user.id);
-    if (c.made_by !== user.id && !canManage(tape, user.id)) throw new HttpError(403, 'Only people on the tape, and whoever manages voice, can delete its clips.');
+    if (c.made_by !== user.id && !canManage(tape, user.id)) throw new HttpError(403, 'Only people who said yes, and whoever manages voice, can delete clips.');
     const files = db.prepare('SELECT file FROM tape_audio WHERE clip_id = ?').all(c.id) as { file: string }[];
     db.prepare('DELETE FROM tape_clips WHERE id = ?').run(c.id);
     remove(c.file);
@@ -611,7 +604,7 @@ export function fireTapes(ctx: TapesContext) {
   route('POST', '/api/tapes/:id/leave', async ({ user, params }) => {
     const { tape } = visibleTape(Number(params[0]), user.id);
     if (!isOn(tape.id, user.id)) return { ok: true };
-    if (tape.state === 'taping') throw new HttpError(409, 'Use the button at the fire to come off a tape that is running.');
+    if (tape.state === 'taping') throw new HttpError(409, 'Use the button at the fire while clips are on.');
     await leaveTape(tape.id, user.id);
     return { tape: tapeJson(tapeOf(tape.id)!, user.id) };
   });
@@ -620,7 +613,6 @@ export function fireTapes(ctx: TapesContext) {
     const tape = tapeOf(tapeId);
     if (!tape) return;
     const files = [
-      tape.file,
       ...(db.prepare('SELECT file FROM tape_clips WHERE tape_id = ?').all(tapeId) as { file: string | null }[]).map((r) => r.file),
       ...(db.prepare('SELECT file FROM tape_audio WHERE tape_id = ?').all(tapeId) as { file: string }[]).map((r) => r.file),
     ];
@@ -680,20 +672,11 @@ export function fireTapes(ctx: TapesContext) {
   transcribeTimer.unref();
 
   // ---- clearing out
-  /** Whole tapes past their days are cleared (their clips stay), and files nothing points to go. */
+  /** Files nothing points to any more go. */
   const sweep = async () => {
-    const old = db.prepare("SELECT id, file FROM tapes WHERE keep = 'all' AND state = 'ready' AND ended_at < ? AND (file IS NOT NULL OR EXISTS (SELECT 1 FROM tape_audio WHERE tape_id = tapes.id AND clip_id IS NULL))")
-      .all(Date.now() - keepMs) as { id: number; file: string | null }[];
-    for (const t of old) {
-      remove(t.file);
-      const audio = db.prepare('SELECT file FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').all(t.id) as { file: string }[];
-      for (const a of audio) remove(a.file);
-      db.prepare('DELETE FROM tape_audio WHERE tape_id = ? AND clip_id IS NULL').run(t.id);
-      db.prepare('UPDATE tapes SET file = NULL WHERE id = ?').run(t.id);
-    }
     // A tape whose fire was deleted takes its rows with it; its files are cleared here.
     const known = new Set([
-      ...(db.prepare('SELECT file FROM tapes WHERE file IS NOT NULL UNION SELECT file FROM tape_clips WHERE file IS NOT NULL UNION SELECT file FROM tape_audio').all() as { file: string }[]).map((r) => r.file),
+      ...(db.prepare('SELECT file FROM tape_clips WHERE file IS NOT NULL UNION SELECT file FROM tape_audio').all() as { file: string }[]).map((r) => r.file),
     ]);
     for (const name of await readdir(dir).catch(() => [] as string[])) {
       if (known.has(name)) continue;

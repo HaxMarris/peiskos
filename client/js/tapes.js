@@ -1,11 +1,14 @@
-// ---------------------------------------------------------------- fire tapes
+// ---------------------------------------------------------------- clips at the fire
 //
-// A fire is taped only once everyone at it says yes. Voice is end-to-end encrypted, so the server
-// can't hear the call: instead your own app records your own microphone, only while you're on the
-// tape, and sends it a few seconds at a time. "Clip that" keeps the last 30 seconds.
+// Once everyone at a fire says yes, anyone there can press "Clip that" to keep the last 30
+// seconds. Nothing else is kept. Voice is end-to-end encrypted, so the server can't hear the call:
+// instead your own app records your own microphone, only while you said yes, and sends it a few
+// seconds at a time; the server only ever holds the last minute and a half or so of it.
+// (In the code and on the server, a time clips are on at a fire is a "tape".)
 
 const TAPE_ICON = '<svg viewBox="0 0 24 24"><path d="M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1Zm4.5 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6Zm9 0a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM7.5 11a1 1 0 1 1 0 2 1 1 0 0 1 0-2Zm9 0a1 1 0 1 1 0 2 1 1 0 0 1 0-2ZM10 14h4v1h-4v-1Z"/></svg>';
 const TAPE_CHUNK_MS = 3000; // how often your app sends what it recorded
+const TAPE_PART_MS = 45_000; // a new part this often, so the server can let go of older ones
 
 let tapeNow = null; // { channelId, tape, offset } from the server; offset turns its clock into ours
 let tapeRec = null; // your own recording: { tapeId, part, rec, track, seq, started, queue, stopped }
@@ -46,12 +49,9 @@ function onTapeClip(ev) {
 
 function onTapeReady(ev) {
   refreshTapes(ev.channelId);
-  if (ev.state === 'failed') return notice(`The tape from ${ev.fire} couldn't be put together.`);
-  if (ev.state === 'empty') return toast(`Nothing was taped at ${ev.fire}.`);
-  toast(`The tape from ${ev.fire} is ready.`, { action: 'Listen', onAction: () => openTapes(ev.channelId), timeout: 8000 });
 }
 
-// ---- the panel above the fire's buttons: asking, and taping
+// ---- the panel above the fire's buttons: asking, and clips on
 
 function renderTape() {
   const panel = $('#tape-panel');
@@ -59,13 +59,14 @@ function renderTape() {
   $('#fire-tape-wrap').classList.toggle('hidden', !state.tapesEnabled || !tapeHearth());
   const t = state.voice && tapeNow?.channelId === state.voice.channelId ? tapeNow.tape : null;
   fireBtn.classList.toggle('on', !!t);
-  fireBtn.title = t?.phase === 'taping' ? 'This fire is being taped' : 'Tape this fire';
+  fireBtn.title = t?.phase === 'taping' ? 'Clips are on at this fire' : 'Turn on clips';
   panel.classList.toggle('hidden', !t);
   clearInterval(tapeTick);
   if (!t) return panel.replaceChildren();
   const by = t.by === state.me.id ? 'You' : nameOf(t.by);
   const here = fireHere();
   const left = () => Math.max(0, Math.ceil((t.endsAt - (Date.now() - tapeNow.offset)) / 1000));
+  const about = 'Anyone can then press Clip that to keep the last 30 seconds, for everyone who can see this fire. Nothing else is kept. Your app records only your own voice.';
   if (t.phase === 'asking') {
     const mine = t.by === state.me.id;
     const answered = t.yes.includes(state.me.id);
@@ -73,14 +74,14 @@ function renderTape() {
     panel.innerHTML = `
       <span class="tape-reel" aria-hidden="true">${TAPE_ICON}</span>
       <div class="tape-info">
-        <b>${mine ? 'Asking everyone to tape this fire' : `${escapeHtml(by)} wants to tape this fire`}</b>
-        <span class="small muted">${t.keep === 'clips' ? 'Only clips will be kept. ' : ''}Anyone who can see this fire can listen later. Your app records only your own voice.</span>
+        <b>${mine ? 'Asking everyone to turn on clips' : `${escapeHtml(by)} wants to turn on clips`}</b>
+        <span class="small muted">${about}</span>
         <span class="small muted tape-count"></span>
       </div>
       <div class="tape-actions">
         ${mine ? '<button class="link-btn danger-link" id="tape-cancel">Call it off</button>'
           : answered ? '<span class="small muted">You said yes</span>'
-          : '<button class="btn" id="tape-yes">Tape me</button><button class="btn secondary" id="tape-no">Not me</button>'}
+          : '<button class="btn" id="tape-yes">Yes</button><button class="btn secondary" id="tape-no">No</button>'}
       </div>`;
     const count = () => (panel.querySelector('.tape-count').textContent = `${t.yes.filter((id) => here.includes(id)).length} of ${here.length} said yes · ${left()}s left`);
     count();
@@ -92,7 +93,7 @@ function renderTape() {
     panel.querySelector('#tape-yes')?.focus({ preventScroll: true });
     return;
   }
-  // Taping. Someone who arrived since is asked first; until they say yes, nothing of theirs is taped.
+  // Clips are on. Someone who arrived since is asked first; until they say yes, nothing of theirs is kept.
   const on = t.yes.includes(state.me.id);
   const said = t.no.includes(state.me.id);
   panel.dataset.phase = on ? 'taping' : 'asked';
@@ -100,18 +101,18 @@ function renderTape() {
   panel.innerHTML = `
     <span class="tape-dot" aria-hidden="true"></span>
     <div class="tape-info">
-      <b>Taping <span class="tape-time"></span></b>
+      <b>Clips on <span class="tape-time"></span></b>
       <span class="small muted tape-who"></span>
-      ${!on && !said ? '<span class="small">This fire is being taped. Anyone who can see it can listen later. Your app records only your own voice.</span>' : ''}
+      ${!on && !said ? `<span class="small">Clips are on at this fire. ${about}</span>` : ''}
     </div>
     <div class="tape-actions">
       ${on ? `<button class="btn" id="tape-clip" title="Keep the last 30 seconds">Clip that</button>
-        <button class="link-btn danger-link" id="tape-stop">Stop</button>
-        <button class="link-btn" id="tape-leave" title="Take your voice off the tape, including what was taped already">Take me off</button>`
-        : said ? '<button class="link-btn" id="tape-yes">Tape me after all</button>'
-        : '<button class="btn" id="tape-yes">Tape me</button><button class="btn secondary" id="tape-no">Not me</button>'}
+        <button class="link-btn danger-link" id="tape-stop">Turn off</button>
+        <button class="link-btn" id="tape-leave" title="Take your voice out of these clips, including ones already made">Take me out</button>`
+        : said ? '<button class="link-btn" id="tape-yes">Say yes after all</button>'
+        : '<button class="btn" id="tape-yes">Yes</button><button class="btn secondary" id="tape-no">No</button>'}
     </div>`;
-  panel.querySelector('.tape-who').textContent = `${t.keep === 'clips' ? 'Keeping only clips' : 'Keeping everything'} · on it: ${names.join(', ') || 'nobody here'}${t.clips ? ` · ${t.clips} ${t.clips === 1 ? 'clip' : 'clips'}` : ''}`;
+  panel.querySelector('.tape-who').textContent = `Can be clipped: ${names.join(', ') || 'nobody here'}${t.clips ? ` · ${t.clips} ${t.clips === 1 ? 'clip' : 'clips'}` : ''}`;
   const time = () => (panel.querySelector('.tape-time').textContent = tapeClock(Date.now() - tapeNow.offset - t.startedAt));
   time();
   tapeTick = setInterval(time, 1000);
@@ -133,43 +134,35 @@ function fireHere() {
 }
 
 function confirmTapeLeave() {
-  return ask({ title: 'Take yourself off the tape?', text: 'What was taped of your voice is deleted, and the clips are cut again without you.', ok: 'Take me off', danger: true });
+  return ask({ title: 'Take yourself out of these clips?', text: 'Your voice is cut out of the clips made while they were on, and nothing more of it is kept.', ok: 'Take me out', danger: true });
 }
 
-/** Marks the seats of people on the tape. */
+/** Marks the seats of people who can be clipped. */
 function tapeSeatMark(wrap, id) {
   wrap.querySelector('.seat-rec')?.remove();
   if (tapeNow?.tape?.phase === 'taping' && tapeNow.channelId === state.voice?.channelId && tapeNow.tape.yes.includes(id))
-    wrap.insertAdjacentHTML('beforeend', '<span class="seat-rec" title="On the tape"><span class="sr-only">On the tape</span></span>');
+    wrap.insertAdjacentHTML('beforeend', '<span class="seat-rec" title="Can be clipped"><span class="sr-only">Can be clipped</span></span>');
 }
 
-// ---- starting a tape
+// ---- turning clips on
 
 function openTapeStart() {
   if (tapeNow?.tape && tapeNow.channelId === state.voice?.channelId) return $('#tape-panel').scrollIntoView({ block: 'nearest' });
   const ch = roomById(state.voice?.channelId)?.c;
-  modal(`<h2>Tape this fire</h2>
-    <p class="small muted">Everyone at the fire is asked first, and it starts once they all say yes. Each person's app records only their own voice. Anyone who can see this fire can listen later.</p>
-    <form id="tape-start" class="tape-start">
-      <fieldset class="tape-keep">
-        <legend class="small">What to keep</legend>
-        <label class="tape-choice"><input type="radio" name="keep" value="all" checked /><span><b>Everything</b><span class="small muted">The whole fire, plus any clips. Whole tapes are cleared after ${state.tapeKeepDays || 30} days.</span></span></label>
-        <label class="tape-choice"><input type="radio" name="keep" value="clips" /><span><b>Only clips</b><span class="small muted">Press "Clip that" to keep the last 30 seconds. Everything else is thrown away when the tape stops.</span></span></label>
-      </fieldset>
-      <div class="modal-row">
-        <button type="button" class="link-btn" id="tape-past">Past tapes</button>
-        <button type="submit" class="btn">Ask everyone</button>
-      </div>
-    </form>`);
+  modal(`<h2>Clips at this fire</h2>
+    <p class="small muted">Everyone at the fire is asked first. Once they all say yes, anyone can press <b>Clip that</b> to keep the last 30 seconds. Nothing else is kept: the fire itself isn't recorded. Anyone who can see this fire can listen to the clips.</p>
+    <div class="modal-row">
+      <button type="button" class="link-btn" id="tape-past">Past clips</button>
+      <button type="button" class="btn" id="tape-ask">Ask everyone</button>
+    </div>`);
   $('#tape-past').onclick = () => openTapes(ch?.id);
-  $('#tape-start').onsubmit = (e) => {
-    e.preventDefault();
-    sendTape({ action: 'ask', keep: new FormData(e.target).get('keep') });
+  $('#tape-ask').onclick = () => {
+    sendTape({ action: 'ask' });
     closeModal();
   };
 }
 
-// ---- recording your own voice while you're on the tape
+// ---- recording your own voice while clips are on
 
 function tapeMicTrack() {
   const LK = window.LivekitClient;
@@ -179,10 +172,10 @@ function tapeMicTrack() {
 }
 const tapeType = () => (typeof MediaRecorder === 'undefined' ? '' : ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find((t) => MediaRecorder.isTypeSupported(t)) ?? '');
 
-/** Records while you're on a running tape (and only then), and stops the moment you aren't. */
+/** Records while clips are on and you said yes (and only then), and stops the moment you didn't. */
 function syncTapeRecording() {
   const want = tapeOnIt() && tapeNow.channelId === state.voice?.channelId ? tapeNow.tape.id : null;
-  if (tapeRec && (tapeRec.tapeId !== want || tapeRec.track !== tapeMicTrack())) stopTapeRecording();
+  if (tapeRec && (tapeRec.tapeId !== want || tapeRec.track !== tapeMicTrack() || performance.now() - tapeRec.started > TAPE_PART_MS)) stopTapeRecording();
   if (!want || tapeRec) return;
   const track = tapeMicTrack();
   const type = tapeType();
@@ -220,7 +213,7 @@ async function sendTapePiece(r, seq, elapsed, blob, type) {
         signal: AbortSignal.timeout(20000),
       });
       if (res.ok) return;
-      // Not on a running tape any more, or the server restarted: a new part starts if it should.
+      // Clips are off for you now, or the server restarted: a new part starts if it should.
       if (res.status === 403 || res.status === 409 || res.status === 429) {
         if (tapeRec === r && res.status !== 403) stopTapeRecording();
         return;
@@ -230,14 +223,15 @@ async function sendTapePiece(r, seq, elapsed, blob, type) {
   }
 }
 
-// The microphone changes (another device picked, a reconnect): a new part starts on the new one.
+// A new part every 45 seconds, and one on the new microphone when it changes (another device
+// picked, a reconnect).
 setInterval(() => { if (tapeNow || tapeRec) syncTapeRecording(); }, 2000);
 
 // ---- listening back
 
-let tapesShown = null; // the fire whose tapes list is open
+let tapesShown = null; // the fire whose clips list is open
 
-/** The open tapes list shows a tape or clip that just finished, unless something in it is playing. */
+/** The open clips list shows a clip that just finished, unless something in it is playing. */
 function refreshTapes(channelId) {
   const list = $('#tape-list');
   if (!list || tapesShown !== channelId || [...list.querySelectorAll('audio')].some((a) => !a.paused)) return;
@@ -249,39 +243,27 @@ async function openTapes(channelId) {
   tapesShown = channelId;
   let data;
   try { data = await api(`/api/channels/${channelId}/tapes`); } catch (err) { return alertError(err); }
-  modal(`<h2>Tapes from ${escapeHtml(c?.name ?? 'this fire')}</h2>
-    <p class="small muted">Whole tapes are cleared after ${state.tapeKeepDays || 30} days. Clips stay until someone deletes them.${data.transcripts ? ' Transcripts are made overnight.' : ''}</p>
+  modal(`<h2>Clips from ${escapeHtml(c?.name ?? 'this fire')}</h2>
+    <p class="small muted">Clips stay until someone deletes them.${data.transcripts ? ' Their words are written out overnight.' : ''}</p>
     <ul class="tape-list" id="tape-list"></ul>`, 'tapes-modal');
   const list = $('#tape-list');
-  if (!data.tapes.length) list.innerHTML = '<li class="small muted">No tapes yet. Start one from the Tape button at the fire.</li>';
-  for (const t of data.tapes) list.append(tapeItem(t, data.transcripts, channelId));
+  const withClips = data.tapes.filter((t) => t.clips.length || t.state === 'taping');
+  if (!withClips.length) list.innerHTML = '<li class="small muted">No clips yet. Turn them on with the Clips button at the fire.</li>';
+  for (const t of withClips) list.append(tapeItem(t, data.transcripts, channelId));
 }
 
-const TAPE_STATE_TEXT = {
-  taping: 'Being taped now.',
-  mixing: 'Being put together. It takes a moment.',
-  empty: 'Nothing was taped.',
-  failed: "This tape couldn't be put together.",
-};
-
+/** One time clips were on, with its clips. */
 function tapeItem(t, transcripts, channelId) {
   const li = document.createElement('li');
   li.className = 'tape-item';
   const when = new Date(t.startedAt).toLocaleString([], { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-  const length = t.durationMs ? tapeClock(t.durationMs) : '';
   li.innerHTML = `
     <div class="tape-item-head">
       <b>${escapeHtml(when)}</b>
-      <span class="small muted">${[length, t.keep === 'clips' ? 'only clips' : '', t.people.map((p) => p.name).join(', ')].filter(Boolean).map(escapeHtml).join(' · ')}</span>
+      <span class="small muted">${[t.state === 'taping' ? 'on now' : '', t.people.map((p) => p.name).join(', ')].filter(Boolean).map(escapeHtml).join(' · ')}</span>
     </div>
-    <div class="tape-whole"></div>
     <ul class="tape-clips"></ul>
-    <div class="tape-item-actions"></div>
-    <div class="tape-transcript hidden" aria-live="polite"></div>`;
-  const whole = li.querySelector('.tape-whole');
-  if (t.url) whole.append(tapeAudio(t.url, `The whole tape from ${when}`));
-  else if (t.cleared) whole.innerHTML = '<span class="small muted">The whole tape was cleared. Its clips are kept.</span>';
-  else if (t.keep !== 'clips' || TAPE_STATE_TEXT[t.state]) whole.innerHTML = `<span class="small muted">${escapeHtml(TAPE_STATE_TEXT[t.state] ?? '')}</span>`;
+    <div class="tape-item-actions"></div>`;
   const clipsEl = li.querySelector('.tape-clips');
   for (const c of t.clips) {
     const row = document.createElement('li');
@@ -301,13 +283,12 @@ function tapeItem(t, transcripts, channelId) {
     clipsEl.append(row);
   }
   const actions = li.querySelector('.tape-item-actions');
-  if (transcripts && t.keep === 'all' && t.url) actions.append(linkButton('Transcript', () => showTranscript(li, `/api/tapes/${t.id}`, whole.querySelector('audio'))));
-  if (t.onIt && t.state !== 'taping') actions.append(linkButton('Take me off', async () => {
+  if (t.onIt && t.state !== 'taping') actions.append(linkButton('Take me out', async () => {
     if (!(await confirmTapeLeave())) return;
     try { await api(`/api/tapes/${t.id}/leave`, { method: 'POST', body: {} }); openTapes(channelId); } catch (err) { alertError(err); }
   }));
-  if (t.canDelete && t.state !== 'taping') actions.append(linkButton('Delete tape', async () => {
-    if (!(await ask({ title: 'Delete this tape?', text: 'The whole tape and all its clips are deleted for everyone.', ok: 'Delete', danger: true }))) return;
+  if (t.canDelete && t.state !== 'taping' && t.clips.length > 1) actions.append(linkButton('Delete all of these', async () => {
+    if (!(await ask({ title: 'Delete these clips?', text: 'All the clips from this time are deleted for everyone.', ok: 'Delete', danger: true }))) return;
     try { await api(`/api/tapes/${t.id}`, { method: 'DELETE' }); li.remove(); } catch (err) { alertError(err); }
   }, true));
   return li;
@@ -334,6 +315,7 @@ function linkButton(text, run, danger = false) {
 /** Who said what, with each line a button that plays from there. */
 async function showTranscript(host, path, audio) {
   const box = host.querySelector(':scope > .tape-transcript') ?? host.appendChild(Object.assign(document.createElement('div'), { className: 'tape-transcript' }));
+  box.setAttribute('aria-live', 'polite');
   if (!box.classList.contains('hidden') && box.childElementCount) return box.classList.add('hidden');
   box.classList.remove('hidden');
   box.textContent = 'Loading…';
@@ -341,7 +323,7 @@ async function showTranscript(host, path, audio) {
   try { data = await api(path); } catch (err) { box.textContent = err.message; return; }
   const { state: st, lines } = data.transcript;
   if (!lines.length) {
-    box.textContent = st === 'waiting' ? 'The words are written out overnight.' : st === 'cleared' ? 'The whole tape was cleared, so its words were too.' : 'No words were picked up.';
+    box.textContent = st === 'waiting' ? 'The words are written out overnight.' : 'No words were picked up.';
     return;
   }
   box.replaceChildren(...lines.map((l) => {
@@ -356,7 +338,6 @@ async function showTranscript(host, path, audio) {
     b.onclick = () => { if (audio) { audio.currentTime = l.at / 1000; audio.play().catch(() => {}); } };
     return b;
   }));
-  if (st === 'waiting') box.insertAdjacentHTML('beforeend', '<span class="small muted">More words come overnight.</span>');
 }
 
 $('#fire-tape').innerHTML = TAPE_ICON;
