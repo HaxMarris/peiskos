@@ -29,6 +29,7 @@ import { roomsAndHearths } from './rooms.ts';
 import { customRoles } from './roles.ts';
 import { emailAddress } from './email.ts';
 import { soundboard } from './soundboard.ts';
+import { theater } from './theater.ts';
 import { customEmoji } from './emoji.ts';
 import { linkPreviews } from './link-previews.ts';
 import { search } from './search.ts';
@@ -72,6 +73,8 @@ export interface AppOptions {
   dailyUploadBytes?: number;
   /** Uploads stop while the disk has less than this free, so the database always has room (default 2 GB). */
   minFreeDiskBytes?: number;
+  /** The movie theater at the fire: the largest movie (default 4 GB), all movies together (default 20 GB), and days an unwatched one is kept (default 14). */
+  movies?: { maxBytes?: number; storageBytes?: number; keepDays?: number };
   /** KLIPY settings; the GIF picker is turned off without them (or without uploads). */
   gifs?: GifOptions;
   /** Link previews are on unless this is false. */
@@ -563,6 +566,7 @@ export function createApp(opts: AppOptions): Server {
       if (old) broadcastToChannel(old, voiceStateEvent(old.id));
       lamps.fireChanged(prev);
       listen.left(prev);
+      movies.left(prev);
       games.left(prev, userId);
       tapes?.left(prev, userId);
       dock.left(userId);
@@ -576,6 +580,7 @@ export function createApp(opts: AppOptions): Server {
       lastActive.set(userId, Date.now());
       sendTo([userId], { type: 'fireside_history', channelId, messages: firesideHistory(channel) });
       listen.joined(channelId);
+      movies.joined(channelId, userId);
       games.joined(channelId, userId);
       tapes?.joined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
@@ -1297,6 +1302,17 @@ export function createApp(opts: AppOptions): Server {
     videoTitle: async (videoId) => (previewOpts ? (await fetchEmbed(`https://www.youtube.com/watch?v=${videoId}`, previewOpts))?.title : undefined),
     active: (userId, t) => lastActive.set(userId, t),
     fail: (status, message) => new HttpError(status, message),
+  });
+
+  // ---- the movie theater at the fire (theater.ts)
+
+  const movies = theater({
+    db, opts, now, route, channelById, inVoice, usersInVoice, sendTo, isMember,
+    canShareFiles: (serverId, userId) => uploadLimitFor(serverId, userId) > 0,
+    isBoss: (serverId, userId) => serverKind(serverId) === 'burrow' && !!standing(serverId, userId)?.perms.has('voice'),
+    uploader: (...a) => uploader(...a),
+    roomOnDisk: (...a) => roomOnDisk(...a),
+    active: (userId, t) => lastActive.set(userId, t),
   });
 
   // ---- the hearth league (league.ts): a season of points a month from the games, fishing and the casino
@@ -2048,7 +2064,11 @@ export function createApp(opts: AppOptions): Server {
       if (emojiUpload) return await handleEmojiUpload(req, res, Number(emojiUpload[1]), url);
       const soundUpload = req.method === 'POST' && url.pathname.match(/^\/api\/servers\/(\d+)\/sounds$/);
       if (soundUpload) return await handleSoundUpload(req, res, Number(soundUpload[1]), url);
+      const moviePiece = req.method === 'PUT' && url.pathname.match(/^\/api\/movie-uploads\/([\w-]+)$/);
+      if (moviePiece) return await movies.handleMoviePiece(req, res, moviePiece[1], url);
       const reading = req.method === 'GET' || req.method === 'HEAD';
+      const movie = reading && url.pathname.match(/^\/api\/movies\/([\w-]+)\.mp4$/);
+      if (movie) return await movies.serveMovie(req, res, movie[1]);
       const picture = reading && url.pathname.match(/^\/api\/(avatars|burrow-pictures|emoji)\/([\w-]+\.(?:png|jpg|gif|webp))$/);
       if (picture) return await servePicture(req, res, picture[1], picture[2]);
       const sound = reading && url.pathname.match(/^\/api\/sounds\/([\w-]+\.(?:mp3|ogg|wav|webm|m4a))$/);
@@ -2231,6 +2251,8 @@ export function createApp(opts: AppOptions): Server {
           tapes.handle(user, msg).catch((err) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' })));
         } else if (msg.type === 'listen') {
           listen.handle(user, msg);
+        } else if (msg.type === 'theater') {
+          movies.handle(user, msg);
         } else if (msg.type === 'game') {
           games.handle(user, ws, msg);
         } else if (msg.type === 'fishing') {

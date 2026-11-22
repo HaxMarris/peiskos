@@ -22,6 +22,8 @@ const MACHINES: Record<string, { pattern: RegExp; initial: string[] }> = {
   fireGame: { pattern: /\bgamePhase\.(?:to|is)\(([^)]*)\)/g, initial: ['none'] },
   connection: { pattern: /\bconnPhase\.(?:to|is)\(([^)]*)\)/g, initial: ['offline'] },
   upload: { pattern: /\.upload\??\.(?:to|is)\(([^)]*)\)/g, initial: ['preparing'] },
+  theater: { pattern: /\btheaterPhase\.(?:to|is)\(([^)]*)\)/g, initial: ['off'] },
+  movieUpload: { pattern: /\bmovieUpPhase\.(?:to|is)\(([^)]*)\)/g, initial: ['idle'] },
   auth: { pattern: /\bauthPhase\.(?:to|is)\(([^)]*)\)/g, initial: ['login', 'register'] },
 };
 

@@ -29,7 +29,7 @@ const voicePrefs = (() => {
     sensitivity: null, // dB your voice must pass to be sent (with autoGate off); null: send whenever the mic hears something
     fx: 'off', // voice changer
     music: false, // stereo, no filters, higher bitrate
-    soundboard: true, soundboardVolume: 0.6, listenVolume: 0.6,
+    soundboard: true, soundboardVolume: 0.6, listenVolume: 0.6, movieVolume: 0.8,
     fullVolume: false, // hear everyone as if beside you, even at a fire with spatial sound
     background: 'off', // camera background: 'off', 'blur' or 'picture'
     keys: { ptt: { code: 'Backquote' }, mute: { code: 'KeyM', ctrl: true, shift: true }, deafen: { code: 'KeyD', ctrl: true, shift: true } },
