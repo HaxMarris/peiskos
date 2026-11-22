@@ -323,8 +323,9 @@ async function selectServer(id, initial = false, open = null) {
   // New here: the welcome room, if the burrow has one.
   const ch = textRooms.find((c) => c.id === remembered) ?? s.threads?.find((t) => t.id === remembered)
     ?? textRooms.find((c) => c.id === s.welcomeChannelId) ?? textRooms.find((c) => !c.archived) ?? textRooms[0];
-  if (initial && ch && ch.id === state.channelId) return renderChannels();
+  if (initial && ch && ch.id === state.channelId) { renderChannels(); return mapOnArrival(s); }
   await selectChannel(ch?.id ?? null);
+  mapOnArrival(s);
 }
 
 function renderChannels() {
@@ -342,6 +343,7 @@ function drawChannels() {
   renderEvents(state.inDms ? null : s);
   renderEventPill();
   renderToday(state.inDms ? null : s);
+  renderMapRow(state.inDms ? null : s);
   if (state.inDms) {
     $('#archived-section').classList.add('hidden');
     return renderDmList();
@@ -538,6 +540,7 @@ function keepRoomView() {
 
 async function selectChannel(id, { around = null, present = false } = {}) {
   closeStage();
+  closeMap();
   const changing = id !== state.channelId;
   if (changing) keepRoomView();
   if (changing) {

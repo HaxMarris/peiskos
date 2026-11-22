@@ -409,7 +409,7 @@ export function login(ctx: LoginContext) {
       try { db.prepare(`DELETE FROM ${t} WHERE ${col} = ?`).run(user.id); } catch { /* a table this server doesn't have */ }
     }
     db.prepare(
-      `UPDATE users SET username = ?, display_name = 'Deleted user', password_hash = '!', avatar = NULL, banner = NULL, bio = '', accent = NULL, birthday = NULL, fire_item = NULL,
+      `UPDATE users SET username = ?, display_name = 'Deleted user', password_hash = '!', avatar = NULL, banner = NULL, bio = '', accent = NULL, birthday = NULL, fire_item = NULL, look = NULL,
          email = NULL, email_verified = 0, email_code = NULL, reset_code = NULL, reset_link = NULL, totp_secret = NULL, totp_pending = NULL,
          recovery_codes = '[]', status_text = NULL, status_emoji = NULL, deleted_at = ? WHERE id = ?`,
     ).run(`deleted-${user.id}-${randomBytes(4).toString('hex')}`, now(), user.id);

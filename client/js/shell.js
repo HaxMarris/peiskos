@@ -93,7 +93,7 @@ function rememberAvatars(server) {
 function applyUser(u) {
   state.avatars.set(u.id, u.avatar);
   const fields = { avatar: u.avatar, ...(u.username ? { username: u.username, displayName: u.displayName ?? null } : {}), ...('accent' in u ? { accent: u.accent } : {}),
-    ...('birthday' in u ? { birthday: u.birthday } : {}), ...('fireItem' in u ? { fireItem: u.fireItem } : {}) };
+    ...('birthday' in u ? { birthday: u.birthday } : {}), ...('fireItem' in u ? { fireItem: u.fireItem } : {}), ...('look' in u ? { look: u.look } : {}) };
   for (const s of state.servers.values()) for (const m of s.members) if (m.id === u.id) Object.assign(m, fields);
   for (const list of Object.values(state.friends ?? {})) for (const f of list) if (f.id === u.id) Object.assign(f, fields);
   if (u.id === state.me?.id) {

@@ -719,6 +719,7 @@ function connect() {
       state.voice.toldTalking = undefined; // sitting down again starts out quiet
     }
     casinoReconnected();
+    mapReconnected();
     // Dropping off ended your "is live" post; still sharing, it picks back up.
     if (state.voice?.room?.localParticipant?.isScreenShareEnabled) ws.send(JSON.stringify({ type: 'voice_live', live: true }));
     // So is whether you're away from this device, and what you're playing.
@@ -983,6 +984,15 @@ function handleEvent(ev) {
       toast(ev.afk ? `You were away for a while, so you were moved to ${to?.name ?? 'the AFK fire'}.` : `${ev.by} moved you to ${to?.name ?? 'another fire'}.`);
       break;
     }
+    case 'map_state':
+    case 'map_move':
+    case 'map_gone':
+    case 'map_elsewhere':
+      onMapEvent(ev);
+      break;
+    case 'camp':
+      onCampEvent(ev);
+      break;
     case 'voice_elsewhere':
       // Sat down at a fire on another device, so this one gets up.
       if (state.voice) {

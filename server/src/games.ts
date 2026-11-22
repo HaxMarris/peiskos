@@ -21,6 +21,8 @@ export interface GamesContext {
   fail: (status: number, message: string) => Error;
   /** The host says how a game went (the league's points). */
   result?: (channelId: number, game: GameName, players: Set<number>, standings: unknown) => void;
+  /** A game is over: how many played it, and for how long (the camp counts games played together). */
+  ended?: (channelId: number, players: number, ms: number) => void;
 }
 
 export function fireGames(ctx: GamesContext) {
@@ -37,8 +39,10 @@ export function fireGames(ctx: GamesContext) {
   const drop = (channelId: number, userId: number) => {
     const g = games.get(channelId);
     if (!g?.players.has(userId)) return;
-    if (g.hostId === userId) games.delete(channelId);
-    else g.players.delete(userId);
+    if (g.hostId === userId) {
+      games.delete(channelId);
+      ctx.ended?.(channelId, g.played.size, Date.now() - g.since);
+    } else g.players.delete(userId);
     tellFire(channelId);
   };
 
