@@ -363,6 +363,7 @@ function gameOver() {
   clearInterval(tick);
   G.phase = 'over';
   Peiskos.busy(false);
+  Peiskos.result([...G.scores].map(([id, score]) => ({ id, score })));
   broadcast();
 }
 

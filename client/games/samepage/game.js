@@ -154,6 +154,7 @@ function nextPrompt() {
     clearInterval(tick);
     G.phase = 'over';
     Peiskos.busy(false);
+    Peiskos.result([...G.scores].map(([id, score]) => ({ id, score })));
     return broadcast();
   }
   if (!deck.length) deck = shuffle(PROMPTS.map((_, i) => i));

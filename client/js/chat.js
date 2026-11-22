@@ -270,6 +270,7 @@ function renderLine(m) {
   el.title = clockTime(new Date(m.createdAt));
   if (m.authorId !== state.me.id && mentionsMe(m)) el.classList.add('mentions-me');
   if (m.pinnedAt) el.insertAdjacentHTML('beforeend', `<span class="pin-mark" title="Pinned">${PIN_ICON}</span>`);
+  if (m.capsule) el.append(renderCapsuleBanner(m));
   if (m.forwarded) el.append(renderForwarded(m.forwarded));
   if (m.replyTo) el.append(renderReplyQuote(m.replyTo));
   const content = document.createElement('div');
@@ -302,7 +303,7 @@ function renderLine(m) {
   const replyBtn = iconButton('', 'Reply', () => setReply(m));
   replyBtn.append(iconNode(REPLY_ICON));
   actions.append(reactBtn, replyBtn);
-  if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
+  if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live && !m.capsule) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
   const more = iconButton('', 'More', (e) => openMessageMenu(e.currentTarget, m));
   more.append(iconNode(MORE_ICON));
   more.setAttribute('aria-haspopup', 'menu');
@@ -1006,6 +1007,7 @@ function openHearthSettings(serverId, first) {
     { id: 'notify', group: 'You', label: 'Notifications', keywords: 'mute mentions alerts', value: notifyLabel.charAt(0).toUpperCase() + notifyLabel.slice(1), action: 'menu', run: () => openNotifyMenu($('#modal-card [data-section="notify"]'), s, null) },
     serverUnread(s) && { id: 'read', group: 'You', label: 'Mark as read', action: 'do', run: () => { markServerRead(s); closeModal(); } },
     { id: 'events', group: 'Together', label: 'Events', keywords: 'plan calendar game night', count: s.events?.length, run: () => openEventList(s.id) },
+    { id: 'league', group: 'Together', label: 'League', keywords: 'season points champion trophy standings', run: () => openLeague(s.id) },
     { id: 'best', group: 'Together', label: 'Best of', keywords: 'fire reactions favourite top messages', run: () => openBestOf(s.id) },
     { id: 'album', group: 'Together', label: 'Photo album', keywords: 'pictures photos videos gallery media', run: () => openAlbum(s.id) },
     { id: 'review', group: 'Together', label: 'Year at the fire', keywords: 'stats recap review wrapped', run: () => openRecap(s.id) },

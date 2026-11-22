@@ -463,6 +463,8 @@ function startReveal(note) {
   G.reveal = G.books.map((_, i) => i);
   G.phase = 'reveal';
   G.note = note;
+  // Nobody wins Smoke Signals: everyone whose sketchbook went round gets a point for playing.
+  Peiskos.result(G.books.map((b) => ({ id: b.owner, score: 0 })));
   G.book = 0;
   G.shown = 1;
   Peiskos.busy(true);
