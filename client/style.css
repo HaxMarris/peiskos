@@ -2354,7 +2354,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .map-row .room-name { font-weight: 800; }
 .hearthland { position: absolute; inset: 0; z-index: 4; background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
 .map-head .fire-title { flex: 1; min-width: 0; }
-.map-head h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-head h1, .map-head .fire-sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .map-box { position: relative; flex: 1; min-height: 0; margin: 0 20px; border-radius: var(--radius-lg); overflow: hidden; background: #1b2a17; box-shadow: 0 1px 2px rgba(60,30,10,.08), 0 8px 28px rgba(60,30,10,.14); }
 #map-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; outline: none; }
 #map-canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--glow); }
@@ -2369,6 +2369,7 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (max-width: 760px) {
   .map-box { margin: 0 8px; }
   .map-head .map-close { display: none; }
+  .map-head .btn { padding-left: 12px; padding-right: 12px; }
   .map-hint { display: none; }
   .map-options { padding: 8px 12px 12px; }
 }
@@ -2389,3 +2390,17 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 .look-sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--field-line); padding: 0; cursor: pointer; }
 .look-sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
 .look-pill:focus-visible, .look-sw:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }
+
+/* The camp panel (js/camp.js): points, the next build, the season's goal, and what's built. */
+.camp-points { font-family: Fraunces, Georgia, serif; font-size: 20px; margin: 10px 0 2px; }
+.camp-points b { font-size: 34px; color: var(--ember); margin-right: 4px; }
+.camp-bar { display: grid; gap: 6px; margin: 12px 0 4px; font-weight: 700; }
+.camp-bar progress { width: 100%; height: 10px; appearance: none; border: 0; border-radius: 999px; background: var(--hover); overflow: hidden; }
+.camp-bar progress::-webkit-progress-bar { background: var(--hover); border-radius: 999px; }
+.camp-bar progress::-webkit-progress-value { background: var(--ember); border-radius: 999px; }
+.camp-bar progress::-moz-progress-bar { background: var(--ember); border-radius: 999px; }
+.camp-modal h3 { margin: 18px 0 4px; }
+.camp-builds { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.camp-builds li { display: flex; justify-content: space-between; gap: 12px; padding: 6px 10px; border-radius: var(--radius-md); color: var(--muted); }
+.camp-builds li.built { color: var(--text); background: var(--hover); }
+.camp-builds li.built > span:first-child::before { content: '✓'; color: var(--moss); margin-right: 8px; font-weight: 800; }
