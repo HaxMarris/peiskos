@@ -48,7 +48,7 @@ export function uploads(ctx: UploadsContext) {
   // Uploads still coming in count as waiting too, so many started at once can't get past the limit.
   const uploading = new Map<number, number>();
   const checkUnsent = (userId: number) => {
-    const n = (db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE uploader_id = ? AND message_id IS NULL').get(userId) as { n: number }).n;
+    const n = (db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE uploader_id = ? AND message_id IS NULL AND capsule_id IS NULL').get(userId) as { n: number }).n;
     if (n + (uploading.get(userId) ?? 0) >= MAX_UNSENT) throw new HttpError(429, 'You have a lot of files waiting to be sent. Send or remove some first.');
   };
   // Sent files have no limit of their own, so a day's uploads are capped, and nothing is taken in
@@ -421,14 +421,14 @@ export function uploads(ctx: UploadsContext) {
     return attachmentJson({ id, name, type: kind.type, size: data.length });
   });
 
-  // Uploads that never made it into a message are cleared out after a day.
+  // Uploads that never made it into a message (or a sealed time capsule) are cleared out after a day.
   if (opts.uploadDir) {
     const sweep = () => {
       const stale = db
-        .prepare('SELECT id FROM attachments WHERE message_id IS NULL AND created_at < ?')
+        .prepare('SELECT id FROM attachments WHERE message_id IS NULL AND capsule_id IS NULL AND created_at < ?')
         .all(now() - 24 * 3600_000) as Json[];
       removeFiles(stale);
-      db.prepare('DELETE FROM attachments WHERE message_id IS NULL AND created_at < ?').run(now() - 24 * 3600_000);
+      db.prepare('DELETE FROM attachments WHERE message_id IS NULL AND capsule_id IS NULL AND created_at < ?').run(now() - 24 * 3600_000);
     };
     setInterval(sweep, 3600_000).unref();
   }

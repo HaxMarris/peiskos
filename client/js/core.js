@@ -895,8 +895,13 @@ function handleEvent(ev) {
         }
         else { renderChannels(); renderMembers(); renderMessages(); renderChatHeader(); }
       }
+      capsulesChanged();
+      if (state.voice && ev.server.channels.some((c) => c.id === state.voice.channelId)) renderFire();
       break;
     }
+    case 'capsule_opened':
+      if (ev.fireId === null || state.voice?.channelId === ev.fireId) showCapsuleOpening(ev);
+      break;
     case 'server_deleted': {
       // Deleted, or we were removed from it. Someone else doing it says so; your own leaving doesn't.
       const gone = state.servers.get(ev.serverId);

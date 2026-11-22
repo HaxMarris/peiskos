@@ -2351,3 +2351,64 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { .event-dot { animation: none; } }
 [data-motion="reduce"] .event-dot { animation: none; }
 .event-row .event-where { color: var(--accent-text); font-weight: 700; }
+
+/* ---- time capsules (capsules.js): a walnut chest with a wax seal, beside its fire and in the room */
+.capsule-note.ready { color: var(--accent-text); }
+.capsule-chest { position: absolute; z-index: 7; translate: -50% -100%; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  border: 0; background: none; padding: 4px; cursor: pointer; color: #fff3e3; border-radius: 10px; }
+.capsule-chest .capsule-svg { width: 52px; height: auto; display: block; filter: drop-shadow(0 2px 2px rgba(0, 0, 0, .35)); }
+.capsule-chest-label { font-size: 11.5px; font-weight: 800; line-height: 1.1; padding: 2px 7px; border-radius: 999px; background: rgba(30, 18, 10, .72); white-space: nowrap; }
+.capsule-chest-count:empty { display: none; }
+.capsule-chest-count { position: absolute; top: 0; right: 2px; min-width: 18px; height: 18px; border-radius: 9px; background: #a8322d; color: #fff; font-size: 11px; font-weight: 800; line-height: 18px; }
+.capsule-chest.ready .capsule-svg { animation: capsule-warm 2.4s ease-in-out infinite alternate; }
+.capsule-chest.ready .capsule-chest-label { background: #a8322d; }
+.capsule-chest:hover .capsule-svg { translate: 0 -2px; }
+.capsule-chest:focus-visible { outline: 3px solid #ffd27a; outline-offset: 2px; }
+@keyframes capsule-warm { from { filter: drop-shadow(0 0 2px rgba(255, 196, 110, .35)); } to { filter: drop-shadow(0 0 12px rgba(255, 196, 110, .9)); } }
+@media (max-width: 760px) { .capsule-chest .capsule-svg { width: 40px; } .capsule-chest-label { font-size: 10.5px; } }
+@media (prefers-reduced-motion: reduce) { .capsule-chest.ready .capsule-svg { animation: none; filter: drop-shadow(0 0 8px rgba(255, 196, 110, .8)); } }
+
+.capsule-form textarea { width: 100%; resize: vertical; }
+.capsule-files { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin: 4px 0 12px; }
+.capsule-files:not(:has(*:not(:empty))) { display: none; }
+.capsule-when { border: 0; padding: 0; margin: 0 0 12px; }
+.capsule-when legend { font-weight: 700; font-size: 13px; margin-bottom: 6px; padding: 0; }
+.capsule-when .quick-times { margin-bottom: 8px; }
+
+.capsule-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface); }
+.capsule-row.ready { border-color: var(--accent); }
+.capsule-row-chest .capsule-svg { width: 42px; display: block; }
+.capsule-row-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.capsule-row-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+@media (max-width: 520px) { .capsule-row { flex-wrap: wrap; } .capsule-row-actions { width: 100%; } }
+
+.capsule-banner { display: flex; align-items: center; gap: 8px; margin: 2px 0 4px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+.capsule-banner-chest .capsule-svg { width: 22px; display: block; }
+
+/* Opening: the seal splits, the lid lifts, light comes out, then what was inside. Once, for everyone at the fire. */
+.capsule-open-card { max-width: 560px; }
+.capsule-open { display: flex; flex-direction: column; align-items: center; text-align: center; }
+.capsule-open-chest { position: relative; width: 150px; margin: 30px 0 10px; }
+.capsule-open-chest .capsule-svg { width: 100%; display: block; position: relative; z-index: 1; overflow: visible; }
+.capsule-glow { position: absolute; left: 50%; top: 38%; width: 220px; height: 220px; translate: -50% -50%; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(255, 214, 140, .9), rgba(255, 170, 80, .35) 55%, transparent); opacity: 0; scale: .3; }
+.capsule-open .capsule-lid { transform-box: fill-box; transform-origin: 0% 100%; animation: capsule-lid .9s cubic-bezier(.3, 1.4, .5, 1) .75s both; }
+.capsule-open .seal-l { animation: capsule-seal-l .5s ease-in .3s both; }
+.capsule-open .seal-r { animation: capsule-seal-r .5s ease-in .3s both; }
+.capsule-open .capsule-seal circle { animation: capsule-fade .3s ease-in .3s both; }
+.capsule-open .capsule-glow { animation: capsule-glow 1.2s ease-out .8s both; }
+.capsule-open-body { width: 100%; animation: capsule-rise .6s ease-out 1.5s both; }
+.capsule-open-body h2 { margin: 0 0 2px; }
+.capsule-open-when { margin: 0 0 12px; color: var(--muted); font-size: 13px; }
+.capsule-open-content { text-align: left; font-size: 16px; line-height: 1.5; white-space: pre-wrap; margin-bottom: 10px; }
+.capsule-open-body .attachments { justify-content: center; }
+@keyframes capsule-lid { to { transform: translate(-1px, -5px) rotate(-20deg); } }
+@keyframes capsule-seal-l { to { transform: translate(-7px, 10px) rotate(-30deg); opacity: 0; } }
+@keyframes capsule-seal-r { to { transform: translate(7px, 10px) rotate(30deg); opacity: 0; } }
+@keyframes capsule-fade { to { opacity: 0; } }
+@keyframes capsule-glow { 0% { opacity: 0; scale: .3; } 40% { opacity: 1; } 100% { opacity: .55; scale: 1; } }
+@keyframes capsule-rise { from { opacity: 0; translate: 0 12px; } }
+.capsule-open.still .capsule-lid { animation: none; transform: translate(-1px, -5px) rotate(-20deg); }
+.capsule-open.still :is(.seal-l, .seal-r, .capsule-seal circle) { animation: none; opacity: 0; }
+.capsule-open.still .capsule-glow { animation: none; opacity: .55; scale: 1; }
+.capsule-open.still .capsule-open-body { animation: none; }

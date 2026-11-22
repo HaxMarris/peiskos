@@ -966,5 +966,6 @@ $('#plus-btn').onclick = (e) => {
     !isDm(state.servers.get(state.serverId)) && { label: 'Find a time that works', run: openPlanCreator },
     stickerGroups().length && { label: 'Send a sticker', run: openStickers },
     { label: 'Send later…', run: openSchedule },
+    !isDm(state.servers.get(state.serverId)) && !roomById(state.channelId)?.thread && { label: 'Seal a time capsule…', run: openCapsuleSealer },
   ]);
 };
