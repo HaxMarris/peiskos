@@ -228,6 +228,10 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
   // Only a setting: each listener's app does the mixing, and older apps just hear everyone as before.
   { why: 'Spatial sound at a fire, off by default', run: (db) => db.exec('ALTER TABLE channels ADD COLUMN spatial_sound INTEGER NOT NULL DEFAULT 0') },
+  // The hearth map (Hearthland): off until a hearth's managers turn it on. Positions on it are
+  // only ever kept in memory; a person's look is theirs on every hearth's map.
+  { why: 'Hearth map, off by default', run: (db) => db.exec('ALTER TABLE servers ADD COLUMN hearthland INTEGER NOT NULL DEFAULT 0') },
+  { why: 'Character look for hearth maps', run: (db) => db.exec('ALTER TABLE users ADD COLUMN look TEXT') },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */

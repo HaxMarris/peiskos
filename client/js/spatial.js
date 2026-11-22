@@ -88,13 +88,15 @@ function updateSpatial() {
   const voice = state.voice;
   const LK = window.LivekitClient;
   if (!voice?.room || !LK) return;
-  const on = spatialHere();
-  const { spots, ear } = on ? fireLayout(roomById(voice.channelId)?.c, state.me.id) : { spots: new Map(), ear: null };
+  // On the hearth's map, voices come from where people stand there (hearthland.js).
+  const map = mapHearing();
+  const { spots, ear } = map ?? (spatialHere() ? fireLayout(roomById(voice.channelId)?.c, state.me.id) : { spots: new Map(), ear: null });
+  const hearing = map?.hearing ?? FIRE_HEARING;
   for (const p of voice.room.remoteParticipants.values()) {
     const track = p.getTrackPublication(LK.Track.Source.Microphone)?.track;
     if (!track) continue;
     const spot = spots.get(Number(p.identity));
-    if (ear && spot) mixAt(track, hearFrom(ear, spot, FIRE_HEARING));
+    if (ear && spot) mixAt(track, hearFrom(ear, spot, hearing));
     else mixOff(track);
   }
 }

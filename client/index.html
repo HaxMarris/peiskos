@@ -164,6 +164,10 @@
         </button>
       </div>
       <div class="side-scroll">
+        <button type="button" id="map-row" class="map-row hidden">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 3 3 5.5v15.5l6-2.5 6 2.5 6-2.5V3l-6 2.5L9 3Zm1 2.2 4 1.7v12.9l-4-1.7V5.2ZM5 6.8l3-1.3v12.9l-3 1.3V6.8Zm11 .1 3-1.3v12.9l-3 1.3V6.9Z"/></svg>
+          <span class="map-row-text"><span class="room-name">Hearth map</span><span class="fire-sub">Walk to the fires</span></span>
+        </button>
         <ul id="fire-main"></ul>
         <div id="hearth-today" class="hearth-today hidden"></div>
         <div id="events-section" class="hidden">
@@ -455,6 +459,30 @@
           <div id="stage-grid" class="stage-grid"></div>
         </div>
       </section>
+      <!-- Hearthland: the hearth as a map you walk around (js/hearthland.js). -->
+      <section id="hearthland" class="hearthland hidden" aria-label="Hearth map">
+        <header class="stage-head map-head">
+          <button class="icon-btn back-btn" id="map-back" title="Back" aria-label="Back">
+            <svg viewBox="0 0 24 24"><path d="M15.4 5.4 14 4l-8 8 8 8 1.4-1.4L8.8 12l6.6-6.6Z"/></svg>
+          </button>
+          <div class="fire-title">
+            <h1 id="map-title">Hearth map</h1>
+            <span class="fire-sub">Walk into a fire's ring to join its call</span>
+          </div>
+          <button class="btn secondary" id="map-look">Your look</button>
+          <button class="btn secondary map-close" id="map-close">Back to chat</button>
+        </header>
+        <div class="map-box">
+          <canvas id="map-canvas" tabindex="0" aria-label="Hearth map" aria-describedby="map-hint"></canvas>
+          <div class="map-banner"><span id="map-banner-text" aria-live="polite"></span><button type="button" class="btn" id="map-act" hidden>Use</button></div>
+          <div class="map-hint" id="map-hint">Arrow keys or WASD to walk, or click where to go. E to use what's here.</div>
+        </div>
+        <div class="map-options">
+          <label class="check"><input type="checkbox" id="map-distance" /> Hear by distance</label>
+          <label class="check"><input type="checkbox" id="map-night" /> Night</label>
+          <label class="check"><input type="checkbox" id="map-first" /> Open hearths on the map</label>
+        </div>
+      </section>
       <div id="empty-state" class="empty-state hidden">
         <div class="empty-illustration"><span class="logo-mark big"></span></div>
         <h2>Join your friends</h2>
@@ -566,6 +594,7 @@
   <script src="js/backdrops-live.js"></script>
   <script src="js/fire-ground.js"></script>
   <script src="js/fire-event.js"></script>
+  <script src="js/hearthland.js"></script>
   <script src="js/extras.js"></script>
   <script src="js/shell.js"></script>
 </body>

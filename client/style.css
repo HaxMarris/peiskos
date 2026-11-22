@@ -2344,3 +2344,48 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { .event-dot { animation: none; } }
 [data-motion="reduce"] .event-dot { animation: none; }
 .event-row .event-where { color: var(--accent-text); font-weight: 700; }
+
+/* ---------- Hearthland: the hearth map (js/hearthland.js) ---------- */
+.map-row { display: flex; align-items: center; gap: 10px; width: 100%; margin: 0 0 8px; padding: 8px 12px; border-radius: var(--radius-lg); border: 1px dashed var(--line); background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.map-row:hover, .map-row.active { border-style: solid; border-color: var(--ember); background: var(--hover); }
+.map-row:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }
+.map-row svg { width: 20px; height: 20px; fill: var(--ember); flex: none; }
+.map-row-text { display: flex; flex-direction: column; min-width: 0; }
+.map-row .room-name { font-weight: 800; }
+.hearthland { position: absolute; inset: 0; z-index: 4; background: var(--bg); display: flex; flex-direction: column; min-height: 0; }
+.map-head .fire-title { flex: 1; min-width: 0; }
+.map-head h1 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-box { position: relative; flex: 1; min-height: 0; margin: 0 20px; border-radius: var(--radius-lg); overflow: hidden; background: #1b2a17; box-shadow: 0 1px 2px rgba(60,30,10,.08), 0 8px 28px rgba(60,30,10,.14); }
+#map-canvas { display: block; width: 100%; height: 100%; touch-action: none; cursor: pointer; outline: none; }
+#map-canvas:focus-visible { box-shadow: inset 0 0 0 3px var(--glow); }
+.map-banner { position: absolute; left: 12px; right: 12px; top: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; border-radius: var(--radius-md); background: rgba(24, 17, 12, .86); color: #fbf4ec; font-size: 14px; box-shadow: 0 4px 14px rgba(0,0,0,.2); }
+.map-banner b { color: var(--glow); font-weight: 800; }
+.map-banner > span { flex: 1 1 200px; min-width: 0; }
+.map-banner .btn { background: #f08a4b; color: #1f1813; }
+.map-banner .btn:focus-visible { outline: 3px solid var(--glow); outline-offset: 2px; }
+.map-hint { position: absolute; left: 0; right: 0; bottom: 0; padding: 7px 12px; font-size: 12px; color: #eadfd3; background: linear-gradient(transparent, rgba(0,0,0,.6)); text-align: center; pointer-events: none; }
+.map-options { flex: none; display: flex; flex-wrap: wrap; gap: 6px 20px; padding: 10px 20px 16px; }
+.map-options .check { margin: 0; }
+@media (max-width: 760px) {
+  .map-box { margin: 0 8px; }
+  .map-head .map-close { display: none; }
+  .map-hint { display: none; }
+  .map-options { padding: 8px 12px 12px; }
+}
+@media (min-width: 761px) { .map-head .back-btn { display: none; } }
+/* Your look */
+.look-edit { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 20px; align-items: start; margin-top: 8px; }
+@media (max-width: 600px) { .look-edit { grid-template-columns: minmax(0, 1fr); } }
+.look-preview { display: grid; gap: 10px; justify-items: center; }
+.look-stage { width: 150px; height: 170px; border-radius: var(--radius-lg); background: radial-gradient(circle at 50% 70%, #6a9a44 0 38%, #4f7631 39% 100%); display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(0,0,0,.12); }
+#look-canvas { width: 120px; height: 150px; image-rendering: pixelated; }
+.look-opts { display: grid; gap: 12px; min-width: 0; }
+.look-row { display: grid; grid-template-columns: 82px minmax(0, 1fr); gap: 10px; align-items: center; }
+@media (max-width: 420px) { .look-row { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+.look-row > span { font-size: 13px; font-weight: 700; color: var(--muted); }
+.look-set { display: flex; flex-wrap: wrap; gap: 6px; }
+.look-pill { font: inherit; cursor: pointer; border: 1px solid var(--line); background: var(--code-bg); color: var(--text); border-radius: var(--radius-pill); padding: 4px 11px; font-size: 13px; font-weight: 600; }
+.look-pill[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.look-sw { width: 26px; height: 26px; border-radius: 50%; border: 2px solid var(--surface); box-shadow: 0 0 0 1px var(--field-line); padding: 0; cursor: pointer; }
+.look-sw[aria-pressed="true"] { box-shadow: 0 0 0 3px var(--accent); }
+.look-pill:focus-visible, .look-sw:focus-visible { outline: 3px solid var(--moss); outline-offset: 2px; }

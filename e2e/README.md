@@ -14,6 +14,7 @@ go by.
 | `chat.test.mjs` | A room (send, reply, edit, react, delete), a direct message, sitting at the fire and muting, and Fireside Angler opening |
 | `fire.test.mjs` | The game picker and the fire's game bar: start, join, full, leave, the host ending it. A Melon Bomber match reaching a second player. |
 | `fire-event.test.mjs` | An event on now at a fire: the lights and banner, a seat kept for someone going, the sidebar saying where it's on |
+| `hearthland.test.mjs` | The hearth map: walking into a fire's ring joins its call and out leaves, Sit down and back, a new look showing for others |
 | `party-games.test.mjs` | Same Page, Odd One Out, Fireside Trivia |
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
 | `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |

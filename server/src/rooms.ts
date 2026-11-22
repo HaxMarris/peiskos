@@ -185,7 +185,7 @@ export function roomsAndHearths(ctx: RoomsContext) {
       return serverSummary(serverId, user.id);
     }
     allowed(serverId, user, 'burrow');
-    const changes = Object.keys(body).filter((k) => ['name', 'description', 'welcomeChannelId', 'afkChannelId', 'afkMinutes', 'rules', 'uploadMb', 'wordFilter', 'liveChannelId'].includes(k));
+    const changes = Object.keys(body).filter((k) => ['name', 'description', 'welcomeChannelId', 'afkChannelId', 'afkMinutes', 'rules', 'uploadMb', 'wordFilter', 'liveChannelId', 'hearthland'].includes(k));
     // All of it or none: one field that doesn't check out leaves the others as they were.
     inTransaction(db, () => {
       if (changes.length) audit(serverId, user.id, 'burrow_edit', null, changes.map((k) => BURROW_FIELDS[k]).join(', '));
@@ -197,6 +197,7 @@ export function roomsAndHearths(ctx: RoomsContext) {
           throw new HttpError(400, 'Pick a text room in this hearth for go-live posts');
         db.prepare('UPDATE servers SET live_channel_id = ? WHERE id = ?').run(channel?.id ?? null, serverId);
       }
+      if (body.hearthland !== undefined) db.prepare('UPDATE servers SET hearthland = ? WHERE id = ?').run(body.hearthland ? 1 : 0, serverId);
       if (body.name !== undefined) db.prepare('UPDATE servers SET name = ? WHERE id = ?').run(cleanName(body.name, 'Hearth name'), serverId);
       if (body.description !== undefined) {
         const text = typeof body.description === 'string' ? body.description.trim() : '';
