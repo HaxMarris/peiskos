@@ -108,6 +108,11 @@ export interface JointContext {
   serverSummary: (serverId: number, userId: number) => unknown;
   matchFireSoon: (channelId: number, ms: number) => void;
   audit: (serverId: number, userId: number, action: string, targetId: number | null, detail?: string) => void;
+  sendTo: (userIds: Iterable<number>, event: Json) => void;
+  /** Clips at the fire (tapes.ts): what's going on at a fire, a guest's answer, and guests coming and going. */
+  clipsAt: (channelId: number) => Json | null;
+  clipsAnswer: (channelId: number, guestId: number, yes: boolean) => void;
+  guestsMoved: (channelId: number, came: number[], went: number[]) => void;
 }
 
 export function jointFires(ctx: JointContext) {
@@ -162,13 +167,18 @@ export function jointFires(ctx: JointContext) {
     }
     if (now.size) guestsAt.set(channelId, now);
     else guestsAt.delete(channelId);
-    const same = (before?.size ?? 0) === now.size && [...now.keys()].every((k) => before?.has(k));
-    if (!same) voiceChanged(channelId);
+    const came = [...now.keys()].filter((k) => !before?.has(k)).map(Number);
+    const went = [...(before?.keys() ?? [])].filter((k) => !now.has(k)).map(Number);
+    if (came.length || went.length) {
+      voiceChanged(channelId);
+      ctx.guestsMoved(channelId, came, went);
+    }
   };
 
   const takeOut = (channelId: number, keep: (g: { linkId: number; remoteId: string }) => boolean) => {
     const here = guestsAt.get(channelId);
     if (!here) return;
+    const went = [...here.keys()];
     for (const [identity, g] of here) {
       if (keep(g)) continue;
       here.delete(identity);
@@ -176,6 +186,7 @@ export function jointFires(ctx: JointContext) {
     }
     if (!here.size) guestsAt.delete(channelId);
     voiceChanged(channelId);
+    ctx.guestsMoved(channelId, [], went.filter((k) => !here.has(k)).map(Number));
   };
 
   /** The fire a code opens, for a request from another server; anything else gets the same answer. */
@@ -211,7 +222,17 @@ export function jointFires(ctx: JointContext) {
   // Another server asks who's at the fire its code opens.
   route('GET', '/api/joint/fire', ({ session, ip }) => {
     const { link, channel } = fireFor(session, ip);
-    return { fire: channel.name, hearth: hearthName(channel.serverId), label: link.label, people: roster(channel, link.id) };
+    return { fire: channel.name, hearth: hearthName(channel.serverId), label: link.label, people: roster(channel, link.id), clips: ctx.clipsAt(channel.id) };
+  }, false);
+
+  // A guest's server passes on their answer about clips at the fire.
+  route('POST', '/api/joint/clips', ({ session, ip, body }) => {
+    const { link, channel } = fireFor(session, ip);
+    const remoteId = typeof body.id === 'string' ? body.id : '';
+    const identity = [...(guestsAt.get(channel.id) ?? [])].find(([, g]) => g.linkId === link.id && g.remoteId === remoteId)?.[0];
+    if (!identity) throw new HttpError(403, 'Sit down at the fire first.');
+    ctx.clipsAnswer(channel.id, Number(identity), body.yes === true);
+    return { clips: ctx.clipsAt(channel.id) };
   }, false);
 
   // Another server asks for a pass for one of its people.
@@ -336,7 +357,7 @@ export function jointFires(ctx: JointContext) {
   };
 
   // What the host last said about each joined fire, so the sidebar can show who's there.
-  const remote = new Map<number, { people: Person[]; ok: boolean; hearth?: string; at: number }>();
+  const remote = new Map<number, { people: Person[]; ok: boolean; hearth?: string; clips?: Json | null; at: number }>();
   const pollMs = opts.jointFires?.pollMs ?? 15_000;
   const asking = new Set<number>(); // joined fires whose host is being asked right now
   const pollRemote = async (fire: Joined) => {
@@ -345,7 +366,7 @@ export function jointFires(ctx: JointContext) {
     try { await askRoster(fire); } finally { asking.delete(fire.channelId); }
   };
   const askRoster = async (fire: Joined) => {
-    const { at: _, ...was } = remote.get(fire.channelId) ?? { at: 0 };
+    const { at: _, clips: wasClips, ...was } = remote.get(fire.channelId) ?? { at: 0 };
     const before = JSON.stringify(was);
     try {
       const data = await askHost(fire, 'GET', '/api/joint/fire');
@@ -353,12 +374,69 @@ export function jointFires(ctx: JointContext) {
         p && typeof p.identity === 'string' && /^\d{1,15}$/.test(p.identity)
           ? [{ identity: p.identity, name: cleanRemoteName(p.name), from: p.from == null ? null : cleanRemoteName(p.from), ...(typeof p.remoteId === 'string' ? { remoteId: p.remoteId } : {}) }]
           : []);
-      remote.set(fire.channelId, { people, ok: true, hearth: cleanRemoteName(data.hearth), at: Date.now() });
+      remote.set(fire.channelId, { people, ok: true, hearth: cleanRemoteName(data.hearth), clips: hostClips(data.clips, people), at: Date.now() });
     } catch {
       remote.set(fire.channelId, { people: [], ok: false, at: Date.now() });
     }
-    const { at: __, ...now } = remote.get(fire.channelId)!;
+    const { at: __, clips, ...now } = remote.get(fire.channelId)!;
     if (JSON.stringify(now) !== before) voiceChanged(fire.channelId);
+    if (clipsKey(clips) !== clipsKey(wasClips)) tellClips(fire.channelId);
+    // While the host is asking everyone, its answer is looked for sooner than the usual poll.
+    if ((clips as { phase?: string } | null | undefined)?.phase === 'asking' && usersInVoice(fire.channelId).length)
+      setTimeout(() => { pollRemote(fire).catch(() => {}); }, 3000).unref();
+  };
+
+  /**
+   * Clips at the host's fire, as people here see them: everyone's ids as this server knows them
+   * (ours by their own id, the host's people below zero), and marked as another server's, so
+   * nobody's app here records anything for it.
+   */
+  const hostClips = (raw: unknown, people: Person[]): Json | null => {
+    if (!raw || typeof raw !== 'object') return null;
+    const c = raw as Record<string, unknown>;
+    if (c.phase !== 'asking' && c.phase !== 'taping') return null;
+    const idOf = (v: unknown) => {
+      const identity = String(v);
+      if (!/^\d{1,15}$/.test(identity)) return null;
+      const p = people.find((x) => x.identity === identity);
+      return p?.remoteId !== undefined && /^\d{1,15}$/.test(p.remoteId) ? Number(p.remoteId) : -Number(identity);
+    };
+    const ids = (v: unknown) => (Array.isArray(v) ? v.slice(0, 100).map(idOf).filter((x): x is number => x !== null) : []);
+    const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0);
+    const shift = c.now ? Date.now() - num(c.now) : 0;
+    return {
+      phase: c.phase, id: null, by: idOf(c.by), yes: ids(c.yes), agreed: ids(c.agreed), no: ids(c.no), remote: true,
+      // The host's times, moved onto this server's clock (its "now" is filled in when it's sent).
+      startedAt: num(c.startedAt) + shift, endsAt: num(c.endsAt) + shift, clips: Math.max(0, Math.min(1000, Math.floor(num(c.clips)))),
+    };
+  };
+  // What changed, leaving out the times (which move a little with each answer from the host).
+  const clipsKey = (clips: Json | null | undefined) => {
+    if (!clips) return 'null';
+    const { startedAt: _, endsAt: __, ...rest } = clips as Record<string, unknown>;
+    return JSON.stringify(rest);
+  };
+  const clipsEvent = (channelId: number) => {
+    const clips = remote.get(channelId)?.clips;
+    return { type: 'tape_state', channelId, tape: clips ? { ...(clips as object), now: Date.now() } : null };
+  };
+  const tellClips = (channelId: number) => ctx.sendTo(usersInVoice(channelId), clipsEvent(channelId));
+  /** Someone here sat down at a joined fire: they see whether clips are on there. */
+  const clipsJoined = (channelId: number, userId: number) => {
+    if (remote.get(channelId)?.clips) ctx.sendTo([userId], clipsEvent(channelId));
+  };
+  /** Someone here answers about clips at the host's fire; only the host can turn them on or off. */
+  const clipsHere = async (user: User, channelId: number, msg: Json) => {
+    const fire = joinedFire(channelId);
+    if (!fire) return false;
+    if (msg.action !== 'answer') throw new HttpError(400, "Clips at this fire are turned on by the group it belongs to.");
+    const data = await askHost(fire, 'POST', '/api/joint/clips', { id: String(user.id), yes: msg.yes === true });
+    const r = remote.get(channelId);
+    if (r) {
+      r.clips = hostClips(data.clips, r.people);
+      tellClips(channelId);
+    }
+    return true;
   };
   const pollAll = async () => {
     if (!joining) return;
@@ -459,7 +537,9 @@ export function jointFires(ctx: JointContext) {
   };
 
   return {
-    guestsHere, guestCount, jointPass, jointKick, voiceExtra, pollTimer,
+    guestsHere, guestCount, jointPass, jointKick, voiceExtra, pollTimer, clipsJoined, clipsHere,
+    guestIds: (channelId: number) => [...(guestsAt.get(channelId)?.keys() ?? [])].map(Number),
+    guestName: (channelId: number, id: number) => guestsAt.get(channelId)?.get(String(id))?.name ?? 'A guest',
     config: { host: hosting && !!liveKitAddress(), join: joining },
   };
 }

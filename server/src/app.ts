@@ -596,6 +596,7 @@ export function createApp(opts: AppOptions): Server {
       movies.joined(channelId, userId);
       games.joined(channelId, userId);
       tapes?.joined(channelId, userId);
+      joint_.clipsJoined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
       lamps.fireChanged(channelId);
       if (usersInVoice(channelId).length === 2) nudgeGathered(channel);
@@ -1205,6 +1206,10 @@ export function createApp(opts: AppOptions): Server {
       const channel = channelById(channelId);
       if (channel) broadcastToChannel(channel, voiceStateEvent(channelId));
     },
+    sendTo,
+    clipsAt: (channelId) => tapes?.stateFor(channelId) ?? null,
+    clipsAnswer: (...a) => tapes?.guestAnswer(...a),
+    guestsMoved: (...a) => tapes?.guestsMoved(...a),
   });
 
   // ---- voice and the Campfire -----------------------------------------------
@@ -1319,6 +1324,8 @@ export function createApp(opts: AppOptions): Server {
           return !!channel && serverKind(channel.serverId) === 'burrow' && !!standing(channel.serverId, userId)?.perms.has('voice');
         },
         isHearth: (serverId) => serverKind(serverId) === 'burrow',
+        guestsAt: (channelId) => joint_.guestIds(channelId),
+        guestName: (channelId, id) => joint_.guestName(channelId, id),
       })
     : null;
 
@@ -2296,8 +2303,15 @@ export function createApp(opts: AppOptions): Server {
         } else if (msg.type === 'soundboard') {
           playSound(user, Number(msg.soundId));
         } else if (msg.type === 'tape') {
-          if (!tapes) throw new HttpError(404, "This server doesn't tape fires.");
-          tapes.handle(user, msg).catch((err) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' })));
+          const fail = (err: unknown) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' }));
+          const at = inVoice.get(user.id);
+          // At another server's fire, answers go to that server; clips there are its to turn on.
+          const there = at === undefined ? Promise.resolve(false) : joint_.clipsHere(user, at, msg);
+          there.then((done) => {
+            if (done) return;
+            if (!tapes) throw new HttpError(404, "This server doesn't tape fires.");
+            return tapes.handle(user, msg);
+          }).catch(fail);
         } else if (msg.type === 'listen') {
           listen.handle(user, msg);
         } else if (msg.type === 'theater') {
