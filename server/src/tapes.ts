@@ -52,6 +52,9 @@ export interface TapesContext {
   /** Tapes are for hearths' fires, not calls in direct messages. */
   isHearth: (serverId: number) => boolean;
   userByToken: (raw: string | undefined) => User | undefined;
+  /** Guests from another server at a joint fire (joint-fires.ts): their LiveKit identities, as numbers. */
+  guestsAt?: (channelId: number) => number[];
+  guestName?: (channelId: number, guestId: number) => string;
 }
 
 /** A fire being asked, or being taped, right now. */
@@ -180,12 +183,20 @@ export function fireTapes(ctx: TapesContext) {
         now: Date.now(),
         // While asking: who said yes. While taping: who is on it (said yes), and who said no.
         yes: l.phase === 'taping' && l.tapeId ? peopleOn(l.tapeId) : yes,
+        // Guests at a joint fire who said yes: asked like everyone, but never recorded.
+        agreed: l.phase === 'taping' ? guests(channelId).filter((id) => l.answers.get(id) === true) : [],
         no,
         clips: l.tapeId ? clipCount(l.tapeId) : 0,
         endsAt: l.phase === 'asking' ? l.startedAt + ASK_MS : l.startedAt + maxMs,
       },
     };
   };
+  // Guests at a joint fire are asked like everyone else, through their own server. Their own app
+  // never records them (it's another server's fire), so they're never on a tape's people.
+  const guests = (channelId: number) => ctx.guestsAt?.(channelId) ?? [];
+  const everyone = (channelId: number) => [...usersInVoice(channelId), ...guests(channelId)];
+  const nameAt = (channelId: number, id: number) =>
+    guests(channelId).includes(id) ? (ctx.guestName?.(channelId, id) ?? 'A guest') : nameIn(channelById(channelId)?.serverId ?? 0, id);
   const tellFire = (channelId: number) => sendTo(usersInVoice(channelId), stateEvent(channelId));
   const note = (channelId: number, text: string) => sendTo(usersInVoice(channelId), { type: 'tape_note', channelId, text });
 
@@ -231,7 +242,7 @@ export function fireTapes(ctx: TapesContext) {
     if (l.phase !== 'asking') return;
     const here = usersInVoice(l.channelId);
     if (!here.length) return endAsk(l, 'Everyone left, so clips stay off.');
-    if (!here.every((id) => l.answers.get(id) === true)) return;
+    if (!everyone(l.channelId).every((id) => l.answers.get(id) === true)) return;
     if (l.timer) clearTimeout(l.timer);
     const channel = channelById(l.channelId);
     if (!channel) return void live.delete(l.channelId);
@@ -241,23 +252,23 @@ export function fireTapes(ctx: TapesContext) {
     const add = db.prepare('INSERT OR IGNORE INTO tape_people (tape_id, user_id) VALUES (?, ?)');
     for (const id of here) add.run(tapeId, id);
     Object.assign(l, { phase: 'taping', tapeId, startedAt: t });
-    l.answers = new Map(here.map((id) => [id, true]));
+    l.answers = new Map(everyone(l.channelId).map((id) => [id, true]));
     l.timer = later(maxMs, () => { if (live.get(l.channelId) === l) stop(l, `Clips turned off after ${Math.round(maxMs / 3600_000 * 10) / 10} hours, the longest they stay on.`); });
     tellFire(l.channelId);
   };
 
-  const answer = (user: User, l: Live, yes: boolean) => {
+  const answer = (user: { id: number }, l: Live, yes: boolean) => {
     if (l.answers.get(user.id) === yes) return;
     l.answers.set(user.id, yes);
-    const channel = channelById(l.channelId)!;
+    const guest = guests(l.channelId).includes(user.id);
     if (l.phase === 'asking') {
-      if (!yes) return endAsk(l, `${nameIn(channel.serverId, user.id)} said no, so clips stay off.`);
+      if (!yes) return endAsk(l, `${nameAt(l.channelId, user.id)} said no, so clips stay off.`);
       tellFire(l.channelId);
       return settle(l);
     }
     // Arrived while it was being taped. Yes puts them on it from now; no leaves them off it.
-    if (yes) db.prepare('INSERT OR IGNORE INTO tape_people (tape_id, user_id) VALUES (?, ?)').run(l.tapeId, user.id);
-    else note(l.channelId, `${nameIn(channel.serverId, user.id)} said no to clips. Nothing of theirs is kept.`);
+    if (yes && !guest) db.prepare('INSERT OR IGNORE INTO tape_people (tape_id, user_id) VALUES (?, ?)').run(l.tapeId, user.id);
+    else if (!yes) note(l.channelId, `${nameAt(l.channelId, user.id)} said no to clips.${guest ? '' : ' Nothing of theirs is kept.'}`);
     tellFire(l.channelId);
   };
 
@@ -530,6 +541,29 @@ export function fireTapes(ctx: TapesContext) {
     else tellFire(channelId);
   };
 
+  /** A guest at a joint fire answered, through their own server. */
+  const guestAnswer = (channelId: number, guestId: number, yes: boolean) => {
+    const l = live.get(channelId);
+    if (l && guests(channelId).includes(guestId) && (l.phase === 'asking' || !l.answers.has(guestId) || yes)) answer({ id: guestId }, l, yes);
+  };
+  /** Guests came to or left a joint fire: like people sitting down and getting up here. */
+  const guestsMoved = (channelId: number, came: number[], went: number[]) => {
+    const l = live.get(channelId);
+    if (!l) return;
+    for (const id of came) {
+      if (l.phase === 'asking') l.answers.delete(id);
+      else if (l.answers.get(id) === false) l.answers.delete(id);
+    }
+    for (const id of went) l.answers.delete(id);
+    if (l.phase === 'asking') {
+      tellFire(channelId);
+      return settle(l);
+    }
+    tellFire(channelId);
+  };
+  /** What's going on at a fire, for its joint fire guests' server to show them. */
+  const stateFor = (channelId: number) => stateEvent(channelId).tape;
+
   // ---- reading tapes back
   const canManage = (tape: { id: number; channel_id: number; started_by: number | null }, userId: number) =>
     tape.started_by === userId || isOn(tape.id, userId) || isBoss(tape.channel_id, userId);
@@ -707,5 +741,5 @@ export function fireTapes(ctx: TapesContext) {
     await jobs;
   };
 
-  return { handle, handleRaw, joined, left, transcribeNext, sweep, stop: stopAll, settled, deleteTape };
+  return { handle, handleRaw, joined, left, guestAnswer, guestsMoved, stateFor, transcribeNext, sweep, stop: stopAll, settled, deleteTape };
 }

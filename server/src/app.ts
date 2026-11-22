@@ -56,6 +56,8 @@ import { casino, type CasinoContext } from './casino.ts';
 import { fireTapes, type TapeOptions } from './tapes.ts';
 import { fishing, fishingDock } from './fishing.ts';
 import { league } from './league.ts';
+import { hearthland, readLook } from './hearthland.ts';
+import { camp } from './camp.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 export type { Perm } from './common.ts';
 
@@ -367,6 +369,7 @@ export function createApp(opts: AppOptions): Server {
         `SELECT id, name, kind, owner_id AS ownerId, invite_code AS inviteCode, dm_key AS dmKey, description, rules,
                 welcome_channel_id AS welcomeChannelId, afk_channel_id AS afkChannelId, afk_minutes AS afkMinutes, live_channel_id AS liveChannelId,
                 COALESCE(fire_look, 'classic') AS fireLook, COALESCE(sky_look, 'evening') AS skyLook, backdrop,
+                hearthland,
                 (SELECT cw.backdrop FROM casino_wallets cw WHERE cw.user_id = ? AND cw.server_id = servers.id) AS myBackdrop,
                 CASE WHEN icon IS NULL THEN NULL ELSE '/api/burrow-pictures/' || icon END AS icon,
                 CASE WHEN banner IS NULL THEN NULL ELSE '/api/burrow-pictures/' || banner END AS banner
@@ -379,6 +382,8 @@ export function createApp(opts: AppOptions): Server {
       server.group = server.dmKey === null;
     }
     delete server.dmKey;
+    if (server.kind === 'burrow') server.hearthland = !!server.hearthland;
+    else delete server.hearthland;
     const manager = can(serverId, viewerId, 'rooms');
     const ids = (sql: string, id: number) => (db.prepare(sql).all(id) as { id: number }[]).map((r) => r.id);
     const prefs = notifyPrefsOf(viewerId, serverId);
@@ -420,13 +425,13 @@ export function createApp(opts: AppOptions): Server {
       .prepare(
         `SELECT u.id, u.username, u.display_name AS displayName, m.nickname, m.shown_role_id AS shownRoleId, u.accent, ${avatarUrl('u.avatar')} AS avatar,
                 u.deleted_at IS NOT NULL AS deleted, m.voice_muted AS voiceMuted, m.timeout_until AS timeoutUntil, u.bot,
-                u.birthday, u.fire_item AS fireItem,
+                u.birthday, u.fire_item AS fireItem, u.look,
                 (SELECT pet FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS pet,
                 (SELECT seat FROM casino_wallets cw WHERE cw.user_id = u.id AND cw.server_id = m.server_id) AS seat
          FROM members m JOIN users u ON u.id = m.user_id
          WHERE m.server_id = ? ORDER BY u.username`,
       )
-      .all(serverId) as (User & { voiceMuted: number; timeoutUntil: number | null; deleted: number; bot: number })[];
+      .all(serverId) as (User & { voiceMuted: number; timeoutUntil: number | null; deleted: number; bot: number; look: string | null })[];
     const mine = db.prepare('SELECT rules_accepted_at, pinned_fire_id FROM members WHERE server_id = ? AND user_id = ?').get(serverId, viewerId) as
       | { rules_accepted_at: number | null; pinned_fire_id: number | null }
       | undefined;
@@ -454,7 +459,7 @@ export function createApp(opts: AppOptions): Server {
         const roleIds = memberRoles.filter((r) => r.user_id === m.id).map((r) => r.role_id);
         const host = server.kind === 'burrow' && m.id === server.ownerId;
         const powers = roleIds.some((id) => (roles.find((r) => r.id === id)?.perms.length ?? 0) > 0);
-        return { ...m, deleted: !!m.deleted, bot: !!m.bot, voiceMuted: !!m.voiceMuted, timeoutUntil: (m.timeoutUntil ?? 0) > now() ? m.timeoutUntil : null, roleIds, role: host ? 'host' : powers ? 'mod' : 'member', online: online.has(m.id), ...presenceOf(m.id) };
+        return { ...m, look: readLook(m.look), deleted: !!m.deleted, bot: !!m.bot, voiceMuted: !!m.voiceMuted, timeoutUntil: (m.timeoutUntil ?? 0) > now() ? m.timeoutUntil : null, roleIds, role: host ? 'host' : powers ? 'mod' : 'member', online: online.has(m.id), ...presenceOf(m.id) };
       }),
     };
   };
@@ -543,6 +548,8 @@ export function createApp(opts: AppOptions): Server {
   /** Everyone in a burrow gets their own view of it, since private rooms differ person to person. */
   const sendServerUpdate = (serverId: number) => {
     for (const id of serverMemberIds(serverId)) sendTo([id], { type: 'server_updated', server: serverSummary(serverId, id) });
+    // Someone left, or the map was turned off: off the map they go.
+    hearthMap.clear(serverId);
   };
 
   // Who is in which voice room. The app reports joining and leaving; LiveKit carries the audio.
@@ -589,6 +596,7 @@ export function createApp(opts: AppOptions): Server {
       movies.joined(channelId, userId);
       games.joined(channelId, userId);
       tapes?.joined(channelId, userId);
+      joint_.clipsJoined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
       lamps.fireChanged(channelId);
       if (usersInVoice(channelId).length === 2) nudgeGathered(channel);
@@ -1198,6 +1206,10 @@ export function createApp(opts: AppOptions): Server {
       const channel = channelById(channelId);
       if (channel) broadcastToChannel(channel, voiceStateEvent(channelId));
     },
+    sendTo,
+    clipsAt: (channelId) => tapes?.stateFor(channelId) ?? null,
+    clipsAnswer: (...a) => tapes?.guestAnswer(...a),
+    guestsMoved: (...a) => tapes?.guestsMoved(...a),
   });
 
   // ---- voice and the Campfire -----------------------------------------------
@@ -1312,6 +1324,8 @@ export function createApp(opts: AppOptions): Server {
           return !!channel && serverKind(channel.serverId) === 'burrow' && !!standing(channel.serverId, userId)?.perms.has('voice');
         },
         isHearth: (serverId) => serverKind(serverId) === 'burrow',
+        guestsAt: (channelId) => joint_.guestIds(channelId),
+        guestName: (channelId, id) => joint_.guestName(channelId, id),
       })
     : null;
 
@@ -1358,6 +1372,10 @@ export function createApp(opts: AppOptions): Server {
       // Everyone who scored hears how many points it was.
       if (got) for (const [id, points] of Object.entries(got)) if (points) sendTo([Number(id)], { type: 'league_points', channelId, game, points });
     },
+    ended: (channelId, players, ms) => {
+      const serverId = channelById(channelId)?.serverId;
+      if (serverId !== undefined) camping.gameEnded(serverId, players, ms);
+    },
   });
   const dock = fishingDock({ inVoice, usersInVoice, sendTo });
 
@@ -1373,7 +1391,22 @@ export function createApp(opts: AppOptions): Server {
 
   // ---- Fireside Angler (fishing.ts): the fishing game's save, per person per hearth
 
-  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember, placed: (serverId, places) => hearthLeague.derbyPlaced(serverId, places) });
+  fishing({
+    db, route, fail: (status, message) => new HttpError(status, message), isMember,
+    placed: (serverId, places) => hearthLeague.derbyPlaced(serverId, places),
+    saved: (...a) => camping.fishSaved(...a),
+  });
+
+  // ---- Hearthland (hearthland.ts): the hearth as a map, with everyone's look and where they stand
+
+  const hearthMap = hearthland({ db, route, isMember, sendTo, userChanged: (...a) => userChanged(...a) });
+
+  // ---- The camp grows (camp.ts): builds on the hearth map from time at the fires, games and fish
+
+  const camping = camp({
+    db, route, isMember, serverMemberIds, sendTo,
+    busyHearths: () => [...new Set(inVoice.values())].map((c) => channelById(c)?.serverId).filter((id): id is number => id !== undefined),
+  });
 
   // ---- messages: reading, sending, editing, reacting and deleting ----
 
@@ -2270,8 +2303,15 @@ export function createApp(opts: AppOptions): Server {
         } else if (msg.type === 'soundboard') {
           playSound(user, Number(msg.soundId));
         } else if (msg.type === 'tape') {
-          if (!tapes) throw new HttpError(404, "This server doesn't tape fires.");
-          tapes.handle(user, msg).catch((err) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' })));
+          const fail = (err: unknown) => ws.send(JSON.stringify({ type: 'error', error: err instanceof Error ? err.message : 'Error' }));
+          const at = inVoice.get(user.id);
+          // At another server's fire, answers go to that server; clips there are its to turn on.
+          const there = at === undefined ? Promise.resolve(false) : joint_.clipsHere(user, at, msg);
+          there.then((done) => {
+            if (done) return;
+            if (!tapes) throw new HttpError(404, "This server doesn't tape fires.");
+            return tapes.handle(user, msg);
+          }).catch(fail);
         } else if (msg.type === 'listen') {
           listen.handle(user, msg);
         } else if (msg.type === 'theater') {
@@ -2280,6 +2320,8 @@ export function createApp(opts: AppOptions): Server {
           games.handle(user, ws, msg);
         } else if (msg.type === 'fishing') {
           dock.handle(user, ws, msg);
+        } else if (msg.type === 'map') {
+          hearthMap.handle(user, ws, msg);
         } else if (msg.type === 'casino') {
           casinoTables.watch(ws, user.id, msg.channelId == null ? null : Number(msg.channelId));
         } else if (msg.type === 'typing') {
@@ -2304,6 +2346,7 @@ export function createApp(opts: AppOptions): Server {
       idleSockets.get(user.id)?.delete(ws);
       games.closed(user.id, ws);
       dock.closed(user.id, ws);
+      hearthMap.closed(user.id, ws);
       casinoTables.closed(ws);
       // The device they were at the fire on is gone, even if another one is still connected.
       const fire = inVoice.get(user.id);
@@ -2323,7 +2366,7 @@ export function createApp(opts: AppOptions): Server {
   };
 
   // Tests set a due time in the past and then check the clock, rather than waiting for it.
-  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, tapes, sweepMeetups });
+  Object.assign(server, { checkClock: tick, checkAfk, sweepFires, checkFire, tapes, sweepMeetups, checkCamp: camping.check });
   server.on('close', () => {
     wss.close();
     clearInterval(afkTimer);
@@ -2333,6 +2376,7 @@ export function createApp(opts: AppOptions): Server {
     tapes?.stop();
     lamps.stop();
     stopMeetups();
+    camping.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);
   });

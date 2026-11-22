@@ -6,6 +6,7 @@ import type { AppOptions, Channel, Handler, User } from './app.ts';
 import type { Db } from './db.ts';
 import { HttpError, type Json, send } from './http.ts';
 import { looksBlank, withoutBidi } from './text.ts';
+import { readLook } from './hearthland.ts';
 
 export interface ProfilesContext {
   avatarPath: (file: string) => string;
@@ -47,8 +48,8 @@ export function profiles(ctx: ProfilesContext) {
 
   const MAX_BIO = 190;
   const profileOf = (userId: number) => {
-    const r = db.prepare('SELECT display_name, bio, banner, accent, created_at, birthday, fire_item FROM users WHERE id = ?').get(userId) as
-      | { display_name: string | null; bio: string; banner: string | null; accent: string | null; created_at: number; birthday: string | null; fire_item: string | null }
+    const r = db.prepare('SELECT display_name, bio, banner, accent, created_at, birthday, fire_item, look FROM users WHERE id = ?').get(userId) as
+      | { display_name: string | null; bio: string; banner: string | null; accent: string | null; created_at: number; birthday: string | null; fire_item: string | null; look: string | null }
       | undefined;
     return {
       displayName: r?.display_name ?? null,
@@ -58,6 +59,7 @@ export function profiles(ctx: ProfilesContext) {
       joinedAt: r?.created_at ?? null,
       birthday: r?.birthday ?? null,
       fireItem: r?.fire_item ?? null,
+      look: readLook(r?.look),
     };
   };
 
@@ -65,7 +67,7 @@ export function profiles(ctx: ProfilesContext) {
   const userChanged = (userId: number) => {
     const u = userById(userId)!;
     const p = profileOf(userId);
-    const updated = { ...u, accent: p.accent, birthday: p.birthday, fireItem: p.fireItem };
+    const updated = { ...u, accent: p.accent, birthday: p.birthday, fireItem: p.fireItem, look: p.look };
     sendTo(new Set([userId, ...usersSharingServerWith(userId), ...friendIds(userId), ...pendingIds(userId)]), { type: 'user_updated', user: updated });
     sendTo([userId], { type: 'me_updated', me: meJson(u) });
     return updated;

@@ -14,7 +14,9 @@ let tapeNow = null; // { channelId, tape, offset } from the server; offset turns
 let tapeRec = null; // your own recording: { tapeId, part, rec, track, seq, started, queue, stopped }
 let tapeTick = 0;
 
-const tapeOnIt = () => !!tapeNow?.tape && tapeNow.tape.phase === 'taping' && tapeNow.tape.yes.includes(state.me.id);
+// At another server's fire (a joint fire) you're asked too, but that server's people's apps do the
+// recording, so yours never does.
+const tapeOnIt = () => !!tapeNow?.tape && tapeNow.tape.phase === 'taping' && !tapeNow.tape.remote && tapeNow.tape.yes.includes(state.me.id);
 const tapeHearth = () => { const s = fireServer(); return !!s && !isDm(s); };
 const tapeClock = (ms) => {
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -56,7 +58,7 @@ function onTapeReady(ev) {
 function renderTape() {
   const panel = $('#tape-panel');
   const fireBtn = $('#fire-tape');
-  $('#fire-tape-wrap').classList.toggle('hidden', !state.tapesEnabled || !tapeHearth());
+  $('#fire-tape-wrap').classList.toggle('hidden', !state.tapesEnabled || !tapeHearth() || !!state.voice?.joint);
   const t = state.voice && tapeNow?.channelId === state.voice.channelId ? tapeNow.tape : null;
   fireBtn.classList.toggle('on', !!t);
   fireBtn.title = t?.phase === 'taping' ? 'Clips are on at this fire' : 'Turn on clips';
@@ -66,7 +68,9 @@ function renderTape() {
   const by = t.by === state.me.id ? 'You' : nameOf(t.by);
   const here = fireHere();
   const left = () => Math.max(0, Math.ceil((t.endsAt - (Date.now() - tapeNow.offset)) / 1000));
-  const about = 'Anyone can then press Clip that to keep the last 30 seconds, for everyone who can see this fire. Nothing else is kept. Your app records only your own voice.';
+  const about = t.remote
+    ? "This fire is on another group's server. Their people can then press Clip that to keep the last 30 seconds of their own voices. Your voice isn't kept."
+    : 'Anyone can then press Clip that to keep the last 30 seconds, for everyone who can see this fire. Nothing else is kept. Your app records only your own voice.';
   if (t.phase === 'asking') {
     const mine = t.by === state.me.id;
     const answered = t.yes.includes(state.me.id);
@@ -94,7 +98,7 @@ function renderTape() {
     return;
   }
   // Clips are on. Someone who arrived since is asked first; until they say yes, nothing of theirs is kept.
-  const on = t.yes.includes(state.me.id);
+  const on = t.yes.includes(state.me.id) || !!t.agreed?.includes(state.me.id);
   const said = t.no.includes(state.me.id);
   panel.dataset.phase = on ? 'taping' : 'asked';
   const names = t.yes.filter((id) => here.includes(id)).map((id) => (id === state.me.id ? 'you' : nameOf(id)));
@@ -106,7 +110,8 @@ function renderTape() {
       ${!on && !said ? `<span class="small">Clips are on at this fire. ${about}</span>` : ''}
     </div>
     <div class="tape-actions">
-      ${on ? `<button class="btn" id="tape-clip" title="Keep the last 30 seconds">Clip that</button>
+      ${on && t.remote ? '<span class="small muted">You said yes. Your voice isn\'t kept.</span>'
+        : on ? `<button class="btn" id="tape-clip" title="Keep the last 30 seconds">Clip that</button>
         <button class="link-btn danger-link" id="tape-stop">Turn off</button>
         <button class="link-btn" id="tape-leave" title="Take your voice out of these clips, including ones already made">Take me out</button>`
         : said ? '<button class="link-btn" id="tape-yes">Say yes after all</button>'

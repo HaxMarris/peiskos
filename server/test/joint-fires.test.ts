@@ -8,6 +8,9 @@ import { WebSocket } from 'ws';
 import { openDb } from '../src/db.ts';
 import { createApp } from '../src/app.ts';
 import { GUEST_BASE, cleanOrigin } from '../src/joint-fires.ts';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { caller } from './helpers.ts';
 
 // Each server has its own stand-in for LiveKit, which says who's in each room and records removals.
@@ -55,7 +58,10 @@ before(async () => {
   for (const lk of [lkHost, lkGuest]) await new Promise<void>((r) => lk.server.listen(0, r));
   hostVoice.apiUrl = `http://localhost:${(lkHost.server.address() as AddressInfo).port}`;
   guestVoice.apiUrl = `http://localhost:${(lkGuest.server.address() as AddressInfo).port}`;
-  hostApp = createApp({ db: openDb(':memory:'), publicDir: '/nonexistent', voice: hostVoice, publicUrl: 'https://host.example', jointFires: { host: true } });
+  hostApp = createApp({
+    db: openDb(':memory:'), publicDir: '/nonexistent', voice: hostVoice, publicUrl: 'https://host.example', jointFires: { host: true },
+    uploadDir: mkdtempSync(join(tmpdir(), 'joint-')), tapes: { timing: { askMs: 8000, askAgainMs: 0 } },
+  });
   hostBase = await listen(hostApp);
   // The guests' server lists the host by the address it calls it at.
   guestJoint.servers.push(hostBase);
@@ -255,4 +261,80 @@ test('a guest pass respects the fire\'s seats and asks for a name', async () => 
   assert.match(third.data.error, /full/);
   // Someone already sitting there can get a fresh pass.
   assert.equal((await ask('1', 'One')).status, 200);
+});
+
+/** A WebSocket to one of the servers, keeping what it's sent. */
+async function socketTo(base: string, token: string) {
+  const ws = new WebSocket(`${base.replace('http', 'ws')}/ws?token=${token}`);
+  const events: any[] = [];
+  ws.on('message', (raw) => events.push(JSON.parse(String(raw))));
+  await new Promise((r) => ws.once('open', r));
+  const next = async (pred: (e: any) => boolean) => {
+    let found: any;
+    await wait(() => {
+      const at = events.findIndex(pred);
+      if (at >= 0) found = events.splice(at, 1)[0];
+      return at >= 0;
+    }, 20);
+    return found;
+  };
+  return { ws, events, next, send: (msg: unknown) => ws.send(JSON.stringify(msg)) };
+}
+
+test('guests at a joint fire are asked about clips like everyone else, and never recorded', async () => {
+  const kai = (await host('/api/register', { body: { username: 'kai', password: 'password1' } })).data;
+  const cove = (await host('/api/servers', { body: { name: 'Cove' }, token: kai.token })).data;
+  const fire = (await host(`/api/servers/${cove.id}/channels`, { body: { name: 'Beach', kind: 'voice' }, token: kai.token })).data.channels.find((c: any) => c.name === 'Beach');
+  const code = (await host(`/api/channels/${fire.id}/joint`, { body: { label: 'Hill folk' }, token: kai.token })).data.code.replace('https://host.example', hostBase);
+
+  const lou = (await guest('/api/register', { body: { username: 'lou', password: 'password1' } })).data;
+  const hill = (await guest('/api/servers', { body: { name: 'Hill' }, token: lou.token })).data;
+  const joined = (await guest(`/api/servers/${hill.id}/joint-fires`, { body: { code }, token: lou.token })).data.channels.find((c: any) => c.voiceJoint);
+
+  // Lou sits at the joined fire on the Hill's server; Kai at the Beach on the host.
+  const louWs = await socketTo(guestBase, lou.token);
+  louWs.send({ type: 'voice_join', channelId: joined.id });
+  const louId = claimsOf((await guest(`/api/channels/${joined.id}/voice`, { body: {}, token: lou.token })).data.token).sub;
+  const kaiWs = await socketTo(hostBase, kai.token);
+  kaiWs.send({ type: 'voice_join', channelId: fire.id });
+  await kaiWs.next((e) => e.type === 'tape_state' && e.channelId === fire.id);
+  lkHost.rooms.set(`room-${fire.id}`, [String(kai.user.id), louId]);
+  await webhook(`room-${fire.id}`);
+  const atBeach = async () => (await host('/api/servers', { token: kai.token })).data.find((s: any) => s.id === cove.id).channels.find((c: any) => c.id === fire.id);
+  await wait(async () => (await atBeach()).voiceJoint?.people?.length === 1);
+
+  // Kai asks. Clips stay off until the guest answers too.
+  kaiWs.send({ type: 'tape', action: 'ask' });
+  const asking = await kaiWs.next((e) => e.type === 'tape_state' && e.tape?.phase === 'asking');
+  assert.deepEqual(asking.tape.yes, [kai.user.id]);
+  // Lou's own server shows the question, with everyone by the ids it knows them by.
+  const louAsked = await louWs.next((e) => e.type === 'tape_state' && e.channelId === joined.id && e.tape?.phase === 'asking');
+  assert.equal(louAsked.tape.remote, true);
+  assert.equal(louAsked.tape.by, -kai.user.id);
+  assert.deepEqual(louAsked.tape.yes, [-kai.user.id]);
+  await new Promise((r) => setTimeout(r, 300));
+  assert.ok(!kaiWs.events.some((e) => e.type === 'tape_state' && e.tape?.phase === 'taping'));
+  // Clips at the host's fire are turned on there, not from the guests' side.
+  louWs.send({ type: 'tape', action: 'ask' });
+  assert.match((await louWs.next((e) => e.type === 'error')).error, /group it belongs to/);
+
+  // Lou says yes: clips go on. Lou agreed, but only Kai can be recorded.
+  louWs.send({ type: 'tape', action: 'answer', yes: true });
+  const taping = await kaiWs.next((e) => e.type === 'tape_state' && e.tape?.phase === 'taping');
+  assert.deepEqual(taping.tape.yes, [kai.user.id]);
+  assert.deepEqual(taping.tape.agreed, [Number(louId)]);
+  const louSees = await louWs.next((e) => e.type === 'tape_state' && e.tape?.phase === 'taping');
+  assert.deepEqual(louSees.tape.yes, [-kai.user.id]);
+  assert.deepEqual(louSees.tape.agreed, [lou.user.id]);
+  assert.equal(louSees.tape.remote, true);
+
+  // Asked again, a no from the guest keeps clips off.
+  kaiWs.send({ type: 'tape', action: 'stop' });
+  await kaiWs.next((e) => e.type === 'tape_state' && e.tape === null);
+  kaiWs.send({ type: 'tape', action: 'ask' });
+  await louWs.next((e) => e.type === 'tape_state' && e.tape?.phase === 'asking');
+  louWs.send({ type: 'tape', action: 'answer', yes: false });
+  assert.ok(await kaiWs.next((e) => e.type === 'tape_note' && e.text === 'lou said no, so clips stay off.'));
+  kaiWs.ws.close();
+  louWs.ws.close();
 });

@@ -17,6 +17,8 @@ go by.
 | `meetup.test.mjs` | An event with a meeting place: sharing where you are on the way, others seeing how far off, sharing turning off on arrival |
 | `capsules.test.mjs` | A time capsule sealed from the + menu with a photo, then opened at the fire for everyone sitting there |
 | `party-games.test.mjs` | Same Page (and its result reaching the league), Odd One Out, Fireside Trivia |
+| `hearthland.test.mjs` | The hearth map: walking into a fire's ring joins its call and out leaves, Sit down and back, a new look showing for others |
+| `camp.test.mjs` | The camp: fish caught putting builds on the map, the Camp panel, being told when something goes up |
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
 | `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |
 | `stockpile.test.mjs` | Two whole rounds of Stockpile |

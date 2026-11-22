@@ -32,7 +32,7 @@ function loadLivekit() {
 }
 
 // muted: start with your mic off (moved to the AFK fire). deafened: keep it on when moved.
-async function joinVoice(channelId, { muted = false, deafened = false, rejoin = false } = {}) {
+async function joinVoice(channelId, { muted = false, deafened = false, rejoin = false, stay = false } = {}) {
   if (state.voice?.channelId === channelId) return;
   if (!state.voiceEnabled) return notice("Fires aren't set up on this server yet. Tell whoever runs it.");
   if (!rejoin) cancelRejoin();
@@ -53,7 +53,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     voice.talkCtx = voice.mixCtx;
   } else voice.talkCtx = keepAwake(new AudioContext({ latencyHint: 'interactive' }));
   renderVoiceBar();
-  if (!rejoin) goToVoice(); // sit down at the fire
+  if (!rejoin && !stay) goToVoice(); // sit down at the fire (walking in on the map stays on the map)
   try {
     const LK = await loadLivekit();
     const { url, token, canSpeak = true, joint = null } = await api(`/api/channels/${channelId}/voice`, { method: 'POST', timeout: 15000 });
@@ -568,7 +568,7 @@ $('#voice-camera').onclick = toggleCamera;
 $('#voice-screen').onclick = () => chooseShare();
 $('#voice-watch').onclick = () => (state.stageOpen ? closeStage() : goToVoice());
 $('#stage-close').onclick = () => closeStage();
-$('#fire-back').onclick = () => { closeStage(); showView('rooms'); };
+$('#fire-back').onclick = () => { const toMap = mapWaiting(); closeStage(); if (!toMap) showView('rooms'); };
 $('#fire-mute').onclick = toggleMute;
 $('#fire-deafen').onclick = toggleDeafen;
 $('#fire-camera').onclick = toggleCamera;
@@ -831,6 +831,7 @@ document.addEventListener('keydown', (e) => {
 
 function openStage() {
   if (!state.voice) return;
+  mapStageOpened();
   if (!state.stageOpen) state.stageShow = 'fire';
   state.stageOpen = true;
   $('#stage').classList.remove('hidden');
@@ -850,6 +851,7 @@ function closeStage() {
   $('#app').classList.remove('watching');
   renderVoicePlaces();
   renderStage();
+  mapStageClosed();
 }
 
 /** Swaps the fire for the video grid, with one tile ("id:screen" or "id:camera") shown big. */
