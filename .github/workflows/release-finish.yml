@@ -1,11 +1,19 @@
 # Publishes the releases "Start release" left waiting for Apple, once Apple approves their iPhone
-# build in TestFlight. It checks every 15 minutes. Run it by hand with a version and "now" ticked
-# to publish that release straight away, without waiting.
+# build in TestFlight.
+#
+# Start release runs this in watch mode as soon as it hands the build to Apple: it checks every
+# 5 minutes until no release is waiting. A job can only run for 6 hours, so near that limit it
+# starts a fresh watch to carry on. The schedule below is only a fallback: GitHub runs scheduled
+# jobs when it has spare capacity, which can be hours apart.
+#
+# Run it by hand with a version and "now" ticked to publish that release straight away, without
+# waiting. Tick "watch" to restart the 5-minute checks if they stopped.
 name: Finish release
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
+    # Off the hour and quarter hour, when GitHub drops fewer scheduled runs.
+    - cron: '7,22,37,52 * * * *'
   workflow_dispatch:
     inputs:
       version:
@@ -15,17 +23,24 @@ on:
         description: Publish it now, without waiting for Apple
         type: boolean
         default: false
+      watch:
+        description: Keep checking every 5 minutes until Apple answers
+        type: boolean
+        default: false
 
 permissions:
   contents: write
+  actions: write # a watch starts the next watch before it runs out of time
 
+# A watch has its own group, so a scheduled check queued behind it can't replace the next watch.
 concurrency:
-  group: release-finish
+  group: release-finish-${{ inputs.watch && 'watch' || 'check' }}
   cancel-in-progress: false
 
 jobs:
   finish:
     runs-on: ubuntu-latest
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
       - shell: bash
@@ -36,35 +51,60 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
           ONLY: ${{ inputs.version }}
           NOW: ${{ inputs.now }}
+          WATCH: ${{ inputs.watch }}
         run: |
           only="$(echo "$ONLY" | tr -d '[:space:]')"
           [ -z "$only" ] || [[ "$only" == v* ]] || only="v$only"
           if [ "$NOW" = true ] && [ -z "$only" ]; then echo "::error::Say which version to publish now."; exit 1; fi
-          # Draft releases, with the iPhone build each one is waiting on (empty if it isn't waiting).
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
-            --jq '.[] | select(.draft) | [.tag_name, ((.body // "") | [scan("<!-- waiting-for-apple: ([A-Za-z0-9-]+) -->")] | last | .[0] // "")] | @tsv' > drafts.tsv
           failed=0
-          while IFS=$'\t' read -r tag build; do
-            [ -z "$only" ] || [ "$tag" = "$only" ] || continue
-            if [ "$NOW" = true ]; then
-              state=approved
-            elif [ -n "$build" ]; then
-              state="$(node .github/scripts/app-store.mjs status "$build")"
-            else
-              continue # still building, or a draft made by hand
+
+          # One pass over the drafts. Sets `waiting` to how many are still waiting on Apple.
+          check() {
+            waiting=0
+            # Draft releases, with the iPhone build each one is waiting on (empty if it isn't waiting).
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+              --jq '.[] | select(.draft) | [.tag_name, ((.body // "") | [scan("<!-- waiting-for-apple: ([A-Za-z0-9-]+) -->")] | last | .[0] // "")] | @tsv' > drafts.tsv
+            while IFS=$'\t' read -r tag build; do
+              [ -z "$only" ] || [ "$tag" = "$only" ] || continue
+              if [ "$NOW" = true ]; then
+                state=approved
+              elif [ -n "$build" ]; then
+                # A failed call to Apple counts as waiting, so one hiccup doesn't end a watch.
+                state="$(node .github/scripts/app-store.mjs status "$build")" || state="waiting (couldn't reach Apple)"
+              else
+                continue # still building, or a draft made by hand
+              fi
+              echo "$(date -u +%H:%M) $tag: $state"
+              case "$state" in
+                approved)
+                  gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+                  echo "Published $tag." >> "$GITHUB_STEP_SUMMARY" ;;
+                rejected*)
+                  # Stop checking it, so this doesn't fail on every check.
+                  body="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
+                  gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "${body//waiting-for-apple:/apple-rejected:}"
+                  echo "::error::Apple didn't approve the iPhone build for $tag ($state). App Store Connect's TestFlight page says why. To release anyway, run Finish release with $tag and tick \"now\"."
+                  failed=1 ;;
+                *) waiting=$((waiting + 1)) ;;
+              esac
+            done < drafts.tsv
+          }
+
+          check
+          if [ -n "$only" ] && ! grep -q "^$only	" drafts.tsv; then
+            # A watch whose release was published elsewhere has nothing left to do.
+            [ "$WATCH" = true ] && exit $failed
+            echo "::error::There's no draft release called $only."; exit 1
+          fi
+          if [ "$WATCH" = true ] && [ "$NOW" != true ]; then
+            stop=$(( $(date +%s) + 5 * 3600 + 40 * 60 )) # under the 6-hour job limit
+            while [ "$waiting" -gt 0 ] && [ "$(date +%s)" -lt "$stop" ]; do
+              sleep 300
+              check
+            done
+            if [ "$waiting" -gt 0 ]; then
+              gh workflow run release-finish.yml --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" -f watch=true -f version="$only"
+              echo "Still waiting for Apple. Started a new watch to keep checking." >> "$GITHUB_STEP_SUMMARY"
             fi
-            echo "$tag: $state"
-            case "$state" in
-              approved)
-                gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --draft=false --latest
-                echo "Published $tag." >> "$GITHUB_STEP_SUMMARY" ;;
-              rejected*)
-                # Stop checking it, so this doesn't fail every 15 minutes.
-                body="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body)"
-                gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --notes "${body//waiting-for-apple:/apple-rejected:}"
-                echo "::error::Apple didn't approve the iPhone build for $tag ($state). App Store Connect's TestFlight page says why. To release anyway, run Finish release with $tag and tick \"now\"."
-                failed=1 ;;
-            esac
-          done < drafts.tsv
-          if [ -n "$only" ] && ! grep -q "^$only	" drafts.tsv; then echo "::error::There's no draft release called $only."; exit 1; fi
+          fi
           exit $failed

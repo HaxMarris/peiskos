@@ -59,6 +59,8 @@ export interface CasinoContext {
   sendTo: (userIds: Iterable<number>, event: Json) => void;
   can: (serverId: number, userId: number, perm: 'burrow') => boolean;
   sendServerUpdate: (serverId: number) => void;
+  /** Someone won something (the league's points). */
+  won?: (serverId: number, userId: number, what: 'slots' | 'blackjack' | 'poker' | 'battle') => void;
   /** Shorter waits, for tests. */
   timing?: { turnMs: number; awayTurnMs: number; pauseMs: number; dealMs: number; battleRoundMs?: number };
   deck?: () => Card[];
@@ -202,6 +204,7 @@ export function casino(ctx: CasinoContext) {
     });
     const won = wins.reduce((n, w) => n + w.pays, 0);
     give(user.id, h, won);
+    if (won > bet) ctx.won?.(h, user.id, 'slots');
     walletChanged(user.id, h);
     // Everyone else looking at the casino at your fire sees your machine spin.
     const at = ctx.inVoice.get(user.id);
@@ -621,6 +624,7 @@ export function casino(ctx: CasinoContext) {
     }
     game.over = true;
     give(userId, h, paid);
+    if (game.hands.some((x) => x.result === 'win' || x.result === 'blackjack')) ctx.won?.(h, userId, 'blackjack');
   };
   const advance = (userId: number, h: number, game: Blackjack) => {
     for (const h of game.hands) if (!h.done && total(h.cards) >= 21) h.done = true;
@@ -728,6 +732,7 @@ export function casino(ctx: CasinoContext) {
           for (const s of stacks) db.prepare('UPDATE casino_wallets SET at_table = ? WHERE user_id = ? AND server_id = ?').run(s.stack, s.userId, h);
         },
         changed: () => tableChanged(channelId),
+        handWon: (userIds) => { for (const id of userIds) ctx.won?.(h, id, 'poker'); },
         deck: ctx.deck,
       });
       tables.set(channelId, t);
@@ -892,6 +897,7 @@ export function casino(ctx: CasinoContext) {
       b.startedAt = Date.now();
     });
     for (const s of seats) if (s.userId !== null) walletChanged(s.userId, b.serverId);
+    if (!b.kept) for (const i of new Set(b.winners)) if (seats[i].userId !== null) ctx.won?.(b.serverId, seats[i].userId!, 'battle');
   }
 
   route('POST', '/api/channels/:id/battles', ({ user, params, body }) => {

@@ -15,11 +15,13 @@ go by.
 | `fire.test.mjs` | The game picker and the fire's game bar: start, join, full, leave, the host ending it. A Melon Bomber match reaching a second player. |
 | `fire-event.test.mjs` | An event on now at a fire: the lights and banner, a seat kept for someone going, the sidebar saying where it's on |
 | `meetup.test.mjs` | An event with a meeting place: sharing where you are on the way, others seeing how far off, sharing turning off on arrival |
-| `party-games.test.mjs` | Same Page, Odd One Out, Fireside Trivia |
+| `capsules.test.mjs` | A time capsule sealed from the + menu with a photo, then opened at the fire for everyone sitting there |
+| `party-games.test.mjs` | Same Page (and its result reaching the league), Odd One Out, Fireside Trivia |
 | `drawing-games.test.mjs` | Sketch & Guess, Sketchpad |
 | `smoke-signals.test.mjs` | Smoke Signals: three and four players, someone leaving mid-game |
 | `stockpile.test.mjs` | Two whole rounds of Stockpile |
 | `casino.test.mjs` | Chips, blackjack, slots, cases, the poker table, a case battle |
+| `league.test.mjs` | The hearth league: last season's champion on a pennant at the fire, the standings it opens, turning the league off |
 
 ## Running them
 
