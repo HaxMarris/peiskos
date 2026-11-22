@@ -32,6 +32,8 @@ export interface ProfilesContext {
   uploader: (req: IncomingMessage) => User;
   userById: (id: number) => User | undefined;
   usersSharingServerWith: (userId: number) => number[];
+  /** League seasons they won, in hearths the viewer is in too. */
+  trophies?: (userId: number, viewerId: number) => unknown[];
 }
 
 export function profiles(ctx: ProfilesContext) {
@@ -171,6 +173,7 @@ export function profiles(ctx: ProfilesContext) {
     return {
       ...u, ...profileOf(id), deleted, friend: friendState(user.id, id), blocked: blocked(user.id, id), mutualBurrows: id === user.id ? [] : mutual,
       achievements: deleted ? [] : achievementsOf(id, id === user.id),
+      trophies: deleted ? [] : ctx.trophies?.(id, user.id) ?? [],
     };
   });
 

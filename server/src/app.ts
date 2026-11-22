@@ -48,6 +48,7 @@ import { listenTogether } from './listen.ts';
 import { fireGames } from './games.ts';
 import { casino, type CasinoContext } from './casino.ts';
 import { fishing, fishingDock } from './fishing.ts';
+import { league } from './league.ts';
 import { childSafetyPage, fallbackContact, privacyPage, termsPage, type LegalOptions } from './legal.ts';
 export type { Perm } from './common.ts';
 
@@ -92,6 +93,8 @@ export interface AppOptions {
   legal?: { name?: string; contact?: string };
   /** Tests make the casino's poker table quicker, and stack its decks. */
   casino?: Pick<CasinoContext, 'timing' | 'deck'>;
+  /** Tests move the league's clock (seasons are calendar months). */
+  league?: { now?: () => number };
 }
 
 // What a route is handed. `session` is the hash of the login's token, as it's kept in the sessions table.
@@ -422,7 +425,7 @@ export function createApp(opts: AppOptions): Server {
       sounds: soundsOf(serverId),
       serverMuted: serverMuted(serverId, viewerId),
       ...(server.kind === 'burrow' ? moderationSummary(serverId, viewerId) : {}),
-      ...(server.kind === 'burrow' ? { motd: fun.motdOf(serverId) } : {}),
+      ...(server.kind === 'burrow' ? { motd: fun.motdOf(serverId), league: hearthLeague.summary(serverId) } : {}),
       ...(server.kind === 'dm' ? { seen: dmSeen(serverId, viewerId) } : {}),
       roles,
       members: members.map((m) => {
@@ -1254,9 +1257,24 @@ export function createApp(opts: AppOptions): Server {
     fail: (status, message) => new HttpError(status, message),
   });
 
+  // ---- the hearth league (league.ts): a season of points a month from the games, fishing and the casino
+
+  const hearthLeague = league({
+    db, route, fail: (status, message) => new HttpError(status, message), isMember, can, channelById, sendServerUpdate,
+    isBurrow: (serverId) => isBurrow(serverId),
+    now: opts.league?.now,
+  });
+
   // ---- games at the fire
 
-  const games = fireGames({ inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message) });
+  const games = fireGames({
+    inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message),
+    result: (channelId, game, players, standings) => {
+      const got = hearthLeague.gameResult(channelId, game, players, standings);
+      // Everyone who scored hears how many points it was.
+      if (got) for (const [id, points] of Object.entries(got)) if (points) sendTo([Number(id)], { type: 'league_points', channelId, game, points });
+    },
+  });
   const dock = fishingDock({ inVoice, usersInVoice, sendTo });
 
   // ---- the casino (casino.ts): chips, blackjack, slots, cases, and a hold 'em table at each fire
@@ -1265,12 +1283,13 @@ export function createApp(opts: AppOptions): Server {
     db, route, fail: (status, message) => new HttpError(status, message),
     channelById, inVoice, usersInVoice, isMember, serverMemberIds, sendTo, can, sendServerUpdate,
     isOnline: (userId) => sockets.has(userId),
+    won: (serverId, userId, what) => hearthLeague.casinoWin(serverId, userId, what),
     ...opts.casino,
   });
 
   // ---- Fireside Angler (fishing.ts): the fishing game's save, per person per hearth
 
-  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember });
+  fishing({ db, route, fail: (status, message) => new HttpError(status, message), isMember, placed: (serverId, places) => hearthLeague.derbyPlaced(serverId, places) });
 
   // ---- messages: reading, sending, editing, reacting and deleting ----
 
@@ -1876,6 +1895,7 @@ export function createApp(opts: AppOptions): Server {
     friendIds: (...a) => friendIds(...a),
     friendState: (...a) => friendState(...a),
     pendingIds: (...a) => pendingIds(...a),
+    trophies: (userId, viewerId) => hearthLeague.trophies(userId, viewerId),
   });
 
   // ---- friends and blocking -----------------------------------------------

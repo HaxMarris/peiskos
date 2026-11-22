@@ -2344,3 +2344,46 @@ kbd { display: inline-block; padding: 2px 7px; border: 1px solid var(--line); bo
 @media (prefers-reduced-motion: reduce) { .event-dot { animation: none; } }
 [data-motion="reduce"] .event-dot { animation: none; }
 .event-row .event-where { color: var(--accent-text); font-weight: 700; }
+
+/* The hearth league (league.js). */
+.league-season { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 2px 0 10px; }
+.league-season-name { font-family: var(--font-head); font-size: 28px; font-weight: 700; line-height: 1.1; color: var(--text-strong); }
+.league-season p { width: 100%; margin: 0; }
+.league-final { color: var(--accent-text); font-weight: 800; }
+.league-off { padding: 8px 12px; border-radius: 10px; background: var(--surface-2); font-weight: 700; }
+.league-standings li.me { box-shadow: inset 0 0 0 2px var(--accent-soft); }
+.league-standings .leader-name { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.league-standings .leader-name > .league-bar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; gap: 2px; }
+.league-part { display: block; min-width: 4px; }
+.league-part.games { background: var(--ember); }
+.league-part.fishing { background: #2f7f8f; }
+.league-part.casino { background: #b8901c; }
+.league-key { display: flex; gap: 14px; margin: 8px 0 0; }
+.league-key span { display: inline-flex; align-items: center; gap: 5px; }
+.league-key i { width: 10px; height: 10px; border-radius: 3px; }
+.league-rules { margin: 14px 0 0; }
+.league-rules summary { cursor: pointer; font-weight: 800; }
+.league-rules ul { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+.league-modal h3 { margin: 18px 0 6px; font-size: 15px; }
+.league-past, .trophies { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.league-past li, .trophies li { display: flex; align-items: center; gap: 8px; }
+.league-past li > span { display: flex; flex-direction: column; line-height: 1.2; }
+.trophy-icon { flex: none; color: #b8901c; }
+.league-toggle { margin-top: 16px; }
+.profile-modal .trophies { width: 100%; }
+.trophies li { font-size: 13.5px; font-weight: 700; }
+
+/* Last season's champion: a felt pennant on a pole at the top left of the circle, above the backdrop. */
+.league-pennant { position: absolute; z-index: 3; left: 14px; top: 10px; display: flex; align-items: flex-start; padding: 0; border: 0; background: none; cursor: pointer; color: #fff6e6; }
+.league-pole { width: 4px; height: 92px; border-radius: 2px; background: linear-gradient(90deg, #8a5a34, #5a361e); box-shadow: 1px 2px 3px rgba(0, 0, 0, .35); }
+.league-pole::before { content: ''; display: block; width: 8px; height: 8px; margin: -4px 0 0 -2px; border-radius: 50%; background: #e7b54a; }
+.league-cloth { display: grid; grid-template-columns: auto 1fr; column-gap: 6px; align-items: center; max-width: 190px; margin-top: 6px; padding: 7px 26px 9px 10px;
+  background: #2c5843; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 50%, 100% 100%, 0 100%); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .18); text-align: left; }
+.league-cloth .trophy-icon { grid-row: 1 / 3; color: #f0c45a; }
+.league-cloth b { font-family: var(--font-head); font-size: 15px; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.league-cloth small { font-size: 11px; font-weight: 700; color: #cfe3d4; white-space: nowrap; }
+.league-pennant:hover .league-cloth { background: #346851; }
+.league-pennant:focus-visible { outline: 3px solid #f0c45a; outline-offset: 3px; border-radius: 4px; }
+.league-pennant.final .league-cloth { background: #7a580e; }
+.league-pennant.final small { color: #fde9b8; }
+@media (max-width: 760px) { .league-pennant { scale: .82; transform-origin: 0 0; left: 8px; top: 6px; } .league-pole { height: 76px; } }

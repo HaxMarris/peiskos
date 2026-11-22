@@ -226,6 +226,33 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
+  // The hearth league (league.ts): a season a month, and every point given in it.
+  { why: 'Hearth league seasons and points', run: (db) => db.exec(`
+    ALTER TABLE servers ADD COLUMN league_off INTEGER NOT NULL DEFAULT 0;
+    CREATE TABLE league_seasons (
+      server_id       INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      month           TEXT NOT NULL, -- YYYY-MM, Eastern
+      number          INTEGER NOT NULL,
+      champion_id     INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      champion_points INTEGER,
+      settled         INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (server_id, month)
+    );
+    CREATE TABLE league_points (
+      id        INTEGER PRIMARY KEY,
+      server_id INTEGER NOT NULL REFERENCES servers(id) ON DELETE CASCADE,
+      month     TEXT NOT NULL,
+      user_id   INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      source    TEXT NOT NULL, -- games, fishing or casino
+      what      TEXT NOT NULL, -- the game, 'derby', 'slots'...
+      base      INTEGER NOT NULL, -- before championship night's doubling, which the daily cap counts
+      points    INTEGER NOT NULL,
+      day       TEXT NOT NULL,
+      at        INTEGER NOT NULL
+    );
+    CREATE INDEX league_points_season ON league_points (server_id, month, user_id);
+    CREATE INDEX league_points_day ON league_points (server_id, user_id, day);
+  `) },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */
