@@ -137,6 +137,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
         // can't hear ourselves (see watchTalking).
         voice.serverSpeakers = new Set(speakers.map((p) => Number(p.identity)));
         updateSpeaking(voice);
+        tellTalking(voice, voice.serverSpeakers.has(state.me.id));
       })
       .on(LK.RoomEvent.TrackMuted, (pub, p) => (pub.kind === 'audio' && pub.source === LK.Track.Source.Microphone ? setMuted(p, true) : renderStage()))
       .on(LK.RoomEvent.TrackUnmuted, (pub, p) => (pub.kind === 'audio' && pub.source === LK.Track.Source.Microphone ? setMuted(p, false) : renderStage()))
@@ -354,6 +355,18 @@ function watchTalking(voice) {
     for (const [id, m] of meters) if (!present.has(id)) { m.source.disconnect(); meters.delete(id); }
     updateSpeaking(voice);
   }, 50);
+}
+
+/**
+ * Tells Peiskos whether you're talking, for friends' lanterns (lamps that flicker while someone at
+ * the fire talks). The voice server's view is used rather than ours, because it keeps working with
+ * the app in the background, and a lamp doesn't need the rings' speed.
+ */
+function tellTalking(voice, talking) {
+  if (state.voice !== voice || voice.toldTalking === talking) return;
+  if (state.ws?.readyState !== WebSocket.OPEN) return;
+  voice.toldTalking = talking;
+  state.ws.send(JSON.stringify({ type: 'voice_speaking', speaking: talking }));
 }
 
 /** Puts together who's talking: measured here where we can, the voice server's word otherwise. */
