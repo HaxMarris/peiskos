@@ -270,6 +270,7 @@ function renderLine(m) {
   el.title = clockTime(new Date(m.createdAt));
   if (m.authorId !== state.me.id && mentionsMe(m)) el.classList.add('mentions-me');
   if (m.pinnedAt) el.insertAdjacentHTML('beforeend', `<span class="pin-mark" title="Pinned">${PIN_ICON}</span>`);
+  if (m.capsule) el.append(renderCapsuleBanner(m));
   if (m.forwarded) el.append(renderForwarded(m.forwarded));
   if (m.replyTo) el.append(renderReplyQuote(m.replyTo));
   const content = document.createElement('div');
@@ -302,7 +303,7 @@ function renderLine(m) {
   const replyBtn = iconButton('', 'Reply', () => setReply(m));
   replyBtn.append(iconNode(REPLY_ICON));
   actions.append(reactBtn, replyBtn);
-  if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
+  if (m.authorId === state.me.id && !m.poll && !m.list && !m.forwarded && !m.live && !m.capsule) actions.append(iconButton('Edit', 'Edit message', () => startEdit(m, content)));
   const more = iconButton('', 'More', (e) => openMessageMenu(e.currentTarget, m));
   more.append(iconNode(MORE_ICON));
   more.setAttribute('aria-haspopup', 'menu');
