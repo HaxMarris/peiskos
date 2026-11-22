@@ -432,6 +432,8 @@ function openEditBurrow(serverId) {
         <select id="burrow-live"><option value="">Off</option>${s.channels.filter((c) => c.kind === 'text' && !c.archived).map((c) => `<option value="${c.id}" ${c.id === s.liveChannelId ? 'selected' : ''}>#${escapeHtml(c.name)}</option>`).join('')}</select>
         <span class="small muted">When someone shares their screen at a fire, a post here says they're live, with a button to join.</span>
       </label>
+      <label class="check"><input type="checkbox" id="burrow-map" aria-describedby="burrow-map-note" ${s.hearthland ? 'checked' : ''} /> Hearth map</label>
+      <span class="small muted" id="burrow-map-note">A map of the hearth people can walk around. Walking into a fire's ring joins its call. The list of rooms and fires stays as it is.</span>
       ${state.maxUploadBytes ? `<label>Largest file people can share
         <span class="inline-form"><input type="number" id="burrow-upload" min="0" max="${Math.floor(state.maxUploadBytes / 1048576)}" placeholder="${Math.floor(state.maxUploadBytes / 1048576)}" value="${s.uploadMb ?? ''}" /><span class="muted">MB</span></span>
         <span class="small muted">Empty: the server's ${formatSize(state.maxUploadBytes)}. 0: no files. Roles can allow more (Roles › Edit).</span></label>` : ''}
@@ -483,6 +485,7 @@ function openEditBurrow(serverId) {
           welcomeChannelId: $('#burrow-welcome').value ? Number($('#burrow-welcome').value) : null,
           rules: $('#burrow-rules').value,
           liveChannelId: $('#burrow-live').value ? Number($('#burrow-live').value) : null,
+          hearthland: $('#burrow-map').checked,
           ...($('#burrow-upload') ? { uploadMb: $('#burrow-upload').value === '' ? null : Number($('#burrow-upload').value) } : {}),
           wordFilter: { words: $('#burrow-words').value.split(/[,\n]/).map((w) => w.trim()).filter(Boolean), action: $('#burrow-words-action').value },
           ...($('#burrow-afk') ? { afkChannelId: $('#burrow-afk').value ? Number($('#burrow-afk').value) : null, afkMinutes: Number($('#burrow-afk-minutes').value) } : {}),

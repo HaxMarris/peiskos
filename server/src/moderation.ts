@@ -47,7 +47,7 @@ export function moderation(ctx: ModerationContext) {
   const roleName = (id: number) => (db.prepare('SELECT name FROM roles WHERE id = ?').get(id) as { name: string } | undefined)?.name ?? '';
   const BURROW_FIELDS: Record<string, string> = {
     name: 'name', description: 'description', welcomeChannelId: 'welcome room', afkChannelId: 'AFK fire', afkMinutes: 'AFK time',
-    rules: 'rules', uploadMb: 'upload limit', wordFilter: 'word filter', liveChannelId: 'go-live room',
+    rules: 'rules', uploadMb: 'upload limit', wordFilter: 'word filter', liveChannelId: 'go-live room', hearthland: 'hearth map',
   };
 
   /** Notes who did what, for the audit log. */
