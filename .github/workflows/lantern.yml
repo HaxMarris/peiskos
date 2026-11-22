@@ -1,0 +1,47 @@
+# Builds the Lantern firmware whenever it changes, so a broken build shows on the pull request.
+# Each run keeps the files to flash (one per board) as the "lantern-firmware" artifact: the
+# merged .bin goes straight onto a board at offset 0 with a browser flasher (see lantern/README.md).
+name: Lantern firmware
+
+on:
+  pull_request:
+    paths: ['lantern/**', '.github/workflows/lantern.yml']
+  push:
+    branches: [main]
+    paths: ['lantern/**', '.github/workflows/lantern.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build the lantern firmware
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: platformio-${{ hashFiles('lantern/firmware/platformio.ini') }}
+      - run: pip install platformio==6.1.18
+      - run: pio run -d lantern/firmware
+      - name: One file per board, to flash at offset 0
+        run: |
+          set -e
+          b=lantern/firmware/.pio/build
+          boot0=~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin
+          esptool() { pio pkg exec -p tool-esptoolpy -- esptool.py "$@"; }
+          mkdir -p out
+          esptool --chip esp32c3 merge_bin -o out/lantern-esp32c3.bin \
+            0x0 $b/c3/bootloader.bin 0x8000 $b/c3/partitions.bin 0xe000 $boot0 0x10000 $b/c3/firmware.bin
+          esptool --chip esp32 merge_bin -o out/lantern-esp32.bin \
+            0x1000 $b/esp32/bootloader.bin 0x8000 $b/esp32/partitions.bin 0xe000 $boot0 0x10000 $b/esp32/firmware.bin
+          ls -l out
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lantern-firmware
+          path: out/*.bin

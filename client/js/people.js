@@ -517,8 +517,8 @@ function openNewDm() {
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
 
-// Your account, in four tabs: how others see you, how the app behaves, how you log in, and your data.
-const ACCOUNT_TABS = [['profile', 'Profile'], ['settings', 'Settings'], ['security', 'Login and security'], ['data', 'Your data']];
+// Your account, in tabs: how others see you, how the app behaves, your lanterns, how you log in, and your data.
+const ACCOUNT_TABS = [['profile', 'Profile'], ['settings', 'Settings'], ['lanterns', 'Lanterns'], ['security', 'Login and security'], ['data', 'Your data']];
 function openAccount(tab = store.get('accountTab') || 'profile') {
   const me = state.me;
   modal(`<h2>Your account</h2>
@@ -555,6 +555,9 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
       ${voiceSettings()}
       ${soundSettings()}
       ${appSettings()}
+    </section>
+    <section data-pane="lanterns" class="account-pane">
+      ${lanternSettings()}
     </section>
     <section data-pane="security" class="account-pane">
       <h3>Username</h3>
@@ -601,6 +604,7 @@ function openAccount(tab = store.get('accountTab') || 'profile') {
     for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === id));
     for (const p of document.querySelectorAll('#modal-card [data-pane]')) p.classList.toggle('hidden', p.dataset.pane !== id);
     if (id === 'security') loadDevices();
+    if (id === 'lanterns') loadLanterns();
   };
   for (const b of document.querySelectorAll('#modal-card [data-tab]')) b.onclick = () => show(b.dataset.tab);
   show(tab);

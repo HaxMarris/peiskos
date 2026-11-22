@@ -226,6 +226,29 @@ export const MIGRATIONS: { why: string; run: (db: Db) => void }[] = [
   // Off sends alerts with no names or message text: Apple and Google carry phone alerts, and
   // can read what's in them.
   { why: 'Message text in alerts, on by default', run: (db) => db.exec('ALTER TABLE users ADD COLUMN alert_text INTEGER NOT NULL DEFAULT 1') },
+  // Lanterns (lanterns.ts): lamps that glow while friends are at a fire. token and pair_code are
+  // hashes (tokenHash), like logins. fire_ids is a JSON list, used when all_fires is off.
+  {
+    why: 'Lanterns',
+    run: (db) => db.exec(`
+      CREATE TABLE lanterns (
+        id           INTEGER PRIMARY KEY,
+        user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        name         TEXT NOT NULL,
+        token        TEXT UNIQUE,
+        pair_code    TEXT UNIQUE,
+        pair_until   INTEGER,
+        enabled      INTEGER NOT NULL DEFAULT 1,
+        light_when   TEXT NOT NULL DEFAULT 'both',
+        all_fires    INTEGER NOT NULL DEFAULT 1,
+        fire_ids     TEXT NOT NULL DEFAULT '[]',
+        brightness   INTEGER NOT NULL DEFAULT 70,
+        created_at   INTEGER NOT NULL,
+        last_seen_at INTEGER
+      );
+      CREATE INDEX lanterns_by_user ON lanterns(user_id);
+    `),
+  },
 ];
 
 /** Runs the numbered steps this database hasn't had yet. */
