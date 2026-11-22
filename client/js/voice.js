@@ -92,6 +92,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
         else {
           $('#voice-audio').append(track.attach());
           participant.setVolume(volume, pub.source);
+          if (pub.source === LK.Track.Source.Microphone) updateSpatial();
         }
         renderStage(); // a shared screen with sound gets a volume control
       })
