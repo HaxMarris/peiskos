@@ -15,6 +15,7 @@ import type { FcmConfig } from './fcm.ts';
 import { looksLikeEmail, type MailConfig } from './mail.ts';
 import { hosting, type HostingOptions } from './hosting.ts';
 import { extras, voiceTimeTracker } from './extras.ts';
+import { recap } from './recap.ts';
 import { trivia } from './trivia.ts';
 import { fileURLToPath } from 'node:url';
 import { looksBlank, withoutBidi } from './text.ts';
@@ -39,6 +40,7 @@ import { directMessages } from './dms.ts';
 import { uploads } from './uploads.ts';
 import { alerts } from './alerts.ts';
 import { savedMessages } from './saved-messages.ts';
+import { lanterns } from './lanterns.ts';
 import { planning } from './planning.ts';
 import { threads } from './threads.ts';
 import { login } from './login.ts';
@@ -558,6 +560,7 @@ export function createApp(opts: AppOptions): Server {
       if (!usersInVoice(prev).length) fireside.delete(prev);
       const old = channelById(prev);
       if (old) broadcastToChannel(old, voiceStateEvent(old.id));
+      lamps.fireChanged(prev);
       listen.left(prev);
       games.left(prev, userId);
       tapes?.left(prev, userId);
@@ -575,6 +578,7 @@ export function createApp(opts: AppOptions): Server {
       games.joined(channelId, userId);
       tapes?.joined(channelId, userId);
       broadcastToChannel(channel, voiceStateEvent(channelId));
+      lamps.fireChanged(channelId);
       if (usersInVoice(channelId).length === 2) nudgeGathered(channel);
     }
   };
@@ -828,6 +832,10 @@ export function createApp(opts: AppOptions): Server {
     isMember, can, canSee, channelById, inVoice, sendServerUpdate, broadcastToChannel,
     allowed: (serverId, user, perm) => allowed(serverId, user as User, perm),
     userChanged: (userId) => userChanged(userId),
+  });
+  recap({
+    db, route, fail: (status, message) => new HttpError(status, message),
+    isMember, canSee, channelById, inVoice, usersInVoice, broadcastToChannel,
   });
   trivia({
     db, route, fail: (status, message) => new HttpError(status, message), isMember, can,
@@ -1299,6 +1307,9 @@ export function createApp(opts: AppOptions): Server {
   });
 
   // ---- games at the fire
+
+  // ---- lanterns: lamps that glow while friends are at a fire (lanterns.ts)
+  const lamps = lanterns({ canSee, channelById, checkTries, db, failedTry, now, route, speaking, usersInVoice });
 
   const games = fireGames({
     inVoice, usersInVoice, sendTo, fail: (status, message) => new HttpError(status, message),
@@ -2069,6 +2080,7 @@ export function createApp(opts: AppOptions): Server {
 
   server.on('upgrade', (req, socket, head) => {
     const url = new URL(req.url ?? '/', 'http://localhost');
+    if (url.pathname === '/lantern') return lamps.upgrade(req, socket, head);
     const user = url.pathname === '/ws' ? userByToken(url.searchParams.get('token') ?? undefined) : undefined;
     if (!user) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -2179,7 +2191,8 @@ export function createApp(opts: AppOptions): Server {
           }
           sendTo(usersInVoice(channelId), { type: 'fireside', channelId, message });
         } else if (msg.type === 'voice_speaking') {
-          // Talking or not, so people outside the fire can see who it is.
+          // Talking or not. Only lanterns hear about it as it happens (people at the fire see it in
+          // the call itself); the server's list of rooms carries it for anyone loading one.
           const channelId = inVoice.get(user.id);
           const on = msg.speaking === true;
           if (channelId === undefined || speaking.has(user.id) === on) return;
@@ -2187,7 +2200,7 @@ export function createApp(opts: AppOptions): Server {
             speaking.add(user.id);
             lastActive.set(user.id, Date.now());
           } else speaking.delete(user.id);
-          broadcastToChannel(channelById(channelId)!, { type: 'voice_speaking', channelId, userId: user.id, speaking: on });
+          lamps.fireChanged(channelId);
         } else if (msg.type === 'idle') {
           // Nobody has touched this device for a while (or they're back).
           const before = userIdle(user.id);
@@ -2269,6 +2282,7 @@ export function createApp(opts: AppOptions): Server {
     for (const t of fireTimers) clearTimeout(t);
     casinoTables.stop();
     tapes?.stop();
+    lamps.stop();
     for (const t of statusTimers.values()) clearTimeout(t);
     if (wakeTimer) clearTimeout(wakeTimer);
   });

@@ -5,3 +5,4 @@ desktop/dist/
 .env
 e2e/failures/
 /node_modules
+lantern/firmware/.pio/
