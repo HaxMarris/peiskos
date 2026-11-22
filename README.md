@@ -108,6 +108,9 @@ Data goes to `server/data/chat.db`.
 | `MAX_UPLOAD_MB`     | `25`                   | Largest file someone can share.                                     |
 | `UPLOAD_DAILY_MB`   | `2048`                 | Most one person can upload in a day, all files together.            |
 | `MIN_FREE_DISK_MB`  | `2048`                 | Uploads pause while the disk has less than this free.               |
+| `MOVIE_MAX_MB`      | `4096`                 | Largest movie someone can put on a hearth's shelf for the movie theater at the fire. |
+| `MOVIE_STORAGE_MB`  | `20480`                | Most space all movies together may take.                            |
+| `MOVIE_KEEP_DAYS`   | `14`                   | Days a movie nobody has put on stays on the shelf.                  |
 | `LIVEKIT_URL`       | same address as Peiskos | Where apps reach LiveKit, if not routed through Peiskos's address.   |
 | `LIVEKIT_API_URL`   | `http://localhost:7880` | Where Peiskos reaches LiveKit to disconnect removed people (Docker Compose points it at the host). |
 | `LIVEKIT_WEBHOOK_URL` | `http://127.0.0.1:3000/api/livekit/webhook` | Docker Compose only: where LiveKit tells Peiskos that someone joined or left a voice room. Change it only if Peiskos isn't on port 3000 of the same machine. |

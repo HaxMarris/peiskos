@@ -40,6 +40,11 @@ const app = createApp({
   maxUploadBytes: Number(process.env.MAX_UPLOAD_MB ?? 25) * 1024 * 1024,
   dailyUploadBytes: Number(process.env.UPLOAD_DAILY_MB ?? 2048) * 1024 * 1024,
   minFreeDiskBytes: Number(process.env.MIN_FREE_DISK_MB ?? 2048) * 1024 * 1024,
+  movies: {
+    maxBytes: Number(process.env.MOVIE_MAX_MB ?? 4096) * 1024 * 1024,
+    storageBytes: Number(process.env.MOVIE_STORAGE_MB ?? 20480) * 1024 * 1024,
+    keepDays: Number(process.env.MOVIE_KEEP_DAYS ?? 14),
+  },
   mail: process.env.SMTP_URL ? { url: process.env.SMTP_URL, from: process.env.MAIL_FROM || `Peiskos <${decodeURIComponent(new URL(process.env.SMTP_URL).username).includes('@') ? decodeURIComponent(new URL(process.env.SMTP_URL).username) : 'burrow@localhost'}>` } : undefined,
   publicUrl: process.env.PUBLIC_URL || undefined,
   pushContact: process.env.PUSH_CONTACT || undefined,

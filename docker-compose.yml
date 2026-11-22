@@ -31,6 +31,10 @@ services:
       MAX_UPLOAD_MB: ${MAX_UPLOAD_MB:-25}
       UPLOAD_DAILY_MB: ${UPLOAD_DAILY_MB:-2048}
       MIN_FREE_DISK_MB: ${MIN_FREE_DISK_MB:-2048}
+      # The movie theater at the fire: largest movie, all movies together (MB), days an unwatched one is kept.
+      MOVIE_MAX_MB: ${MOVIE_MAX_MB:-4096}
+      MOVIE_STORAGE_MB: ${MOVIE_STORAGE_MB:-20480}
+      MOVIE_KEEP_DAYS: ${MOVIE_KEEP_DAYS:-14}
       # GIF picker (see README).
       KLIPY_API_KEY: ${KLIPY_API_KEY:-}
       GIF_RATING: ${GIF_RATING:-}
