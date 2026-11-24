@@ -25,12 +25,14 @@ function displaySettings() {
     </label>
     <span class="small muted">Makes everything in Peiskos bigger or smaller${isDesktop ? '. Ctrl+plus and Ctrl+minus work too.' : ', on this device.'}</span>
     <label>Motion
-      <select id="display-motion">
+      <select id="display-motion" ${d.power === 'low' ? 'disabled title="Low resource mode keeps motion low."' : ''}>
         <option value="system" ${!d.motion ? 'selected' : ''}>Follow my system setting</option>
         <option value="reduce" ${d.motion === 'reduce' ? 'selected' : ''}>Less motion</option>
         <option value="full" ${d.motion === 'full' ? 'selected' : ''}>All animations</option>
       </select>
     </label>
+    <label class="check"><input type="checkbox" id="display-power" aria-describedby="display-power-note" ${d.power === 'low' ? 'checked' : ''} /> Low resource mode</label>
+    <span class="small muted" id="display-power-note">Uses less battery, processor and memory. The fire and map stop moving, spatial sound is off, and others' cameras come in at lower quality.</span>
     <label class="check"><input type="checkbox" id="display-seasons" ${d.seasons !== 'off' ? 'checked' : ''} /> Seasonal touches</label>
     <span class="small muted">Snow on the fire in winter, falling leaves in autumn, and something extra for the holidays.</span>`;
 }
@@ -38,7 +40,23 @@ function wireDisplaySettings() {
   $('#display-compact').onchange = (e) => saveDisplay({ compact: e.target.checked });
   $('#display-size').onchange = (e) => saveDisplay({ textSize: Number(e.target.value) });
   $('#display-motion').onchange = (e) => saveDisplay({ motion: e.target.value === 'system' ? undefined : e.target.value });
+  $('#display-power').onchange = (e) => { saveDisplay({ power: e.target.checked ? 'low' : undefined }); powerChanged(); };
   $('#display-seasons').onchange = (e) => { saveDisplay({ seasons: e.target.checked ? undefined : 'off' }); seasonLayer(); };
+}
+
+/** Low resource mode was turned on or off: what's already running follows (a game picks it up next time). */
+function powerChanged() {
+  const motion = $('#display-motion');
+  if (motion) {
+    motion.disabled = lowPower();
+    motion.title = lowPower() ? 'Low resource mode keeps motion low.' : '';
+  }
+  mapDistanceBox();
+  updateSpatial();
+  allCameraQuality();
+  const lp = state.voice?.room?.localParticipant;
+  if (lp) applyShareMode(lp).catch((err) => console.warn('Share mode:', err));
+  renderFire();
 }
 
 // Ctrl+plus, Ctrl+minus and Ctrl+0 in the desktop app (browsers zoom by themselves).

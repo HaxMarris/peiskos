@@ -819,7 +819,7 @@ function voiceSettings() {
       <button type="button" class="link-btn" id="vs-chime">Play a test sound</button>
       <label class="check"><input type="checkbox" id="vs-board" ${voicePrefs.soundboard ? 'checked' : ''} /> Play soundboard sounds</label>
       <label class="check"><input type="checkbox" id="vs-full" aria-describedby="vs-full-note" ${voicePrefs.fullVolume ? 'checked' : ''} /> Hear everyone at full volume</label>
-      <span class="small muted" id="vs-full-note">At fires with spatial sound, everyone sounds as if they're beside you, in both ears.</span>
+      <span class="small muted" id="vs-full-note">At fires with spatial sound, everyone sounds as if they're beside you, in both ears.${lowPower() ? ' Low resource mode does this too.' : ''}</span>
       <div class="vs-group">
         <span class="vs-label">Hotkeys</span>
         <div class="key-row"><span>Mute</span><button type="button" class="btn secondary key-btn" id="vs-key-mute">${escapeHtml(keyLabel(voicePrefs.keys.mute))}</button></div>

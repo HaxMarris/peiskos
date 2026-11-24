@@ -48,14 +48,16 @@
 
   /**
    * How Peiskos looks for you on this device: compact messages, text size (the whole app is
-   * scaled, as zooming does) and less motion. Applied here too, so the first paint is right.
+   * scaled, as zooming does), less motion and low resource mode (which brings less motion with it).
+   * Applied here too, so the first paint is right.
    */
   function applyDisplay() {
     const root = document.documentElement;
     let d = {};
     try { d = JSON.parse(localStorage.getItem('display')) || {}; } catch {}
     root.dataset.density = d.compact ? 'compact' : 'cozy';
-    root.dataset.motion = d.motion === 'reduce' ? 'reduce' : d.motion === 'full' ? 'full' : 'system';
+    root.dataset.power = d.power === 'low' ? 'low' : 'normal';
+    root.dataset.motion = d.power === 'low' || d.motion === 'reduce' ? 'reduce' : d.motion === 'full' ? 'full' : 'system';
     // The time of year (northern hemisphere), and a few holidays, for the seasonal touches.
     const now = new Date(), month = now.getMonth() + 1, md = month * 100 + now.getDate();
     const off = d.seasons === 'off';

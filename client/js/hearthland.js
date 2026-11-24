@@ -383,7 +383,7 @@ function hlSeated(f) {
  * by distance. Null otherwise, and the fire's own setting applies.
  */
 function mapHearing() {
-  if (!hl.open || !state.voice || voicePrefs.fullVolume) return null;
+  if (!hl.open || !state.voice || voicePrefs.fullVolume || lowPower()) return null;
   const f = hlMapFires().find((x) => x.c.id === state.voice.channelId);
   if (!f) return null;
   const spots = new Map();
@@ -422,7 +422,7 @@ function openMap(serverId = state.serverId) {
   hl.bannerKey = '';
   hl.night = daylight().night > 0.5;
   $('#map-night').checked = hl.night;
-  $('#map-distance').checked = !voicePrefs.fullVolume;
+  mapDistanceBox();
   $('#map-first').checked = mapFirst();
   $('#map-title').textContent = s.name;
   $('#hearthland').classList.remove('hidden');
@@ -646,6 +646,13 @@ $('#map-close').onclick = () => closeMap();
 $('#map-look').onclick = () => openLookEditor();
 $('#map-camp').onclick = () => openCampPanel(hl.serverId);
 $('#map-night').onchange = (e) => { hl.night = e.target.checked; };
+/** "Hear by distance" is off while low resource mode is on, since that skips the mixing. */
+function mapDistanceBox() {
+  const box = $('#map-distance');
+  box.checked = !voicePrefs.fullVolume && !lowPower();
+  box.disabled = lowPower();
+  box.closest('label').title = lowPower() ? 'Off in low resource mode.' : '';
+}
 $('#map-distance').onchange = (e) => { voicePrefs.fullVolume = !e.target.checked; saveVoicePrefs(); updateSpatial(); };
 $('#map-first').onchange = (e) => store.set(hlPrefKey, e.target.checked ? 'map' : 'list');
 
@@ -655,6 +662,11 @@ function hlFrame(now) {
   hl.frame = 0;
   if (!hl.open) return;
   hl.frame = requestAnimationFrame(hlFrame);
+  // Low resource mode: 20 frames a second while anyone moves, 2 while the map only flickers.
+  if (lowPower()) {
+    const busy = hl.keys.size || hl.route.length || [...hl.walkers.values()].some((p) => Math.abs(p.tx - p.x) + Math.abs(p.ty - p.y) > 0.5);
+    if (now - (hl.last || 0) < (busy ? 48 : 500)) return;
+  }
   const dt = Math.min(0.05, (now - (hl.last || now)) / 1000);
   hl.last = now;
   const t = now / 1000;

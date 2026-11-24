@@ -14,6 +14,8 @@ const Peiskos = (() => {
   let nextId = 1;
   const self = {
     me: null, hostId: null, isHost: false, serverId: null, players: [],
+    /** Low resource mode is on in Peiskos: draw less (fewer frames, no extra effects). */
+    lowPower: false,
     on(kind, fn) { handlers[kind].push(fn); },
     /** To the host (from a player), or to 'all' or one player's id (from the host). */
     send(to, data) { post({ kind: 'send', to, data }); },
@@ -43,6 +45,7 @@ const Peiskos = (() => {
       self.isHost = m.me.id === m.hostId;
       self.serverId = m.serverId ?? null;
       self.players = m.players || [];
+      self.lowPower = !!m.lowPower;
       handlers.init.forEach((fn) => fn(m.resume || null));
     } else if (m.kind === 'players') {
       for (const p of self.players) seenNames.set(p.id, p.name);

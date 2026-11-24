@@ -256,7 +256,7 @@ window.addEventListener('message', (e) => {
     // The page loads again when it moves between windows (popping out); the host's game picks up
     // where it left off from the last snapshot it gave.
     const hearthId = roomById(fireGame.channelId)?.s.id ?? null;
-    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g), resume: gamePlay.snapshot, serverId: hearthId }, '*');
+    gamePlay.frame.contentWindow.postMessage({ kind: 'init', me: { id: state.me.id, name: nameOf(state.me.id, 'Player') }, hostId: g.hostId, players: gamePlayers(g), resume: gamePlay.snapshot, serverId: hearthId, lowPower: lowPower() }, '*');
     for (const q of gamePlay.queue.splice(0)) postToGame(q);
   } else if (m.kind === 'send') {
     if (m.to === 'all' || Number.isInteger(m.to)) sendGame({ action: 'send', to: m.to, data: m.data });

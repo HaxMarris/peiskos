@@ -528,6 +528,7 @@ function renderAttachments(list) {
       el.onload = () => { if (state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 400) messagesEl.scrollTop = messagesEl.scrollHeight; };
       el.onclick = () => openImage(a, url);
       pictureMenuOn(el, a, url);
+      if (/gif|webp/.test(a.type) && !a.thumb) stillGif(el);
     } else if (VIDEO_TYPES.test(a.type)) {
       el = document.createElement('video');
       el.className = 'att-video';
@@ -562,6 +563,29 @@ function renderAttachments(list) {
     wrap.append(a.spoiler ? spoilerWrap(el) : el);
   }
   return wrap;
+}
+
+/**
+ * Low resource mode: a GIF shows a still of itself until you point at it, so the browser isn't
+ * drawing every GIF in the chat all the time. Tapping it opens it, moving, as before.
+ */
+function stillGif(img) {
+  img.addEventListener('load', () => {
+    if (!lowPower() || !img.isConnected || !img.naturalWidth) return;
+    const still = document.createElement('canvas');
+    still.width = img.naturalWidth;
+    still.height = img.naturalHeight;
+    try { still.getContext('2d').drawImage(img, 0, 0); } catch { return; }
+    still.className = 'gif-still-frame';
+    still.setAttribute('aria-hidden', 'true');
+    still.onclick = () => img.click();
+    const wrap = document.createElement('span');
+    wrap.className = 'gif-still still';
+    img.replaceWith(wrap);
+    wrap.append(img, still);
+    wrap.onpointerenter = () => wrap.classList.remove('still');
+    wrap.onpointerleave = () => wrap.classList.add('still');
+  }, { once: true });
 }
 
 function openImage(a, url) {
