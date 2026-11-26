@@ -16,7 +16,7 @@ export interface LegalOptions {
 }
 
 /** The date these were last changed. Bump it whenever the wording changes. */
-export const LEGAL_UPDATED = '19 November 2026';
+export const LEGAL_UPDATED = '26 November 2026';
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -98,6 +98,9 @@ export function privacyPage(o: LegalOptions) {
       <li><b>Where you are:</b> the hearths and groups you're in, your roles and nicknames, your friends and the people you've blocked, and what you've read, which is how other people in a conversation can see you've seen a message.</li>
       <li><b>Logins:</b> for each device you're logged in on, a description of the browser or app, its IP address, and when it was last used, so you can see them under Login and security and log them out. Logins you don't use for 30 days end on their own. Passkeys and two-step login keep only what's needed to check them.</li>
       <li><b>Unsent messages:</b> a message you've started typing but not sent, one per room, so it's there on your other devices. It's deleted when you send it or clear the box.</li>
+      <li><b>Time capsules:</b> the text and files you seal until a day you pick. Nobody in the hearth can open one before then; on its day it's posted in its room like a message. Throw one away, or delete your account, and the ones still sealed are deleted.</li>
+      <li><b>Movies:</b> a movie you add to a hearth's shelf for the theater at the fire: the file, its name, length and size, and that you added it. Everyone in that hearth can watch it. It's deleted when someone takes it off the shelf, or once nobody has put it on for 14 days (or however long the server is set to keep them).</li>
+      <li><b>Your look on hearth maps:</b> the character you put together. Where you walk on a map is kept only in memory while you're on it, and only people on that map see it.</li>
       <li><b>Clips at the fire:</b> only if everyone at a fire says yes to clips, and only for people who said yes. While clips are on, your own app records your own voice and sends it to the server, which deletes it again within about a minute and a half unless someone presses "Clip that" to keep the last 30 seconds. Clips get a written-out version (transcript) made later on the server itself, by a program that runs there. Anyone who can see that fire can listen to its clips. They stay until someone who said yes, or a moderator, deletes them. You can take yourself out at any time, which cuts your voice out of the clips made while you were in.</li>
       <li><b>Time at the fire:</b> when you join and leave voice, which unlocks fire decorations, achievements and the year in review.</li>
       <li><b>Games:</b> in each hearth, your play chips, the items, pets, seats and backgrounds you've won or unlocked, the fish you've caught, your scores, and any trivia questions or words you add for your hearth's games. Drawings, clues and answers during a game are passed between the players and aren't saved.</li>
@@ -116,7 +119,7 @@ export function privacyPage(o: LegalOptions) {
     <ul>
       <li>Voice calls, video and screen shares aren't recorded, except for clips everyone at the fire agreed to (above). They're end-to-end encrypted, so the server passes them along without being able to listen or watch.</li>
       <li>Fireside chat (the text chat at a fire) is gone once everyone leaves the fire, unless the hearth's host chose to keep that fire's chat.</li>
-      <li>Your location, when you share it on the way to an event (meet-up). Your device sends it only while Peiskos is open, and only after you tap Share. The server keeps the latest one in memory and never saves it. The others going see how far you are from the meeting place and in which direction, not where you are. It's dropped when you stop, when you arrive, after 15 minutes without an update, and 3 hours after the event starts.</li>
+      <li>Your location, when you share it on the way to an event (meet-up). Your device sends it only while Peiskos is open, and only after you tap Share. The server keeps the latest one in memory and never saves it. The others going see how far you are from the meeting place and in which direction: to about 10 metres and 5 degrees within 2 km, which together come close to where you are, and to about 500 metres and one of eight directions further away. They don't see a map or your coordinates. It's dropped when you stop, when you arrive, after 15 minutes without an update, and 3 hours after the event starts.</li>
       <li>The server doesn't keep a record of the pages you open or what you do in the app beyond what's listed above.</li>
     </ul>
     <p>Text messages and files are not end-to-end encrypted. They're stored on the server so they're there on all your devices, which means ${runBy} could technically read them. They won't, except to deal with a report or a legal obligation.</p>

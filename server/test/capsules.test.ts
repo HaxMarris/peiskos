@@ -149,3 +149,19 @@ test('taking a sealed capsule back, and a hearth with no fire', async () => {
   assert.equal(opened.data.message.content, 'three');
   assert.equal(opened.data.message.authorId, bo.user.id);
 });
+
+test('deleting an account throws away the time capsules it sealed that are still closed', async () => {
+  const max = await reg('capsule-keeper');
+  const sam = await reg('capsule-leaver');
+  const hearth = (await call('/api/servers', { body: { name: 'Keepsakes' }, token: max.token })).data;
+  await call('/api/join', { body: { inviteCode: hearth.inviteCode }, token: sam.token });
+  const room = hearth.channels.find((c: any) => c.kind === 'text').id;
+  const photo = await upload(room, sam.token, new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]), 'p.png', 'image/png');
+  const sealed = await call(`/api/channels/${room}/capsules`, { body: { content: 'for later', opensAt: Date.now() + 30 * DAY, attachmentIds: [photo.id] }, token: sam.token });
+  assert.equal(sealed.status, 200);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM capsules WHERE author_id = ?').get(sam.user.id) as any).n, 1);
+
+  assert.equal((await call('/api/me', { method: 'DELETE', body: { password: 'password1' }, token: sam.token })).status, 200);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM capsules WHERE author_id = ?').get(sam.user.id) as any).n, 0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM attachments WHERE id = ?').get(photo.id) as any).n, 0);
+});

@@ -1,13 +1,14 @@
 FROM node:22-alpine
 WORKDIR /app
+# Clips at the fire are cut and mixed with ffmpeg. Installed before the code is copied, so an
+# update that only changes code doesn't download it again.
+RUN apk add --no-cache ffmpeg
 COPY server/package.json server/package-lock.json ./server/
 RUN cd server && npm ci --omit=dev
 COPY server/src ./server/src
 COPY server/trivia ./server/trivia
 COPY client ./client
 ENV PORT=3000 DB_FILE=/data/chat.db NODE_ENV=production
-# Clips at the fire are cut and mixed with ffmpeg.
-RUN apk add --no-cache ffmpeg
 RUN mkdir -p /data && chown node:node /data
 VOLUME /data
 EXPOSE 3000

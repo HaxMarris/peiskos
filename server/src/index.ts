@@ -7,6 +7,16 @@ import { finishRestore, scheduleBackups } from './backup.ts';
 import { s3FromEnv } from './s3.ts';
 import { parseCertList } from './app-links.ts';
 
+// The values .env.example comes with are public, so they're never accepted as real ones.
+const EXAMPLES: Record<string, string> = { REGISTRATION_CODE: 'change-me', LIVEKIT_API_SECRET: 'paste-a-long-random-secret-here' };
+const unchanged = Object.keys(EXAMPLES).filter((k) => process.env[k]?.trim() === EXAMPLES[k]);
+if (unchanged.length) {
+  console.error(`Peiskos didn't start: ${unchanged.join(' and ')} in .env still ${unchanged.length > 1 ? 'have their example values' : 'has its example value'} from .env.example, which anyone can read.`);
+  if (unchanged.includes('LIVEKIT_API_SECRET')) console.error('Make a voice secret with:  openssl rand -base64 32');
+  console.error('Change it in .env, then run: docker compose up -d');
+  process.exit(1);
+}
+
 const here = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT ?? 3000);
 const dbFile = process.env.DB_FILE ?? resolve(here, '../data/chat.db');
@@ -109,7 +119,28 @@ app.listen(port, () => {
   if (!process.env.KLIPY_API_KEY) console.log('The GIF picker is off (set KLIPY_API_KEY to turn it on).');
   if (!process.env.SMTP_URL) console.log("Email is off, so people can't reset a forgotten password themselves (set SMTP_URL to turn it on).");
   if (process.env.LIVEKIT_API_KEY && process.env.TAPES !== 'off' && !tapesOn) console.log("Clips at the fire are off: install ffmpeg to turn them on.");
-  if (tapesOn && !process.env.WHISPER_URL) console.log('Clips have no transcripts (set WHISPER_URL to turn them on; see README).');
+  if (tapesOn && process.env.LIVEKIT_API_KEY && !process.env.WHISPER_URL) console.log('Clips have no transcripts (set WHISPER_URL to turn them on; see README).');
+  if (process.env.LIVEKIT_API_SECRET && process.env.LIVEKIT_API_SECRET.length < 32)
+    console.log('Warning: LIVEKIT_API_SECRET is shorter than 32 characters, so it could be guessed. Make a new one with: openssl rand -base64 32');
   if (!process.env.LIVEKIT_API_KEY) console.log('Voice rooms are off (set LIVEKIT_API_KEY and LIVEKIT_API_SECRET to turn them on).');
   if (process.env.JOINT_FIRES === 'on' && !process.env.PUBLIC_URL) console.log("Joint fires are on, but can't be hosted until PUBLIC_URL is set.");
 });
+
+// Restarts and updates (docker compose stop, the updater) send SIGTERM. Without an answer to it,
+// Docker waits 10 seconds and then kills Peiskos mid-write. Stop taking requests, give the ones
+// under way a few seconds, and close the database cleanly.
+let stopping = false;
+const shutDown = (signal: string) => {
+  if (stopping) return;
+  stopping = true;
+  console.log(`${signal}: stopping.`);
+  const done = () => {
+    try { db.close(); } catch { /* already closed */ }
+    process.exit(0);
+  };
+  app.close(done);
+  app.closeIdleConnections();
+  setTimeout(() => { app.closeAllConnections(); done(); }, 5000).unref();
+};
+process.on('SIGTERM', () => shutDown('SIGTERM'));
+process.on('SIGINT', () => shutDown('SIGINT'));

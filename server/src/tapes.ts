@@ -74,6 +74,8 @@ export const CLIP_MS = 30_000;
 const CHUNK_MAX = 1024 * 1024;
 const PERSON_MAX = 200 * 1024 * 1024; // what one person's app can send for one tape (3 hours is about 45 MB)
 const CLIPS_MAX = 200;
+// A clip takes seconds to cut; a whole tape's mix a few minutes at most, even on a small computer.
+const FFMPEG_MAX_MS = 15 * 60_000;
 const TYPES: Record<string, string> = { 'audio/webm': 'webm', 'audio/mp4': 'mp4', 'audio/ogg': 'ogg' };
 // What people's apps send is read only as the audio it says it is: ffmpeg left to guess could take a
 // file for a playlist and go reading other files or addresses.
@@ -117,8 +119,10 @@ export function fireTapes(ctx: TapesContext) {
       let err = '';
       p.stderr.on('data', (d) => (err = (err + d).slice(-2000)));
       try { if (p.pid) setPriority(p.pid, 15); } catch { /* not allowed here: it runs at normal priority */ }
-      p.on('error', reject);
-      p.on('close', (code) => (code === 0 ? resolve() : reject(new Error(err.trim() || `ffmpeg stopped with ${code}`))));
+      // Jobs wait for each other, so one that hangs (a broken recording) would stop every clip after it.
+      const limit = setTimeout(() => { err = 'ffmpeg took too long'; p.kill('SIGKILL'); }, FFMPEG_MAX_MS);
+      p.on('error', (e) => { clearTimeout(limit); reject(e); });
+      p.on('close', (code) => { clearTimeout(limit); if (code === 0) resolve(); else reject(new Error(err.trim() || `ffmpeg stopped with ${code}`)); });
     }));
     jobs = job.catch(() => {});
     return job;
@@ -389,6 +393,12 @@ export function fireTapes(ctx: TapesContext) {
     const recut = Promise.all(clipIds.map((id) => cut(id)));
     clipsCutting.set(tapeId, Promise.all([clipsCutting.get(tapeId), recut]));
     await recut;
+  };
+
+  /** An account is deleted: their voice comes off every tape, and its clips are cut again without it. */
+  const forgetPerson = async (userId: number) => {
+    const tapeIds = db.prepare('SELECT tape_id AS id FROM tape_people WHERE user_id = ? UNION SELECT tape_id FROM tape_audio WHERE user_id = ?').all(userId, userId) as { id: number }[];
+    for (const { id } of tapeIds) await leaveTape(id, userId);
   };
 
   // ---- what people's apps send while they're on a tape
@@ -741,5 +751,5 @@ export function fireTapes(ctx: TapesContext) {
     await jobs;
   };
 
-  return { handle, handleRaw, joined, left, guestAnswer, guestsMoved, stateFor, transcribeNext, sweep, stop: stopAll, settled, deleteTape };
+  return { handle, handleRaw, joined, left, guestAnswer, guestsMoved, stateFor, transcribeNext, sweep, stop: stopAll, settled, deleteTape, forgetPerson };
 }

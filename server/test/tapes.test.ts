@@ -317,3 +317,35 @@ test("while clips are on, nobody's voice is kept past the last minute and a half
     quick.close();
   }
 });
+
+test("deleting an account takes that person's voice off every clip", async () => {
+  const [host, bob] = await people('host', 'bob');
+  const { fire } = await fireWith(host, bob);
+  const h = await sitDown(host, fire);
+  const b = await sitDown(bob, fire);
+  h.send({ type: 'tape', action: 'ask' });
+  await tapeState(b, (t) => t?.phase === 'asking');
+  b.send({ type: 'tape', action: 'answer', yes: true });
+  const { tape } = await tapeState(h, (t) => t?.phase === 'taping');
+  await sendAudio(bob, tape.id, 'bob-deletes-account');
+  await sendAudio(host, tape.id, 'host-stays');
+  await new Promise((r) => setTimeout(r, 1500));
+  h.send({ type: 'tape', action: 'clip' });
+  const { clip } = await h.next((e) => e.type === 'tape_clip');
+  assert.equal(clip.state, 'ready');
+  h.send({ type: 'tape', action: 'stop' });
+  await h.next((e) => e.type === 'tape_ready');
+  await app.tapes.settled();
+  b.ws.close();
+
+  assert.equal((await call('/api/me', { method: 'DELETE', body: { password: 'password1' }, token: bob.token })).status, 200);
+  await new Promise((r) => setTimeout(r, 200));
+  await app.tapes.settled();
+  const t = (await call(`/api/tapes/${tape.id}`, { token: host.token })).data.tape;
+  assert.deepEqual(t.people.map((p: any) => p.id), [host.user.id]);
+  while (await app.tapes.transcribeNext(true)) { /* next */ }
+  const after = (await call(`/api/tape-clips/${clip.id}`, { token: host.token })).data;
+  assert.equal(after.clip.state, 'ready');
+  assert.deepEqual(after.transcript.lines.map((l: any) => l.userId), [host.user.id]);
+  h.ws.close();
+});

@@ -9,6 +9,8 @@ services:
   burrow:
     build: .
     restart: unless-stopped
+    # A small init passes Docker's stop signal on and cleans up after ffmpeg.
+    init: true
     logging: *logging
     ports:
       # Only Caddy (on this machine) talks to Burrow directly. Set BURROW_BIND=0.0.0.0 in .env

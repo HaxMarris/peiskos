@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { openDb } from '../src/db.ts';
-import { backupNow } from '../src/backup.ts';
+import { backupNow, sentOffsite } from '../src/backup.ts';
 
 test('daily backups are readable copies and only the newest are kept', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'burrow-backup-'));
@@ -24,4 +24,13 @@ test('daily backups are readable copies and only the newest are kept', async () 
   assert.equal((copy.prepare('SELECT username FROM users').get() as { username: string }).username, 'max');
   copy.close();
   db.close();
+});
+
+test('off-site copies leave out clips, movies and files still being written', () => {
+  assert.equal(sentOffsite('abc123'), true);
+  assert.equal(sentOffsite('avatars/me.webp'), true);
+  assert.equal(sentOffsite('tapes/voice.webm'), false);
+  assert.equal(sentOffsite('movies/film.mp4'), false);
+  assert.equal(sentOffsite('movies/film.part'), false);
+  assert.equal(sentOffsite('upload.part'), false);
 });
