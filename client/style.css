@@ -694,6 +694,12 @@ label.check input { width: auto; }
 .file-icon svg { width: 22px; height: 22px; fill: currentColor; }
 .attachments { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; margin: 4px 0 2px; }
 .att-image { max-width: min(400px, 100%); max-height: 300px; border-radius: var(--radius-md); cursor: zoom-in; display: block; background: var(--surface-2); }
+/* Low resource mode: a GIF's still covers it (hidden, it isn't redrawn) until pointed at. */
+.gif-still { position: relative; display: block; width: fit-content; max-width: 100%; }
+.gif-still-frame { display: none; }
+.gif-still.still .att-image { visibility: hidden; }
+.gif-still.still .gif-still-frame { display: block; position: absolute; inset: 0; width: 100%; height: 100%; border-radius: var(--radius-md); cursor: zoom-in; }
+.gif-still.still::after { content: "GIF"; position: absolute; left: 6px; bottom: 6px; padding: 1px 6px; border-radius: var(--radius-sm); background: rgb(0 0 0 / .6); color: #fff; font-size: 11px; font-weight: 800; pointer-events: none; }
 .att-video { max-width: min(480px, 100%); max-height: 320px; border-radius: var(--radius-md); background: #000; }
 .att-file { display: flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-md); text-decoration: none; color: var(--text); max-width: 360px; }
 .att-file .file-icon { width: 40px; height: 40px; border-radius: var(--radius-md); flex: none; }

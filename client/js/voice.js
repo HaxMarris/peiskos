@@ -88,6 +88,7 @@ async function joinVoice(channelId, { muted = false, deafened = false, rejoin = 
     voice.room = room;
     room
       .on(LK.RoomEvent.TrackSubscribed, (track, pub, participant) => {
+        if (pub.source === LK.Track.Source.Camera) cameraQuality(pub);
         if (track.kind !== 'audio') return renderStage();
         const id = pidOf(participant.identity);
         const volume = heard(pub.source === LK.Track.Source.ScreenShareAudio ? streamVolumeFor(id) : volumeFor(id));
@@ -322,11 +323,13 @@ function watchTalking(voice) {
   const meters = new Map(); // user id -> { track, source, analyser, until }
   voice.talkMeters = meters;
   const samples = new Float32Array(2048);
+  voice.talkSkip = 0;
   const micOf = (p) => p.getTrackPublication(window.LivekitClient.Track.Source.Microphone)?.track?.mediaStreamTrack ?? null;
   voice.talkTimer = setInterval(() => {
     const room = voice.room;
     if (state.voice !== voice || !room || ctx.state === 'closed') return clearInterval(voice.talkTimer);
     if (document.hidden) return; // nobody sees the rings
+    if (lowPower() && ++voice.talkSkip % 3) return; // low resource mode: every 150 ms is enough
     const now = performance.now();
     const present = new Set();
     for (const p of [room.localParticipant, ...room.remoteParticipants.values()]) {
@@ -353,7 +356,8 @@ function watchTalking(voice) {
       m.analyser.getFloatTimeDomainData(samples);
       let sum = 0;
       for (let i = 0; i < samples.length; i++) sum += samples[i] * samples[i];
-      if (track.enabled && 10 * Math.log10(sum / samples.length || 1e-12) > TALK_DB) m.until = now + TALK_HOLD;
+      // Measured less often in low resource mode, so held longer to bridge the gaps between words.
+      if (track.enabled && 10 * Math.log10(sum / samples.length || 1e-12) > TALK_DB) m.until = now + TALK_HOLD * (lowPower() ? 1.5 : 1);
     }
     for (const [id, m] of meters) if (!present.has(id)) { m.source.disconnect(); meters.delete(id); }
     updateSpeaking(voice);
@@ -641,6 +645,25 @@ function mediaError(err, what) {
   return `Couldn't start your ${what}: ${err?.message || err}`;
 }
 
+/**
+ * Others' cameras come in at their lowest copy in low resource mode (cameras send three sizes), so
+ * there's less to download and decode. Screen shares send one copy only, so they stay as they are.
+ */
+function cameraQuality(pub) {
+  const LK = window.LivekitClient;
+  if (!pub.isSubscribed || !!pub.lowered === lowPower()) return;
+  pub.lowered = lowPower();
+  pub.setVideoQuality(pub.lowered ? LK.VideoQuality.LOW : LK.VideoQuality.HIGH);
+}
+function allCameraQuality() {
+  const room = state.voice?.room, LK = window.LivekitClient;
+  if (!room || !LK) return;
+  for (const p of room.remoteParticipants.values()) {
+    const pub = p.getTrackPublication(LK.Track.Source.Camera);
+    if (pub) cameraQuality(pub);
+  }
+}
+
 async function flipCamera() {
   const track = state.voice?.room?.localParticipant.getTrackPublication(window.LivekitClient.Track.Source.Camera)?.track;
   if (!track) return;
@@ -681,11 +704,17 @@ const SHARE_MODES = {
 };
 let shareMode = SHARE_MODES[store.get('shareMode')] ? store.get('shareMode') : 'smooth';
 
+/** The mode a share uses: in low resource mode, smooth sends 30 frames a second, as sharp does. */
+const shareModeNow = () => {
+  const mode = SHARE_MODES[shareMode];
+  return lowPower() ? { ...mode, encoding: { ...mode.encoding, maxFramerate: 30 } } : mode;
+};
+
 /** Switches the screen being shared to the current mode. */
 async function applyShareMode(lp) {
   const track = lp.getTrackPublication(window.LivekitClient.Track.Source.ScreenShare)?.track;
   if (!track) return;
-  const mode = SHARE_MODES[shareMode];
+  const mode = shareModeNow();
   track.mediaStreamTrack.contentHint = mode.hint;
   await track.setDegradationPreference(mode.degradation);
   const sender = track.sender;
@@ -707,13 +736,14 @@ async function toggleScreen(surface) {
   const audioContext = starting && appAudio ? new AudioContext({ sampleRate: 48000 }) : null;
   try {
     if (!starting) stopAppAudio(voice);
-    const modeName = shareMode, mode = SHARE_MODES[modeName];
-    // Captured at up to 60 fps either way, so the mode can still change in the desktop picker.
+    const modeName = shareMode, mode = shareModeNow();
+    // Captured at up to 60 fps either way, so the mode can still change in the desktop picker
+    // (at 30 in low resource mode, which never sends more).
     await lp.setScreenShareEnabled(
       starting,
       {
         audio: !appAudio, systemAudio: 'include', selfBrowserSurface: 'exclude', surfaceSwitching: 'include', contentHint: mode.hint,
-        resolution: { width: 1920, height: 1080, frameRate: 60 }, ...(typeof surface === 'string' ? { video: { displaySurface: surface } } : {}),
+        resolution: { width: 1920, height: 1080, frameRate: lowPower() ? 30 : 60 }, ...(typeof surface === 'string' ? { video: { displaySurface: surface } } : {}),
       },
       // One full-size copy only: a second, smaller one would cost the sharer frames.
       { screenShareEncoding: mode.encoding, degradationPreference: mode.degradation, simulcast: false },

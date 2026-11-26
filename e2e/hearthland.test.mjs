@@ -84,3 +84,31 @@ test('a new look shows on the map for everyone, and the map is off until a manag
   await until(() => b.page.evaluate((id) => lookOf(id).hat === 'crown', ines.id), "Oskar to see Ines's crown");
   noErrors(seats);
 });
+
+test('low resource mode: turned on in Display, the map still walks, and voices are heard without distance', async (t) => {
+  const hearth = await makeHearth(server.base, ['Kari']);
+  const [kari] = hearth.people;
+  await call(server.base, `/api/servers/${hearth.id}`, { method: 'PATCH', body: { hearthland: true }, token: kari.token });
+  const seats = [];
+  closeWhenDone(t, seats);
+  const me = await openApp(server.base, kari);
+  seats.push(me);
+  const page = me.page;
+
+  await page.evaluate(() => openAccount('settings'));
+  await page.locator('#display-power').check();
+  assert.deepEqual(await page.evaluate(() => [document.documentElement.dataset.power, document.documentElement.dataset.motion]), ['low', 'reduce']);
+  assert.equal(await page.locator('#display-motion').isDisabled(), true);
+  // Kept after a reload, from the first paint.
+  await page.reload();
+  await page.waitForFunction(() => typeof state !== 'undefined' && state.me && state.ws?.readyState === 1);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.power), 'low');
+
+  await page.locator('#map-row').click();
+  await sees(page.locator('#hearthland'), /Walk into a fire's ring/);
+  assert.equal(await page.locator('#map-distance').isDisabled(), true);
+  // Drawn less often, but walking still gets there.
+  await walk(page, 'ArrowUp', (id) => state.voice?.channelId === id && state.voice.connected, hearth.fireId);
+  assert.equal(await page.evaluate(() => mapHearing()), null);
+  noErrors(seats);
+});

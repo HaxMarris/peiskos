@@ -1090,7 +1090,9 @@ function drawMap(now) {
 // ---------- scene ----------
 const cv = $('cv'), ctx = cv.getContext('2d');
 let W = 0, H = 0, dpr = 1;
-function resize() { const r = cv.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; }
+// Low resource mode in Peiskos: the water is drawn 30 times a second, one pixel per screen pixel.
+let lowPower = false, lastDrawn = 0;
+function resize() { const r = cv.getBoundingClientRect(); dpr = lowPower ? 1 : Math.min(2, window.devicePixelRatio || 1); W = r.width; H = r.height; cv.width = W * dpr; cv.height = H * dpr; }
 new ResizeObserver(resize).observe(cv);
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const stars = Array.from({ length: 70 }, () => [Math.random(), Math.random() * .5, Math.random()]);
@@ -1365,7 +1367,7 @@ function frame(now) {
   // Ask for the next frame first, so one bad frame can't stop the game for good.
   requestAnimationFrame(frame);
   try {
-    if (W && H) { if (G.mode === 'map') drawMap(now); else drawScene(now); }
+    if (W && H && (!lowPower || now - lastDrawn >= 30)) { lastDrawn = now; if (G.mode === 'map') drawMap(now); else drawScene(now); }
     dockTick(now);
     if (now - lastIdleTick > 1000) { lastIdleTick = now; const r = tickIdle(Date.now()); if (r.added || r.missed) { renderNets(); if (S.tab === 'idle' && !pickingPond()) renderPane(); save(); } else renderNetsLight(); }
   } catch (err) {
@@ -1613,7 +1615,7 @@ window.addEventListener('message', e => {
   if (e.source !== peiskos()) return;
   const m = e.data;
   if (!m || typeof m !== 'object') return;
-  if (m.kind === 'init') { if (Number.isFinite(m.now)) clockSkew = m.now - Date.now(); start(m.save, m.theme); }
+  if (m.kind === 'init') { if (Number.isFinite(m.now)) clockSkew = m.now - Date.now(); if (m.lowPower) { lowPower = true; resize(); } start(m.save, m.theme); }
   else if (m.kind === 'reload') { start(m.save); $('catchbox').innerHTML = '<div class="catch"><h3>Picked up your other device</h3><div class="row" style="color:var(--muted)"><span>You saved there more recently, so this is where you left off.</span></div></div>'; G.resultAt = performance.now(); }
   else if (m.kind === 'theme') document.documentElement.dataset.theme = m.theme;
   else if (m.kind === 'flush') flushSave();

@@ -1348,6 +1348,7 @@ function updateHud(){
 // MAIN LOOP
 // ---------------------------------------------------------------
 let lastFrame = performance.now();
+let lastDrawn = 0;
 let simTimer = null, lastSim = 0;
 
 // Host only: advance the match and send everyone the board.
@@ -1399,8 +1400,12 @@ function gameLoop(now){
     game.clientStep(dt);
   }
 
-  render();
-  updateHud();
+  // Drawn at 30 frames a second in low resource mode; the game itself still runs every frame.
+  if(!Peiskos.lowPower || game.matchOver || now - lastDrawn >= 30){
+    lastDrawn = now;
+    render();
+    updateHud();
+  }
 
   if(game.matchOver){
     renderGameOverOverlay();
@@ -1442,9 +1447,11 @@ function wz(py){ return py/TILE - ROWS/2; }
 
 function r3Init(){
   if(R3.renderer) return;
-  R3.renderer = new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
-  R3.renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
-  R3.renderer.shadowMap.enabled = true;
+  // Low resource mode (Peiskos.lowPower): no smoothing or shadows, and one pixel per screen pixel.
+  const low = Peiskos.lowPower;
+  R3.renderer = new THREE.WebGLRenderer({canvas, antialias:!low, alpha:false});
+  R3.renderer.setPixelRatio(low ? 1 : Math.min(window.devicePixelRatio||1, 2));
+  R3.renderer.shadowMap.enabled = !low;
   R3.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   // correct colour pipeline — without these, PBR materials look flat and muddy
   if(THREE.sRGBEncoding !== undefined) R3.renderer.outputEncoding = THREE.sRGBEncoding;

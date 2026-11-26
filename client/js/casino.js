@@ -726,7 +726,8 @@ async function spin() {
   // Take the bet off straight away; the win shows up once the reels stop.
   setWallet({ ...casino.wallet, chips: r.wallet.chips - r.won });
   const strips = [...casinoPanes.slots.querySelectorAll('.slot-strip')];
-  const durations = [1100, 1500, 1900];
+  // With less motion (or in low resource mode) the reels jump straight to their stops, so there's nothing to wait for.
+  const durations = lessMotion() ? [250, 300, 350] : [1100, 1500, 1900];
   strips.forEach((strip, i) => {
     placeStrip(strip, Number(strip.dataset.stop), false, 0);
     strip.getBoundingClientRect(); // so the jump back isn't animated
@@ -993,7 +994,8 @@ async function openTheCase(c) {
     strip.style.transition = 'none';
     strip.style.transform = 'translateX(0)';
   });
-  const ms = got.length > 1 ? 4200 : 5600;
+  // With less motion the reel jumps to where it lands, so only a short pause is left before the drop.
+  const ms = lessMotion() ? 500 : got.length > 1 ? 4200 : 5600;
   reels.getBoundingClientRect();
   strips.forEach((strip, i) => {
     const reel = strip.parentElement;

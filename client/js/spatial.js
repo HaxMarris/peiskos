@@ -77,10 +77,13 @@ function mixOff(track) {
   nodes.gain.disconnect();
 }
 
-/** Whether you hear the fire you're at by seat: its managers turned it on, and you haven't turned it off. */
+/**
+ * Whether you hear the fire you're at by seat: its managers turned it on, and you haven't turned it
+ * off (or turned on low resource mode, which skips the mixing).
+ */
 function spatialHere() {
   const voice = state.voice;
-  return !!voice && !!roomById(voice.channelId)?.c?.spatialSound && !voicePrefs.fullVolume;
+  return !!voice && !!roomById(voice.channelId)?.c?.spatialSound && !voicePrefs.fullVolume && !lowPower();
 }
 
 /** Places every voice at your fire. Run when people come or go, a voice arrives, or a setting changes. */

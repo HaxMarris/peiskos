@@ -28,6 +28,15 @@ const isDesktop = location.protocol === 'file:';
 const isPhoneApp = !!window.Capacitor?.isNativePlatform?.();
 const isApp = isDesktop || isPhoneApp;
 
+// Display settings that scripts check as well as the stylesheet (theme.js sets both on the page).
+/** Low resource mode: less drawing, lighter calls. Chosen under Display. */
+const lowPower = () => document.documentElement.dataset.power === 'low';
+/** Less motion: chosen in Peiskos (or brought by low resource mode), or asked for by the system. */
+const lessMotion = () => {
+  const m = document.documentElement.dataset.motion;
+  return m === 'reduce' || (m !== 'full' && matchMedia('(prefers-reduced-motion: reduce)').matches);
+};
+
 // Crashes in the app are sent to the server (a few per visit), where whoever runs it sees them
 // on the admin page. Just the error and where it happened; nothing you typed.
 let errorsSent = 0;

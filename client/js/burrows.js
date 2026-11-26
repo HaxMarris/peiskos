@@ -534,8 +534,13 @@ function keepRoomView() {
   if (!id || !state.messages.length || messagesEl.getAttribute('aria-busy')) return;
   const atBottom = state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 80;
   roomMemory.delete(id);
-  roomMemory.set(id, { messages: state.messages, reachedStart: state.reachedStart, reachedEnd: state.reachedEnd, scrollTop: messagesEl.scrollTop, atBottom });
-  if (roomMemory.size > 8) roomMemory.delete(roomMemory.keys().next().value);
+  // Low resource mode keeps fewer rooms, and only the newest 100 messages of one left at the bottom.
+  const low = lowPower(), trim = low && atBottom && state.messages.length > 100;
+  roomMemory.set(id, {
+    messages: trim ? state.messages.slice(-100) : state.messages, reachedStart: !trim && state.reachedStart,
+    reachedEnd: state.reachedEnd, scrollTop: messagesEl.scrollTop, atBottom,
+  });
+  while (roomMemory.size > (low ? 3 : 8)) roomMemory.delete(roomMemory.keys().next().value);
 }
 
 async function selectChannel(id, { around = null, present = false } = {}) {
