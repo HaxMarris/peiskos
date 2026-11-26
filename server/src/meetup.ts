@@ -43,6 +43,8 @@ type MeetEvent = { id: number; serverId: number; startsAt: number; placeLat: num
 const toRad = (deg: number) => (deg * Math.PI) / 180;
 
 /** Metres between two points, and the compass direction from the first to the second. */
+const FAR_M = 2000;
+
 export function distanceAndBearing(lat1: number, lng1: number, lat2: number, lng2: number) {
   const φ1 = toRad(lat1), φ2 = toRad(lat2), Δφ = toRad(lat2 - lat1), Δλ = toRad(lng2 - lng1);
   const a = Math.sin(Δφ / 2) ** 2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) ** 2;
@@ -86,9 +88,10 @@ export function meetup(ctx: MeetupContext) {
       userId,
       here: s.here,
       at: s.at,
-      // Rounded: enough to find each other, no more.
-      distance: s.here ? 0 : Math.round(s.distance / 10) * 10,
-      bearing: s.here ? 0 : Math.round(s.bearing / 5) * 5 % 360,
+      // Rounded: enough to find each other, no more. Further than 2 km away, more roughly still,
+      // since a close distance and direction from a known place come near to saying where you are.
+      distance: s.here ? 0 : s.distance > FAR_M ? Math.round(s.distance / 500) * 500 : Math.round(s.distance / 10) * 10,
+      bearing: s.here ? 0 : s.distance > FAR_M ? Math.round(s.bearing / 45) * 45 % 360 : Math.round(s.bearing / 5) * 5 % 360,
       accuracy: Math.round(s.accuracy),
       eta: s.here ? null : etaSeconds(s.track),
     }));

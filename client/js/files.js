@@ -528,7 +528,7 @@ function renderAttachments(list) {
       el.onload = () => { if (state.reachedEnd && messagesEl.scrollHeight - messagesEl.scrollTop - messagesEl.clientHeight < 400) messagesEl.scrollTop = messagesEl.scrollHeight; };
       el.onclick = () => openImage(a, url);
       pictureMenuOn(el, a, url);
-      if (/gif|webp/.test(a.type) && !a.thumb) stillGif(el);
+      if ((a.type === 'image/gif' || a.type === 'image/webp') && !a.thumb) stillGif(el, a, url);
     } else if (VIDEO_TYPES.test(a.type)) {
       el = document.createElement('video');
       el.className = 'att-video';
@@ -569,16 +569,22 @@ function renderAttachments(list) {
  * Low resource mode: a GIF shows a still of itself until you point at it, so the browser isn't
  * drawing every GIF in the chat all the time. Tapping it opens it, moving, as before.
  */
-function stillGif(img) {
-  img.addEventListener('load', () => {
+function stillGif(img, a, url) {
+  img.addEventListener('load', async () => {
     if (!lowPower() || !img.isConnected || !img.naturalWidth) return;
+    // A WebP may be a still picture, which needs no still and no GIF label.
+    if (a.type === 'image/webp' && !(await animatedWebp(img.currentSrc || img.src))) return;
+    if (!img.isConnected) return;
     const still = document.createElement('canvas');
-    still.width = img.naturalWidth;
-    still.height = img.naturalHeight;
-    try { still.getContext('2d').drawImage(img, 0, 0); } catch { return; }
+    // No bigger than it's shown (at most 400 px wide, twice that for sharp screens), to save memory.
+    const scale = Math.min(1, 800 / Math.max(img.naturalWidth, img.naturalHeight));
+    still.width = Math.round(img.naturalWidth * scale);
+    still.height = Math.round(img.naturalHeight * scale);
+    try { still.getContext('2d').drawImage(img, 0, 0, still.width, still.height); } catch { return; }
     still.className = 'gif-still-frame';
     still.setAttribute('aria-hidden', 'true');
     still.onclick = () => img.click();
+    pictureMenuOn(still, a, url);
     const wrap = document.createElement('span');
     wrap.className = 'gif-still still';
     img.replaceWith(wrap);
@@ -586,6 +592,18 @@ function stillGif(img) {
     wrap.onpointerenter = () => wrap.classList.remove('still');
     wrap.onpointerleave = () => wrap.classList.add('still');
   }, { once: true });
+}
+
+/** Whether a WebP moves: its VP8X header says so. The file was just loaded, so this comes from the cache. */
+async function animatedWebp(url) {
+  try {
+    const reader = (await fetch(url)).body.getReader();
+    const { value } = await reader.read();
+    reader.cancel().catch(() => {});
+    return !!value && value.length > 20 && String.fromCharCode(...value.subarray(12, 16)) === 'VP8X' && (value[20] & 2) !== 0;
+  } catch {
+    return true;
+  }
 }
 
 function openImage(a, url) {

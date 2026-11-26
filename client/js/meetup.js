@@ -235,7 +235,7 @@ function renderMeetupView() {
   const open = meetupOpen(e);
   const note = !open ? (Date.now() < e.startsAt ? 'Sharing opens 2 hours before the start.' : 'This meet-up is over.')
     : !canShareLocation() ? 'Share your location from the phone app or a browser.'
-      : "People going see how far you are and which way, not your exact spot. Sharing pauses when Peiskos isn't open, and turns off when you get there or 3 hours after the start.";
+      : "People going see how far you are and which way. Near the meeting place, that's close to your exact spot. Sharing pauses when Peiskos isn't open, and turns off when you get there or 3 hours after the start.";
   view.innerHTML = `
     <h2>Meet up for ${escapeHtml(e.title)}</h2>
     <p class="meetup-place small">${MAP_PIN_ICON}<span>${escapeHtml(e.placeName || 'Meeting place')}</span>

@@ -97,6 +97,13 @@ test('meet-up: only people going share and see, and only a distance and directio
   assert.equal(p.lat, undefined, 'no coordinates go out');
   assert.equal(p.lng, undefined);
 
+  // Further away, only roughly: to 500 m and one of eight directions.
+  await new Promise((r) => setTimeout(r, 4100));
+  await call(`/api/events/${ev.id}/location`, { body: { lat: PLACE.lat + 0.039, lng: PLACE.lng + 0.045, accuracy: 20 }, token: maya.token });
+  const far = (await theoWs.next((e) => e.type === 'meetup' && e.eventId === ev.id && e.people[0]?.distance > 2000)).people[0];
+  assert.equal(far.distance % 500, 0);
+  assert.equal(far.bearing % 45, 0);
+
   // Within 100 m counts as there, and stays so.
   await new Promise((r) => setTimeout(r, 4100));
   assert.deepEqual((await call(`/api/events/${ev.id}/location`, { body: { ...NEARBY, accuracy: 10 }, token: maya.token })).data, { here: true });

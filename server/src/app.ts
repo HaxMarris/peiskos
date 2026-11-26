@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse, type Server } from 'node:http';
 import { randomBytes, randomInt } from 'node:crypto';
 import { extname, join, normalize } from 'node:path';
+import { unlink } from 'node:fs/promises';
 import { WebSocketServer, WebSocket } from 'ws';
 import { addModeratorRole, inTransaction, tokenHash, withStatementCache, type Db } from './db.ts';
 import { APP_CSP, HttpError, MIME, allowance, bearer, clientIp, readBody, sameText, send, type Json } from './http.ts';
@@ -1328,6 +1329,17 @@ export function createApp(opts: AppOptions): Server {
         guestName: (channelId, id) => joint_.guestName(channelId, id),
       })
     : null;
+  /**
+   * An account is deleted: their voice comes off every tape. With clips turned off now, their audio
+   * from before is still deleted, just without cutting the clips again.
+   */
+  const forgetVoice = async (userId: number) => {
+    if (tapes) return tapes.forgetPerson(userId);
+    const rows = db.prepare('SELECT file FROM tape_audio WHERE user_id = ?').all(userId) as { file: string }[];
+    db.prepare('DELETE FROM tape_audio WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM tape_people WHERE user_id = ?').run(userId);
+    if (opts.uploadDir) for (const r of rows) unlink(join(opts.uploadDir, 'tapes', r.file)).catch(() => {});
+  };
 
   const listen = listenTogether({
     inVoice, usersInVoice, sendTo,
@@ -2038,6 +2050,7 @@ export function createApp(opts: AppOptions): Server {
     clearTries, db, deleteBurrow, failedTry, filePath, friendsOf, hashCode, holdName, isBotUser, leaveGroup,
     meJson, newPassword, now, opts, placeOf, removeFiles, removeMember, route, sendServerUpdate, sendTo,
     serverMemberIds, socketTokens, sockets, startSession, userById, userByToken, userChanged,
+    forgetVoice: (userId) => forgetVoice(userId),
   });
 
   // ---- HTTP plumbing ------------------------------------------------------

@@ -237,8 +237,8 @@ never holds more than the last minute and a half or so of anyone's voice. When s
 Clip that, Peiskos cuts the last 30 seconds out of that and mixes it with ffmpeg (in the Docker
 image; without Docker, install ffmpeg or clips stay off). Anyone who can see the fire can listen:
 hold or right-click the fire and pick **Clips**, or **Past clips** from the Clips button. Clips stay
-until someone who said yes, or a moderator, deletes them. They're kept in `uploads/tapes`, so
-off-site backups copy them too, and new clips stop once they take up `TAPE_STORAGE_MB` (10 GB). People
+until someone who said yes, or a moderator, deletes them. They're kept in `uploads/tapes`, which
+off-site backups leave out (copies there are never deleted), and new clips stop once they take up `TAPE_STORAGE_MB` (10 GB). People
 need an app version with clips to answer; one without it can't say yes, so clips stay off.
 
 **Transcripts** of clips are made on the server itself, at night, by [whisper.cpp](https://github.com/ggml-org/whisper.cpp)
@@ -383,7 +383,8 @@ BACKUP_S3_KEY_ID=your-key-id
 BACKUP_S3_SECRET=your-secret-key
 ```
 
-Peiskos never deletes anything there; set the bucket to drop old versions if you like. The admin
+Peiskos never deletes anything there; set the bucket to drop old versions if you like. For that
+reason clips (`uploads/tapes`) and movies (`uploads/movies`) aren't copied. The admin
 page shows when the last copy worked.
 
 **Restoring:** pick a day under *Backups* on the admin page and press *Restore*; Peiskos restarts on

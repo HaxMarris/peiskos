@@ -24,6 +24,8 @@ export interface LoginContext {
   deleteBurrow: (serverId: number) => void;
   failedTry: (keys: string[], windowMs?: number) => void;
   filePath: (id: string) => string;
+  /** Their voice off every clip at the fire (tapes.ts). */
+  forgetVoice: (userId: number) => Promise<unknown>;
   friendsOf: (userId: number) => { friends: { status: string; custom: { text: string; emoji: string; until: number | null; } | null; activity: { name: string; since: number; } | null; online: boolean; id: number; username: string; displayName: string | null; avatar: string | null; }[]; incoming: { status: string; custom: { text: string; emoji: string; until: number | null; } | null; activity: { name: string; since: number; } | null; online: boolean; id: number; username: string; displayName: string | null; avatar: string | null; }[]; outgoing: { status: string; custom: { text: string; emoji: string; until: number | null; } | null; activity: { name: string; since: number; } | null; online: boolean; id: number; username: string; displayName: string | null; avatar: string | null; }[]; blocked: User[]; };
   hashCode: (code: string) => string;
   holdName: (name: string, userId: number) => void;
@@ -403,6 +405,16 @@ export function login(ctx: LoginContext) {
     }
     const files = db.prepare('SELECT avatar, banner FROM users WHERE id = ?').get(user.id) as { avatar: string | null; banner: string | null };
     for (const f of [files.avatar, files.banner]) if (f && opts.uploadDir) unlink(avatarPath(f)).catch(() => {});
+    // Their voice in clips at the fire, and time capsules they sealed that haven't opened yet
+    // (opened ones are messages by then, kept or removed with the rest).
+    ctx.forgetVoice(user.id).catch((err) => console.warn(`Couldn't take a deleted account off its clips: ${err.message}`));
+    const sealed = db.prepare('SELECT id, server_id AS serverId FROM capsules WHERE author_id = ? AND opened_at IS NULL').all(user.id) as { id: number; serverId: number }[];
+    for (const c of sealed) {
+      removeFiles(db.prepare('SELECT id FROM attachments WHERE capsule_id = ?').all(c.id) as Json[]);
+      db.prepare('DELETE FROM attachments WHERE capsule_id = ?').run(c.id);
+      db.prepare('DELETE FROM capsules WHERE id = ?').run(c.id);
+    }
+    for (const serverId of new Set(sealed.map((c) => c.serverId))) sendServerUpdate(serverId);
     for (const table of ['friends_a', 'friends_b', 'blocks', 'blocks_by', 'passkeys', 'push_subs', 'scheduled_messages', 'saved_messages', 'drafts', 'calendar_feeds', 'lanterns']) {
       const [t, col] =
         table === 'friends_a' ? ['friends', 'user_a'] : table === 'friends_b' ? ['friends', 'user_b'] : table === 'blocks_by' ? ['blocks', 'blocked_id'] : [table, 'user_id'];

@@ -74,6 +74,7 @@ async function copyOffsiteOnce(cfg: S3Config, dir: string, uploadDir: string | u
     if (uploadDir && existsSync(uploadDir)) {
       for (const file of walk(uploadDir)) {
         const name = relative(uploadDir, file).split(sep).join('/');
+        if (!sentOffsite(name)) continue;
         const size = statSync(file).size;
         if (state.sent[name] === size) continue;
         await putFile(cfg, `uploads/${name}`, file);
@@ -99,6 +100,16 @@ export function offsiteStatus(dir: string): OffsiteStatus | null {
 /** The database copies in the bucket, newest first. */
 export async function offsiteBackups(cfg: S3Config) {
   return (await listFiles(cfg, 'db/')).filter((f) => NAME.test(f.name.slice(3))).sort((a, b) => b.name.localeCompare(a.name));
+}
+
+/**
+ * Which uploads get an off-site copy. Copies there are never deleted, so clips (voice, which the
+ * privacy page says is deleted from the server) stay here, and so do movies (big, and gone after a
+ * couple of weeks) and anything still being written.
+ */
+export function sentOffsite(name: string) {
+  const top = name.split('/')[0];
+  return top !== 'tapes' && top !== 'movies' && !name.endsWith('.part');
 }
 
 function* walk(dir: string): Generator<string> {
